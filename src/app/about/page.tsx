@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, Check, Copy } from "lucide-react";
+import { Mail, Check, Copy, Phone } from "lucide-react";
 import { gsap } from "gsap";
 import avatarImage from "@/assets/images/avatar.jpg";
 import githubIcon from "@/assets/images/svg/github-fill.svg";
@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/tooltip";
 
 const contactInfo = [
+  {
+    icon: Phone,
+    iconType: "lucide" as const,
+    label: "电话",
+    value: "13647228144",
+    href: "tel:13647228144",
+    display: "13647228144"
+  },
   {
     icon: Mail,
     iconType: "lucide" as const,
