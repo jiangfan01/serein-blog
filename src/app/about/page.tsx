@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail } from "lucide-react";
+import { gsap } from "gsap";
 import avatarImage from "@/assets/images/avatar.jpg";
 import githubIcon from "@/assets/images/svg/github-fill.svg";
 import wechatIcon from "@/assets/images/svg/wechat-fill.svg";
@@ -44,12 +46,50 @@ const contactInfo = [
 ];
 
 export default function AboutPage() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const avatarRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const subtitleRef = useRef<HTMLParagraphElement>(null);
+  const metaRef = useRef<HTMLDivElement>(null);
+  const bioRef = useRef<HTMLDivElement>(null);
+  const contactRef = useRef<HTMLDivElement>(null);
+  const skillsRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+
+      // 初始状态
+      gsap.set([avatarRef.current, titleRef.current, subtitleRef.current, metaRef.current], {
+        opacity: 0,
+        y: 30,
+      });
+      gsap.set([bioRef.current, contactRef.current, skillsRef.current, backRef.current], {
+        opacity: 0,
+        y: 40,
+      });
+
+      // 动画序列
+      tl.to(avatarRef.current, { opacity: 1, y: 0, duration: 0.8 }, 0.2)
+        .to(titleRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.4)
+        .to(subtitleRef.current, { opacity: 1, y: 0, duration: 0.5 }, 0.5)
+        .to(metaRef.current, { opacity: 1, y: 0, duration: 0.5 }, 0.6)
+        .to(bioRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.7)
+        .to(contactRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.9)
+        .to(skillsRef.current, { opacity: 1, y: 0, duration: 0.6 }, 1.1)
+        .to(backRef.current, { opacity: 1, y: 0, duration: 0.5 }, 1.3);
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] pt-32 pb-24 px-6 md:px-16">
+    <div ref={containerRef} className="min-h-screen bg-[var(--app-bg)] pt-32 pb-24 px-6 md:px-16">
       <div className="max-w-4xl mx-auto">
         {/* 头像区域 */}
         <div className="flex flex-col items-center mb-16">
-          <div className="relative w-40 h-40 mb-8">
+          <div ref={avatarRef} className="relative w-40 h-40 mb-8">
             <Image
               src={avatarImage}
               alt="Serein"
@@ -60,15 +100,15 @@ export default function AboutPage() {
             <div className="absolute inset-0 rounded-full ring-2 ring-[var(--accent)]/20" />
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-black text-[var(--text-strong)] mb-4 tracking-tight">
+          <h1 ref={titleRef} className="text-5xl md:text-6xl font-black text-[var(--text-strong)] mb-4 tracking-tight">
             Serein
           </h1>
           
-          <p className="text-xl text-[var(--text-secondary)] mb-2">
+          <p ref={subtitleRef} className="text-xl text-[var(--text-secondary)] mb-2">
             前端开发工程师
           </p>
           
-          <div className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm font-mono">
+          <div ref={metaRef} className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm font-mono">
             <span>男</span>
             <span>·</span>
             <span>24岁</span>
@@ -78,7 +118,7 @@ export default function AboutPage() {
         </div>
 
         {/* 简介 */}
-        <div className="mb-20">
+        <div ref={bioRef} className="mb-20">
           <p className="text-[var(--text-secondary)] text-lg leading-relaxed text-center max-w-2xl mx-auto">
             热衷于探索前沿技术与视觉美学的全栈开发者。
             <br />
@@ -89,7 +129,7 @@ export default function AboutPage() {
         </div>
 
         {/* 联系方式 */}
-        <div className="mb-16">
+        <div ref={contactRef} className="mb-16">
           <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
             联系方式
           </h2>
@@ -147,7 +187,7 @@ export default function AboutPage() {
         </div>
 
         {/* 技能标签 */}
-        <div className="border-t border-[var(--border-subtle)] pt-16">
+        <div ref={skillsRef} className="border-t border-[var(--border-subtle)] pt-16">
           <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
             技能方向
           </h2>
@@ -156,7 +196,7 @@ export default function AboutPage() {
             {[
               'React', 'Vue', 'Next.js', 'TypeScript',
               'Node.js', 'Golang', 'Gin',
-              'AI 应用', 'Agent',
+              'AI 应用', 'Agent', 'LLM 集成',
               'Prisma', 'MySQL', 'PostgreSQL',
               'GSAP', 'Framer Motion', 'Tailwind CSS'
             ].map(skill => (
@@ -171,7 +211,7 @@ export default function AboutPage() {
         </div>
 
         {/* 返回首页 */}
-        <div className="mt-20 text-center">
+        <div ref={backRef} className="mt-20 text-center">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--accent)] transition-colors text-sm font-mono"
