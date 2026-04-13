@@ -60,15 +60,15 @@ export default function AboutPage() {
             <div className="absolute inset-0 rounded-full ring-2 ring-[var(--accent)]/20" />
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-black text-white mb-4 tracking-tight">
+          <h1 className="text-5xl md:text-6xl font-black text-[var(--text-strong)] mb-4 tracking-tight">
             Serein
           </h1>
           
-          <p className="text-xl text-gray-400 mb-2">
+          <p className="text-xl text-[var(--text-secondary)] mb-2">
             前端开发工程师
           </p>
           
-          <div className="flex items-center gap-2 text-gray-500 text-sm font-mono">
+          <div className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm font-mono">
             <span>男</span>
             <span>·</span>
             <span>24岁</span>
@@ -79,7 +79,7 @@ export default function AboutPage() {
 
         {/* 简介 */}
         <div className="mb-20">
-          <p className="text-gray-400 text-lg leading-relaxed text-center max-w-2xl mx-auto">
+          <p className="text-[var(--text-secondary)] text-lg leading-relaxed text-center max-w-2xl mx-auto">
             热衷于探索前沿技术与视觉美学的全栈开发者。
             <br />
             追逐新鲜热门的技术栈，痴迷于打造极致的用户体验。
@@ -90,14 +90,14 @@ export default function AboutPage() {
 
         {/* 联系方式 */}
         <div className="mb-16">
-          <h2 className="text-2xl font-bold text-white mb-8 text-center">
+          <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
             联系方式
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {contactInfo.map((contact) => {
               const content = (
-                <div className="group flex items-start gap-4 p-6 hover:bg-white/[0.02] transition-colors rounded-lg">
+                <div className="group flex items-start gap-4 p-6 hover:bg-[var(--surface-secondary)]/50 transition-colors rounded-lg">
                   <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center group-hover:bg-[var(--accent)]/20 transition-colors">
                     {contact.iconType === "lucide" && contact.icon ? (
                       <contact.icon className="w-5 h-5 text-[var(--accent)]" />
@@ -114,10 +114,10 @@ export default function AboutPage() {
                   </div>
                   
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-mono text-gray-600 uppercase tracking-wider mb-1">
+                    <div className="text-sm font-mono text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
                       {contact.label}
                     </div>
-                    <div className="text-white font-medium break-all group-hover:text-[var(--accent)] transition-colors">
+                    <div className="text-[var(--text-strong)] font-medium break-all group-hover:text-[var(--accent)] transition-colors">
                       {contact.display}
                     </div>
                   </div>
@@ -147,8 +147,8 @@ export default function AboutPage() {
         </div>
 
         {/* 技能标签 */}
-        <div className="border-t border-white/10 pt-16">
-          <h2 className="text-2xl font-bold text-white mb-8 text-center">
+        <div className="border-t border-[var(--border-subtle)] pt-16">
+          <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
             技能方向
           </h2>
           
@@ -156,13 +156,13 @@ export default function AboutPage() {
             {[
               'React', 'Vue', 'Next.js', 'TypeScript',
               'Node.js', 'Golang', 'Gin',
-              'AI 应用', 'Agent', 'LLM 集成',
+              'AI 应用', 'Agent',
               'Prisma', 'MySQL', 'PostgreSQL',
               'GSAP', 'Framer Motion', 'Tailwind CSS'
             ].map(skill => (
               <span
                 key={skill}
-                className="px-4 py-2 text-sm font-mono text-gray-400 border border-gray-800 rounded-full hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                className="px-4 py-2 text-sm font-mono text-[var(--text-secondary)] border border-[var(--border-default)] rounded-full hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
               >
                 {skill}
               </span>
@@ -174,7 +174,7 @@ export default function AboutPage() {
         <div className="mt-20 text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-gray-500 hover:text-[var(--accent)] transition-colors text-sm font-mono"
+            className="inline-flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--accent)] transition-colors text-sm font-mono"
           >
             <span>←</span>
             <span>返回首页</span>

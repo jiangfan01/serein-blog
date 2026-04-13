@@ -4,6 +4,7 @@ import React, { useCallback, useLayoutEffect, useRef, useState, useEffect } from
 import { gsap } from 'gsap';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { flushSync } from 'react-dom';
 import './staggered-menu.css';
 import { Logo } from "@/components/brand/logo";
 
@@ -68,13 +69,60 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   const [textLines, setTextLines] = useState(['菜单', '关闭']);
 
   const isDark = resolvedTheme === 'dark';
+  const themeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setTheme(isDark ? 'light' : 'dark');
+    const button = themeButtonRef.current;
+    if (!button) {
+      setTheme(isDark ? 'light' : 'dark');
+      return;
+    }
+
+    const { top, left, width, height } = button.getBoundingClientRect();
+    const x = left + width / 2;
+    const y = top + height / 2;
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const maxRadius = Math.hypot(
+      Math.max(x, viewportWidth - x),
+      Math.max(y, viewportHeight - y)
+    );
+
+    const applyTheme = () => {
+      setTheme(isDark ? 'light' : 'dark');
+    };
+
+    if (typeof document.startViewTransition !== 'function') {
+      applyTheme();
+      return;
+    }
+
+    const transition = document.startViewTransition(() => {
+      flushSync(applyTheme);
+    });
+
+    const ready = transition?.ready;
+    if (ready && typeof ready.then === 'function') {
+      ready.then(() => {
+        document.documentElement.animate(
+          {
+            clipPath: [
+              `circle(0px at ${x}px ${y}px)`,
+              `circle(${maxRadius}px at ${x}px ${y}px)`,
+            ],
+          },
+          {
+            duration: 400,
+            easing: 'ease-in-out',
+            pseudoElement: '::view-transition-new(root)',
+          }
+        );
+      });
+    }
   }, [isDark, setTheme]);
 
   const openTlRef = useRef<gsap.core.Timeline | null>(null);
@@ -410,14 +458,14 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
         })()}
       </div>
       <header className="staggered-menu-header" aria-label="Main navigation header">
-        <div className="sm-logo" aria-label="Logo" style={{ color: menuButtonColor }}>
+        <a href="/" className="sm-logo" aria-label="返回首页" style={{ color: menuButtonColor }}>
           <Logo
             showText={true}
             className="gap-2.5"
             markClassName="h-7 w-7"
             textClassName="text-[var(--font-size-caption)]"
           />
-        </div>
+        </a>
         <button
           ref={toggleBtnRef}
           className="sm-toggle"
@@ -480,16 +528,19 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
           {/* 主题切换 */}
           <div className="sm-theme-toggle" aria-label="主题切换">
             <button
+              ref={themeButtonRef}
               onClick={toggleTheme}
               className="sm-theme-btn"
-              aria-label={isDark ? '切换到浅色模式' : '切换到深色模式'}
+              aria-label="切换主题"
             >
-              {mounted && (
+              {mounted ? (
                 isDark ? (
                   <Sun className="sm-theme-icon" />
                 ) : (
                   <Moon className="sm-theme-icon" />
                 )
+              ) : (
+                <span className="sm-theme-icon" style={{ width: '1.25rem', height: '1.25rem' }} />
               )}
               <span>{mounted ? (isDark ? '浅色模式' : '深色模式') : '主题'}</span>
             </button>
