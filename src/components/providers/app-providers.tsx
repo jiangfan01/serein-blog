@@ -7,6 +7,7 @@ import {
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ThemeProvider } from "next-themes";
 import { useState } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function AppProviders({
   children,
@@ -33,7 +34,9 @@ export function AppProviders({
       disableTransitionOnChange
     >
       <QueryClientProvider client={queryClient}>
-        {children}
+        <TooltipProvider>
+          {children}
+        </TooltipProvider>
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
     </ThemeProvider>

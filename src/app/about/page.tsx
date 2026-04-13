@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { Mail, Check, Copy } from "lucide-react";
 import { gsap } from "gsap";
 import avatarImage from "@/assets/images/avatar.jpg";
 import githubIcon from "@/assets/images/svg/github-fill.svg";
 import wechatIcon from "@/assets/images/svg/wechat-fill.svg";
 import qqIcon from "@/assets/images/svg/QQ.svg";
+import qrcodeImage from "@/assets/images/qrcode.jpg";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const contactInfo = [
   {
@@ -44,6 +50,115 @@ const contactInfo = [
     display: "1431037397"
   }
 ];
+
+function CopyableContact({ contact }: { contact: typeof contactInfo[number] }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(contact.value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const iconElement = contact.iconType === "lucide" && contact.icon ? (
+    <contact.icon className="w-5 h-5 text-[var(--accent)]" />
+  ) : contact.iconType === "svg" && contact.iconSvg ? (
+    <Image
+      src={contact.iconSvg}
+      alt={contact.label}
+      width={20}
+      height={20}
+      className="text-[var(--accent)]"
+      style={{ filter: 'brightness(0) saturate(100%) invert(64%) sepia(35%) saturate(456%) hue-rotate(122deg) brightness(91%) contrast(87%)' }}
+    />
+  ) : null;
+
+  const inner = (
+    <div className="group flex items-start gap-4 p-6 hover:bg-[var(--surface-secondary)]/50 transition-colors rounded-lg cursor-pointer">
+      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center group-hover:bg-[var(--accent)]/20 transition-colors">
+        {iconElement}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-mono text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
+          {contact.label}
+        </div>
+        <div className="text-[var(--text-strong)] font-medium break-all group-hover:text-[var(--accent)] transition-colors flex items-center gap-2">
+          {contact.display}
+          {contact.label !== "微信" && (
+            <span className="opacity-0 group-hover:opacity-60 transition-opacity">
+              {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // 微信：hover 显示二维码
+  if (contact.label === "微信") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div onClick={handleCopy}>{inner}</div>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="bg-white p-2 rounded-xl shadow-2xl border border-gray-100"
+        >
+          <Image
+            src={qrcodeImage}
+            alt="微信二维码"
+            width={180}
+            height={320}
+            className="rounded-lg object-cover"
+            style={{ aspectRatio: "9/16" }}
+          />
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // 有链接的：点击跳转 + 复制 tooltip
+  if (contact.href) {
+    return (
+      <Tooltip open={copied || undefined}>
+        <TooltipTrigger asChild>
+          <a
+            href={contact.href}
+            target={contact.href.startsWith('http') ? '_blank' : undefined}
+            rel={contact.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              handleCopy();
+              window.open(contact.href!, contact.href!.startsWith('http') ? '_blank' : '_self');
+            }}
+          >
+            {inner}
+          </a>
+        </TooltipTrigger>
+        {copied && (
+          <TooltipContent side="top">
+            <Check className="w-3 h-3" /> 已复制
+          </TooltipContent>
+        )}
+      </Tooltip>
+    );
+  }
+
+  // 无链接的（QQ 等）：点击复制
+  return (
+    <Tooltip open={copied || undefined}>
+      <TooltipTrigger asChild>
+        <div onClick={handleCopy}>{inner}</div>
+      </TooltipTrigger>
+      {copied && (
+        <TooltipContent side="top">
+          <Check className="w-3 h-3" /> 已复制
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
 
 export default function AboutPage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -135,54 +250,9 @@ export default function AboutPage() {
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {contactInfo.map((contact) => {
-              const content = (
-                <div className="group flex items-start gap-4 p-6 hover:bg-[var(--surface-secondary)]/50 transition-colors rounded-lg">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center group-hover:bg-[var(--accent)]/20 transition-colors">
-                    {contact.iconType === "lucide" && contact.icon ? (
-                      <contact.icon className="w-5 h-5 text-[var(--accent)]" />
-                    ) : contact.iconType === "svg" && contact.iconSvg ? (
-                      <Image
-                        src={contact.iconSvg}
-                        alt={contact.label}
-                        width={20}
-                        height={20}
-                        className="text-[var(--accent)]"
-                        style={{ filter: 'brightness(0) saturate(100%) invert(64%) sepia(35%) saturate(456%) hue-rotate(122deg) brightness(91%) contrast(87%)' }}
-                      />
-                    ) : null}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-mono text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
-                      {contact.label}
-                    </div>
-                    <div className="text-[var(--text-strong)] font-medium break-all group-hover:text-[var(--accent)] transition-colors">
-                      {contact.display}
-                    </div>
-                  </div>
-                </div>
-              );
-
-              if (contact.href) {
-                return (
-                  <a
-                    key={contact.label}
-                    href={contact.href}
-                    target={contact.href.startsWith('http') ? '_blank' : undefined}
-                    rel={contact.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                  >
-                    {content}
-                  </a>
-                );
-              }
-
-              return (
-                <div key={contact.label}>
-                  {content}
-                </div>
-              );
-            })}
+            {contactInfo.map((contact) => (
+              <CopyableContact key={contact.label} contact={contact} />
+            ))}
           </div>
         </div>
 
