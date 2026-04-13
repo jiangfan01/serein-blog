@@ -1,0 +1,176 @@
+/* Nextra 主题覆盖 - 匹配 Serein Blog 设计 */
+
+/* 整体背景 */
+.nextra-nav-container,
+.nextra-sidebar-container,
+.nextra-content,
+article,
+main,
+html[class~="dark"] .nextra-nav-container,
+html[class~="dark"] .nextra-sidebar-container {
+  background: var(--app-bg) !important;
+}
+
+/* 导航栏 */
+nav.nextra-nav-container {
+  background: rgba(12, 15, 18, 0.8) !important;
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* 侧边栏 */
+.nextra-sidebar-container {
+  background: var(--app-bg) !important;
+  border-right: 1px solid var(--border-subtle) !important;
+}
+
+/* 侧边栏链接 */
+.nextra-sidebar-container a {
+  color: var(--text-secondary) !important;
+  transition: color 0.2s ease;
+}
+
+.nextra-sidebar-container a:hover,
+.nextra-sidebar-container a[data-active="true"] {
+  color: var(--accent) !important;
+}
+
+/* 内容区域 */
+article {
+  color: var(--text-primary) !important;
+}
+
+/* 标题 */
+article h1 {
+  color: var(--text-strong) !important;
+  font-weight: 800 !important;
+}
+
+article h2,
+article h3,
+article h4 {
+  color: var(--text-strong) !important;
+  font-weight: 700 !important;
+  border-bottom: none !important;
+}
+
+/* 段落文字 */
+article p {
+  color: var(--text-secondary) !important;
+}
+
+/* 链接 */
+article a {
+  color: var(--accent) !important;
+  text-decoration: none !important;
+}
+
+article a:hover {
+  text-decoration: underline !important;
+}
+
+/* 列表 */
+article ul,
+article ol {
+  color: var(--text-secondary) !important;
+}
+
+article li {
+  color: var(--text-secondary) !important;
+}
+
+article li a {
+  color: var(--accent) !important;
+}
+
+/* 代码块 */
+article pre {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+}
+
+article code {
+  background: var(--surface-secondary) !important;
+  color: var(--accent) !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 4px !important;
+  font-size: 0.9em !important;
+}
+
+article pre code {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
+}
+
+/* 表格 */
+article table {
+  border-collapse: collapse !important;
+}
+
+article th {
+  background: var(--surface-secondary) !important;
+  color: var(--text-strong) !important;
+  border: 1px solid var(--border-subtle) !important;
+  padding: 0.75rem 1rem !important;
+}
+
+article td {
+  border: 1px solid var(--border-subtle) !important;
+  padding: 0.75rem 1rem !important;
+  color: var(--text-secondary) !important;
+}
+
+/* 引用块 */
+article blockquote {
+  border-left: 3px solid var(--accent) !important;
+  background: var(--surface-secondary) !important;
+  color: var(--text-secondary) !important;
+  padding: 1rem !important;
+  margin: 1rem 0 !important;
+  border-radius: 0 8px 8px 0 !important;
+}
+
+/* TOC 目录 */
+.nextra-toc {
+  color: var(--text-tertiary) !important;
+}
+
+.nextra-toc a {
+  color: var(--text-tertiary) !important;
+}
+
+.nextra-toc a:hover,
+.nextra-toc a[data-active="true"] {
+  color: var(--accent) !important;
+}
+
+/* 搜索框 */
+.nextra-search input {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Footer */
+footer {
+  background: var(--app-bg) !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  color: var(--text-tertiary) !important;
+}
+
+/* 分隔线 */
+article hr {
+  border-color: var(--border-subtle) !important;
+}
+
+/* 强调文字 */
+article strong {
+  color: var(--text-strong) !important;
+}
+
+/* 滚动条隐藏 */
+.nextra-sidebar-container::-webkit-scrollbar {
+  display: none;
+}
