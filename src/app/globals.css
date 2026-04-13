@@ -2,26 +2,143 @@
 @import "nextra-theme-docs/style.css";
 
 :root {
-  --background: #f7f5ef;
-  --foreground: #111827;
-  --app-bg: #f7f5ef;
-  --app-fg: #111827;
+  color-scheme: light;
+
+  /* Core palette */
+  --background: #f5f5f2;
+  --foreground: #121417;
+  --app-bg: #f5f5f2;
+  --app-fg: #121417;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-secondary: #f0f1ed;
+  --surface-tertiary: #e8eae5;
+  --surface-inverse: #171a1f;
+
+  /* Text */
+  --text-strong: #121417;
+  --text-primary: #262b31;
+  --text-secondary: #5f6771;
+  --text-tertiary: #7b848f;
+  --text-quaternary: #9ca3af;
+  --text-inverse: #f5f7fa;
+
+  /* Lines */
+  --border-subtle: #e4e6e1;
+  --border-default: #d6d9d2;
+  --border-strong: #bcc2bb;
+
+  /* Accent */
   --accent: #0f766e;
+  --accent-strong: #0a5c56;
+  --accent-soft: #d7ece9;
+  --accent-contrast: #f4fbfa;
+
+  /* States */
+  --success: #1f7a55;
+  --warning: #a16207;
+  --danger: #b42318;
+
+  /* Typography */
+  --font-family-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-family-mono: var(--font-geist-mono), monospace;
+
+  --font-size-hero: clamp(3.5rem, 6vw, 6.25rem);
+  --font-size-display: clamp(2.75rem, 4vw, 4.5rem);
+  --font-size-h1: clamp(2.25rem, 3vw, 3.5rem);
+  --font-size-h2: clamp(1.75rem, 2.4vw, 2.5rem);
+  --font-size-h3: 1.5rem;
+  --font-size-h4: 1.25rem;
+  --font-size-body-lg: 1.125rem;
+  --font-size-body: 1rem;
+  --font-size-body-sm: 0.9375rem;
+  --font-size-caption: 0.8125rem;
+  --font-size-micro: 0.75rem;
+
+  --line-height-tight: 1.05;
+  --line-height-heading: 1.15;
+  --line-height-body: 1.75;
+  --line-height-relaxed: 1.9;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* Radius */
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+  --radius-pill: 999px;
+
+  /* Shadow */
+  --shadow-soft: 0 14px 40px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 18px 48px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 24px 80px rgba(15, 23, 42, 0.1);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 160ms;
+  --duration-base: 260ms;
+  --duration-slow: 420ms;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-border: var(--border-default);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0f172a;
-    --foreground: #f8fafc;
-    --app-bg: #0b1220;
-    --app-fg: #f8fafc;
+    color-scheme: dark;
+
+    --background: #0c0f12;
+    --foreground: #f2f4f7;
+    --app-bg: #0c0f12;
+    --app-fg: #f2f4f7;
+
+    --surface: #111419;
+    --surface-secondary: #171b20;
+    --surface-tertiary: #1f252c;
+    --surface-inverse: #f3f5f7;
+
+    --text-strong: #f2f4f7;
+    --text-primary: #dde2e8;
+    --text-secondary: #aab3bc;
+    --text-tertiary: #8a949e;
+    --text-quaternary: #6b7280;
+    --text-inverse: #13161a;
+
+    --border-subtle: #20252c;
+    --border-default: #2b323a;
+    --border-strong: #3a444f;
+
+    --accent: #2f9b92;
+    --accent-strong: #5fb7af;
+    --accent-soft: rgba(47, 155, 146, 0.18);
+    --accent-contrast: #eefcfa;
+
+    --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
+    --shadow-md: 0 20px 48px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 30px 84px rgba(0, 0, 0, 0.38);
   }
 }
 
@@ -31,15 +148,19 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-width: none;
 }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 24rem),
-    linear-gradient(180deg, #f8fafc 0%, #f7f5ef 100%);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--app-bg);
+  color: var(--text-primary);
+  font-family: var(--font-family-sans);
+  line-height: var(--line-height-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 a {
@@ -48,5 +169,101 @@ a {
 }
 
 code {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-family-mono);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+
+.surface-primary {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+}
+
+.surface-secondary {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none;
+}
+
+.home-intro-ring {
+  --ring-progress: 0;
+  width: clamp(10rem, 18vw, 15rem);
+  height: clamp(10rem, 18vw, 15rem);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 58%),
+    conic-gradient(
+      from -90deg,
+      var(--accent) calc(var(--ring-progress) * 1turn),
+      rgba(255, 255, 255, 0.08) 0turn
+    );
+  padding: 0.95rem;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.home-intro-core {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #0c0f12;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.home-reveal-layer {
+  --reveal-progress: 0;
+  position: absolute;
+  inset: 0;
+  clip-path: circle(calc(0.75rem + var(--reveal-progress) * 130vmax) at 50% 50%);
+}
+
+.home-reveal-site {
+  --site-opacity: 0;
+  --site-scale: 0.94;
+  opacity: var(--site-opacity);
+  transform: scale(var(--site-scale));
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+@keyframes ripple {
+  0% {
+    width: 20px;
+    height: 20px;
+    opacity: 0.5;
+  }
+  100% {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+  }
+}
+
+.animate-ripple {
+  animation: ripple 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
