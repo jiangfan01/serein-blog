@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { IntroAnimation } from "@/components/intro/intro-animation-final";
 import { techStack } from "@/data/tech-stack";
 import { LineWaves } from "@/components/effects/line-waves";
+import GradualBlur from "@/components/effects/gradual-blur";
 
 const projects = [
   {
@@ -299,67 +300,92 @@ export function HomePage() {
               </h2>
             </div>
 
-            <div className="space-y-32">
+            <div className="space-y-0">
               {projects.map((project, index) => (
                 <div
                   key={project.id}
-                  className="group"
+                  className="group relative"
+                  style={{
+                    minHeight: '600px',
+                    overflow: 'hidden',
+                    background: 'linear-gradient(to bottom, rgba(47, 155, 146, 0.03), rgba(47, 155, 146, 0.01))'
+                  }}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-                    {/* 左侧：编号和分类 */}
-                    <div className="md:col-span-2">
-                      <div className="flex flex-col gap-4">
-                        <span className="text-6xl font-black text-white/10 group-hover:text-[var(--accent)]/20 transition-colors">
-                          {project.id}
-                        </span>
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-gray-600">
-                          {project.category}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 右侧：内容 */}
-                    <div className="md:col-span-10 space-y-6">
-                      <h3 className="text-4xl md:text-5xl font-bold text-white group-hover:text-[var(--accent)] transition-colors">
-                        {project.title}
-                      </h3>
-
-                      <p className="text-gray-400 text-lg leading-relaxed max-w-4xl">
-                        {project.description}
-                      </p>
-
-                      <div className="flex flex-wrap gap-3">
-                        {project.tags.map(tag => (
-                          <span
-                            key={tag}
-                            className="font-mono text-xs text-gray-500"
-                          >
-                            {tag}
+                  {/* 内容区域 */}
+                  <div 
+                    className="relative z-10 py-32 px-4"
+                    style={{
+                      paddingBottom: '200px'
+                    }}
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+                      {/* 左侧：编号和分类 */}
+                      <div className="md:col-span-2">
+                        <div className="flex flex-col gap-4">
+                          <span className="text-6xl font-black text-white/10 group-hover:text-[var(--accent)]/20 transition-colors">
+                            {project.id}
                           </span>
-                        ))}
+                          <span className="font-mono text-[10px] uppercase tracking-widest text-gray-600">
+                            {project.category}
+                          </span>
+                        </div>
                       </div>
 
-                      {project.url ? (
-                        <a
-                          href={project.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors group/link text-lg font-bold pt-4"
-                        >
-                          <span>查看项目</span>
-                          <ArrowRight className="h-5 w-5 transform group-hover/link:translate-x-2 transition-transform" />
-                        </a>
-                      ) : (
-                        <span className="inline-flex items-center gap-3 text-gray-600 text-lg font-bold pt-4">
-                          <span>内部项目</span>
-                        </span>
-                      )}
+                      {/* 右侧：内容 */}
+                      <div className="md:col-span-10 space-y-6">
+                        <h3 className="text-4xl md:text-5xl font-bold text-white group-hover:text-[var(--accent)] transition-colors">
+                          {project.title}
+                        </h3>
+
+                        <p className="text-gray-400 text-lg leading-relaxed max-w-4xl">
+                          {project.description}
+                        </p>
+
+                        <div className="flex flex-wrap gap-3 pt-4">
+                          {project.tags.map(tag => (
+                            <span
+                              key={tag}
+                              className="font-mono text-xs text-gray-500 px-3 py-1 border border-gray-800 rounded-full"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+
+                        {project.url ? (
+                          <a
+                            href={project.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors group/link text-lg font-bold pt-8"
+                          >
+                            <span>查看项目</span>
+                            <ArrowRight className="h-5 w-5 transform group-hover/link:translate-x-2 transition-transform" />
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-3 text-gray-600 text-lg font-bold pt-8">
+                            <span>内部项目</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
+                  {/* GradualBlur 效果 - 交错方向 */}
+                  <GradualBlur
+                    target="parent"
+                    position={index % 2 === 0 ? "bottom" : "top"}
+                    height="15rem"
+                    strength={5}
+                    divCount={12}
+                    curve="bezier"
+                    exponential
+                    opacity={1}
+                  />
+
                   {/* 分隔线 */}
                   {index < projects.length - 1 && (
-                    <div className="mt-32 h-px bg-white/10" />
+                    <div className="absolute bottom-0 left-0 right-0 h-px bg-white/10 z-20" />
                   )}
                 </div>
               ))}
