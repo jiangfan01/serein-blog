@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -13,8 +13,17 @@ export function IntroAnimation() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
+  const [hasPlayed, setHasPlayed] = useState(false);
 
   useEffect(() => {
+    // Check if animation has already played in this session
+    const animationPlayed = sessionStorage.getItem('intro-animation-played');
+    
+    if (animationPlayed === 'true') {
+      setHasPlayed(true);
+      return;
+    }
+
     const section = sectionRef.current;
     const overlay = overlayRef.current;
     const title = titleRef.current;
@@ -45,6 +54,10 @@ export function IntroAnimation() {
           scrub: 1.2,
           pin: true,
           anticipatePin: 1,
+          onLeave: () => {
+            // Mark animation as played when user scrolls past it
+            sessionStorage.setItem('intro-animation-played', 'true');
+          }
         },
       });
 
@@ -67,6 +80,11 @@ export function IntroAnimation() {
       ctx.revert();
     };
   }, []);
+
+  // If animation has already played, don't render it
+  if (hasPlayed) {
+    return null;
+  }
 
   return (
     <section
