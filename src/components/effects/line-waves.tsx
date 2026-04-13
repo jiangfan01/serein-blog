@@ -231,8 +231,10 @@ export function LineWaves({
     }
 
     let animationFrameId: number;
+    let disposed = false;
 
     function update(time: number) {
+      if (disposed) return;
       animationFrameId = requestAnimationFrame(update);
       program.uniforms.uTime.value = time * 0.001;
 
@@ -251,6 +253,7 @@ export function LineWaves({
     animationFrameId = requestAnimationFrame(update);
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', resize);
       if (enableMouseInteraction && gl.canvas) {

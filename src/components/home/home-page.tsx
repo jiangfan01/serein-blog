@@ -45,27 +45,28 @@ const projects = [
 export function HomePage() {
   return (
     <>
+      {/* LineWaves Background — fixed, visible across entire page including intro */}
+      <div className="fixed inset-0 pointer-events-none opacity-40 z-0">
+        <LineWaves
+          speed={0.3}
+          innerLineCount={32}
+          outerLineCount={36}
+          warpIntensity={1}
+          rotation={-45}
+          edgeFadeWidth={0}
+          colorCycleSpeed={1}
+          brightness={0.2}
+          color1="#2f9b92"
+          color2="#2f9b92"
+          color3="#2f9b92"
+          enableMouseInteraction
+          mouseInfluence={2}
+        />
+      </div>
+
       <IntroAnimation />
       
-      <div className="relative bg-[var(--app-bg)]">
-        {/* LineWaves Background */}
-        <div className="fixed inset-0 pointer-events-none opacity-40 z-0">
-          <LineWaves
-            speed={0.3}
-            innerLineCount={32}
-            outerLineCount={36}
-            warpIntensity={1}
-            rotation={-45}
-            edgeFadeWidth={0}
-            colorCycleSpeed={1}
-            brightness={0.2}
-            color1="#2f9b92"
-            color2="#2f9b92"
-            color3="#2f9b92"
-            enableMouseInteraction
-            mouseInfluence={2}
-          />
-        </div>
+      <div className="relative">
 
         {/* Hero Section */}
         <section className="relative min-h-screen flex items-center justify-center px-6 md:px-16 overflow-hidden">

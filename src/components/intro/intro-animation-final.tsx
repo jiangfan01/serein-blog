@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -14,7 +14,7 @@ export function IntroAnimation() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const section = sectionRef.current;
     const overlay = overlayRef.current;
     const title = titleRef.current;
@@ -28,59 +28,54 @@ export function IntroAnimation() {
       { opacity: 1, y: 0, duration: 1, ease: "power2.out", delay: 0.3 }
     );
 
-    const ctx = gsap.context(() => {
-      // Initial states
-      gsap.set(overlay, {
-        clipPath: "circle(100% at 50% 50%)",
-      });
-      gsap.set(hint, {
-        opacity: 0.6,
-      });
+    // Initial states
+    gsap.set(overlay, {
+      clipPath: "circle(100% at 50% 50%)",
+    });
+    gsap.set(hint, {
+      opacity: 0.6,
+    });
 
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: section,
-          start: "top top",
-          end: "+=1600",
-          scrub: 1.2,
-          pin: true,
-          anticipatePin: 1,
-        },
-      });
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: "+=1600",
+        scrub: 1.2,
+        pin: true,
+        anticipatePin: 1,
+      },
+    });
 
-      // Only animate hint and circle, NOT the title
-      tl.to(hint, {
-        opacity: 0,
-        duration: 2,
-        ease: "power2.in",
-      }, 0);
+    // Only animate hint and circle, NOT the title
+    tl.to(hint, {
+      opacity: 0,
+      duration: 2,
+      ease: "power2.in",
+    }, 0);
 
-      // Circle shrinks from center
-      tl.to(overlay, {
-        clipPath: "circle(0% at 50% 50%)",
-        duration: 8,
-        ease: "power3.inOut",
-      }, 2);
-    }, section);
+    // Circle shrinks from center
+    tl.to(overlay, {
+      clipPath: "circle(0% at 50% 50%)",
+      duration: 8,
+      ease: "power3.inOut",
+    }, 2);
+
+    const st = tl.scrollTrigger!;
 
     return () => {
-      ctx.revert();
-      // Kill all ScrollTriggers associated with this component
-      ScrollTrigger.getAll().forEach(trigger => {
-        if (trigger.vars.trigger === section) {
-          trigger.kill();
-        }
-      });
+      // Kill ScrollTrigger FIRST to remove pin-spacer wrapper
+      // before React tries to removeChild on the original DOM nodes.
+      st.kill();
+      tl.kill();
+      gsap.set([overlay, title, hint, section], { clearProps: "all" });
     };
   }, []);
 
   return (
     <section
       ref={sectionRef}
-      className="relative z-50 h-screen overflow-hidden"
-      style={{ 
-        backgroundColor: "var(--app-bg)",
-      }}
+      className="relative z-30 h-screen overflow-hidden"
     >
       {/* Overlay that shrinks to reveal content */}
       <div
