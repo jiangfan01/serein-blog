@@ -1,0 +1,74 @@
+---
+title: React 生命周期
+description: 类组件生命周期与 Hooks 对应关系
+---
+
+# React 生命周期
+
+## 一、挂载阶段（组件被创建并插入 DOM）
+
+| 生命周期方法 | 作用 |
+|--------------|------|
+| `constructor()` | 初始化 state 和方法绑定 |
+| `static getDerivedStateFromProps(props, state)` | 根据 props 派生 state，**少用** |
+| `render()` | 渲染组件 UI，**唯一必需的方法** |
+| `componentDidMount()` | 组件挂载后执行，适合发请求、操作 DOM、订阅等副作用逻辑 |
+
+## 二、更新阶段（state 或 props 变化时）
+
+| 生命周期方法 | 作用 |
+|--------------|------|
+| `static getDerivedStateFromProps(props, state)` | 同上 |
+| `shouldComponentUpdate(nextProps, nextState)` | 是否允许更新，**用于性能优化** |
+| `render()` | 渲染更新后的 UI |
+| `getSnapshotBeforeUpdate(prevProps, prevState)` | 获取更新前 DOM 快照 |
+| `componentDidUpdate(prevProps, prevState, snapshot)` | DOM 更新完毕，可执行副作用操作 |
+
+## 三、卸载阶段（组件被移除）
+
+| 生命周期方法 | 作用 |
+|--------------|------|
+| `componentWillUnmount()` | 清理副作用，如取消定时器、取消订阅等 |
+
+## 四、函数组件对应 Hooks
+
+| 类组件生命周期 | 对应的 Hook 写法 |
+|----------------|------------------|
+| `componentDidMount` | `useEffect(() => {...}, [])` |
+| `componentDidUpdate` | `useEffect(() => {...})` |
+| `componentWillUnmount` | `useEffect(() => { return () => {...} }, [])` |
+
+### 示例
+
+```tsx
+import { useEffect } from 'react';
+
+useEffect(() => {
+  console.log("组件挂载或更新");
+
+  return () => {
+    console.log("组件卸载");
+  };
+}, [依赖项]);
+```
+
+## 生命周期图示
+
+```
+挂载阶段:
+constructor → getDerivedStateFromProps → render → componentDidMount
+
+更新阶段:
+getDerivedStateFromProps → shouldComponentUpdate → render 
+→ getSnapshotBeforeUpdate → componentDidUpdate
+
+卸载阶段:
+componentWillUnmount
+```
+
+## 总结
+
+- 类组件使用生命周期方法管理副作用
+- 函数组件使用 `useEffect` Hook 替代
+- `useEffect` 的依赖数组控制执行时机
+- 返回的清理函数在组件卸载或依赖变化时执行

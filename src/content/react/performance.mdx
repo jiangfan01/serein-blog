@@ -1,0 +1,183 @@
+---
+title: React 性能优化
+description: React 应用性能优化的多种方案
+---
+
+# React 性能优化
+
+React 性能优化不仅包含组件级优化，也涉及构建优化、资源加载优化等。
+
+## 一、组件层级优化
+
+### React.memo
+
+缓存组件的渲染结果，当 props 没有变化时，组件不会重新渲染。
+
+```tsx
+const MemoedComponent = React.memo(function MyComponent({ name }) {
+  return <div>{name}</div>;
+});
+
+// 自定义比较函数
+const MemoedComponent = React.memo(MyComponent, (prevProps, nextProps) => {
+  return prevProps.id === nextProps.id;
+});
+```
+
+### useMemo
+
+缓存计算结果，只有依赖变化才重新计算。
+
+```tsx
+const expensiveValue = useMemo(() => {
+  return computeExpensive(a, b);
+}, [a, b]);
+```
+
+### useCallback
+
+缓存函数引用，依赖不变时返回同一个函数。
+
+```tsx
+const handleClick = useCallback(() => {
+  console.log("Clicked");
+}, []);
+```
+
+### 优化三剑客对比
+
+| API | 缓存对象 | 典型用途 |
+|-----|----------|----------|
+| React.memo | 组件渲染结果 | 避免不必要的子组件渲染 |
+| useMemo | 计算值 | 避免重复计算 |
+| useCallback | 函数 | 避免函数频繁创建 |
+
+### 列表虚拟化
+
+使用 `react-window` 或 `react-virtualized` 降低长列表渲染压力。
+
+```tsx
+import { FixedSizeList } from 'react-window';
+
+function VirtualList({ items }) {
+  return (
+    <FixedSizeList
+      height={400}
+      itemCount={items.length}
+      itemSize={50}
+      width="100%"
+    >
+      {({ index, style }) => (
+        <div style={style}>{items[index]}</div>
+      )}
+    </FixedSizeList>
+  );
+}
+```
+
+### 懒加载组件
+
+使用 `React.lazy + Suspense` 延迟加载组件。
+
+```tsx
+const LazyComponent = React.lazy(() => import('./HeavyComponent'));
+
+function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+```
+
+## 二、构建优化（Webpack/Vite）
+
+| 优化策略 | 描述 |
+|----------|------|
+| Tree Shaking | 删除未使用的代码 |
+| 代码分割 | 按路由/组件打包拆分 |
+| 压缩混淆 | TerserPlugin 压缩 JS/CSS |
+| 图片压缩 | image-webpack-loader |
+| Gzip 压缩 | compression-webpack-plugin |
+
+## 三、资源加载优化
+
+| 技术 | 优势 |
+|------|------|
+| CDN 加速 | 静态资源走 CDN |
+| 图片懒加载 | `loading="lazy"` |
+| HTTP/2 | 多路复用 + 头部压缩 |
+| DNS 预解析 | `<link rel="dns-prefetch">` |
+
+## 四、其他优化技巧
+
+### 避免不必要的 state
+
+```tsx
+// ❌ 不需要的 state
+const [fullName, setFullName] = useState('');
+useEffect(() => {
+  setFullName(`${firstName} ${lastName}`);
+}, [firstName, lastName]);
+
+// ✅ 直接计算
+const fullName = `${firstName} ${lastName}`;
+```
+
+### 事件节流/防抖
+
+```tsx
+const handleScroll = useMemo(
+  () => throttle(() => {
+    // 处理滚动
+  }, 100),
+  []
+);
+```
+
+### 合理拆分组件
+
+避免"大组件更新波及小部分 UI"。
+
+```tsx
+// ❌ 整个组件重渲染
+function Page() {
+  const [count, setCount] = useState(0);
+  return (
+    <div>
+      <ExpensiveList /> {/* 每次都重渲染 */}
+      <button onClick={() => setCount(c => c + 1)}>{count}</button>
+    </div>
+  );
+}
+
+// ✅ 拆分组件
+function Page() {
+  return (
+    <div>
+      <ExpensiveList />
+      <Counter />
+    </div>
+  );
+}
+```
+
+## 五、调试工具
+
+| 工具 | 用途 |
+|------|------|
+| React DevTools | 查看组件更新频率 |
+| Webpack Bundle Analyzer | 分析打包体积 |
+| Lighthouse | 性能评估 |
+
+## 总结
+
+| 层级 | 优化方向 | 代表手段 |
+|------|----------|----------|
+| 组件层 | 渲染优化 | React.memo、useMemo/useCallback |
+| 构建层 | 体积压缩 | Tree Shaking、懒加载、gzip |
+| 网络层 | 加载速度 | CDN、图片懒加载、HTTP2 |
+| 工具辅助 | 分析瓶颈 | DevTools、Lighthouse |
+
+> ⚠️ 性能优化的关键：**按需优化 + 实际监测**，避免过度优化。

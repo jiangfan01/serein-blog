@@ -1,0 +1,99 @@
+---
+title: JSX 基础
+description: 了解 JSX 语法及其工作原理
+---
+
+# JSX 基础
+
+**JSX** 是 JavaScript 的语法扩展，它让我们可以像写 HTML 一样书写组件结构。
+
+## 基本语法
+
+```jsx
+const element = <h1>Hello World</h1>;
+```
+
+## JSX 的本质
+
+JSX 本质上是 `React.createElement` 的语法糖，最终会被 Babel 转换为 JS 函数调用：
+
+```jsx
+// JSX 写法
+const element = <h1 className="title">Hello</h1>;
+
+// 编译后
+const element = React.createElement(
+  'h1',
+  { className: 'title' },
+  'Hello'
+);
+```
+
+## JSX 中的表达式
+
+在 JSX 中可以使用花括号 `{}` 嵌入任何有效的 JavaScript 表达式：
+
+```jsx
+const name = 'Serein';
+const element = <h1>Hello, {name}!</h1>;
+
+// 也可以是函数调用
+const element = <h1>Hello, {formatName(user)}!</h1>;
+```
+
+## 条件渲染
+
+### 三元运算符
+
+```jsx
+{isLoggedIn ? <UserGreeting /> : <GuestGreeting />}
+```
+
+### 逻辑与运算符
+
+```jsx
+{messages.length > 0 && <MessageList messages={messages} />}
+```
+
+## 列表渲染
+
+使用 `map()` 方法渲染列表，记得添加 `key` 属性：
+
+```jsx
+const items = ['Apple', 'Banana', 'Orange'];
+
+return (
+  <ul>
+    {items.map((item, index) => (
+      <li key={index}>{item}</li>
+    ))}
+  </ul>
+);
+```
+
+> **注意**：尽量使用唯一的 ID 作为 key，而不是数组索引。
+
+## JSX 的注意事项
+
+1. **className 代替 class** - 因为 `class` 是 JavaScript 保留字
+2. **htmlFor 代替 for** - 同样是保留字问题
+3. **驼峰命名** - 所有 DOM 属性使用驼峰命名，如 `onClick`、`tabIndex`
+4. **必须有根元素** - 可以使用 `<>...</>` (Fragment) 包裹
+
+```jsx
+// 使用 Fragment
+return (
+  <>
+    <Header />
+    <Main />
+    <Footer />
+  </>
+);
+```
+
+## 总结
+
+- JSX 让 UI 代码更直观、更易读
+- 本质是 `React.createElement` 的语法糖
+- 支持嵌入 JavaScript 表达式
+- 需要注意一些命名差异（className、htmlFor 等）

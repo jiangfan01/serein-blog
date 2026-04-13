@@ -1,0 +1,177 @@
+---
+title: 组件通信
+description: React 组件间通信的多种方式
+---
+
+# React 组件通信
+
+React 中组件通信是一个核心话题，不同场景需要不同的通信方式。
+
+## 父子组件通信
+
+### Props 传递（父 → 子）
+
+父组件通过 `props` 向子组件传递数据。
+
+```tsx
+// 父组件
+function Parent() {
+  const [name, setName] = useState('Serein');
+  return <Child name={name} />;
+}
+
+// 子组件
+function Child({ name }) {
+  return <p>Hello, {name}</p>;
+}
+```
+
+### 回调函数（子 → 父）
+
+子组件通过调用父组件传递的回调函数实现反向通信。
+
+```tsx
+// 父组件
+function Parent() {
+  const handleMessage = (msg) => {
+    console.log('收到消息:', msg);
+  };
+  return <Child onMessage={handleMessage} />;
+}
+
+// 子组件
+function Child({ onMessage }) {
+  return (
+    <button onClick={() => onMessage('Hello!')}>
+      发送消息
+    </button>
+  );
+}
+```
+
+### Ref 通信
+
+父组件使用 `ref` 获取子组件的实例或 DOM 元素。
+
+```tsx
+// 子组件
+const Child = forwardRef((props, ref) => {
+  useImperativeHandle(ref, () => ({
+    sayHello: () => console.log('Hello!')
+  }));
+  return <div>Child</div>;
+});
+
+// 父组件
+function Parent() {
+  const childRef = useRef();
+  
+  const handleClick = () => {
+    childRef.current.sayHello();
+  };
+  
+  return (
+    <>
+      <Child ref={childRef} />
+      <button onClick={handleClick}>调用子组件方法</button>
+    </>
+  );
+}
+```
+
+## 兄弟组件通信
+
+### 状态提升（Lifting State Up）
+
+将多个子组件共享的状态提升到它们的共同父组件。
+
+```tsx
+function Parent() {
+  const [sharedState, setSharedState] = useState('');
+  
+  return (
+    <>
+      <ChildA value={sharedState} onChange={setSharedState} />
+      <ChildB value={sharedState} />
+    </>
+  );
+}
+```
+
+**优点：**
+- **单一数据源**：所有组件共享同一个状态源
+- **数据流清晰**：自上而下的单向数据流
+- **易于调试**：状态集中管理
+
+## 跨层级组件通信
+
+### useContext
+
+利用 React 的上下文机制在多层组件中共享状态。
+
+```tsx
+// 创建 Context
+const UserContext = createContext(null);
+
+// 顶层提供
+function App() {
+  const [user, setUser] = useState({ name: 'Serein' });
+  
+  return (
+    <UserContext.Provider value={{ user, setUser }}>
+      <DeepChild />
+    </UserContext.Provider>
+  );
+}
+
+// 深层消费
+function DeepChild() {
+  const { user } = useContext(UserContext);
+  return <p>用户: {user.name}</p>;
+}
+```
+
+### Redux / Zustand 等状态管理库
+
+用于复杂项目或多组件共享状态场景。
+
+```tsx
+// Zustand 示例
+import { create } from 'zustand';
+
+const useStore = create((set) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 })),
+}));
+
+function Counter() {
+  const { count, increment } = useStore();
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+## 通信方式对比
+
+| 通信方式 | 场景 | 特点 |
+|----------|------|------|
+| props | 父 → 子 | 简单直接 |
+| 回调函数 | 子 → 父 | 向上传递数据 |
+| 状态提升 | 兄弟组件 | 利用公共父组件中转 |
+| useContext | 跨层级组件 | 适用于轻量级全局共享状态 |
+| Redux/Zustand | 跨组件全局通信 | 适用于大型应用，状态集中管理 |
+
+## 选择建议
+
+```
+简单父子通信 → props + 回调函数
+兄弟组件通信 → 状态提升
+跨层级少量数据 → useContext
+复杂全局状态 → Redux / Zustand
+```
+
+## 总结
+
+- 优先使用 props 和回调函数处理简单通信
+- 状态提升是兄弟组件通信的标准方案
+- useContext 适合主题、用户信息等全局数据
+- 复杂应用考虑使用专业的状态管理库
