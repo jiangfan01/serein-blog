@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useLayoutEffect, useRef, useState, useEffect } from 'react';
+import Link from 'next/link';
 import { gsap } from 'gsap';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -458,14 +459,14 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
         })()}
       </div>
       <header className="staggered-menu-header" aria-label="Main navigation header">
-        <a href="/" className="sm-logo" aria-label="返回首页" style={{ color: menuButtonColor }}>
+        <Link href="/" className="sm-logo" aria-label="返回首页" style={{ color: menuButtonColor }}>
           <Logo
             showText={true}
             className="gap-2.5"
             markClassName="h-7 w-7"
             textClassName="text-[var(--font-size-caption)]"
           />
-        </a>
+        </Link>
         <button
           ref={toggleBtnRef}
           className="sm-toggle"
@@ -497,9 +498,9 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
             {items && items.length ? (
               items.map((it, idx) => (
                 <li className="sm-panel-itemWrap" key={it.label + idx}>
-                  <a className="sm-panel-item" href={it.link} aria-label={it.ariaLabel}>
+                  <Link className="sm-panel-item" href={it.link} aria-label={it.ariaLabel}>
                     <span className="sm-panel-itemLabel">{it.label}</span>
-                  </a>
+                  </Link>
                 </li>
               ))
             ) : (
