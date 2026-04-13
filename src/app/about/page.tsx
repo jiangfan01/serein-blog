@@ -58,7 +58,7 @@ export default function AboutPage() {
           </h1>
           
           <p className="text-xl text-gray-400 mb-2">
-            全栈开发 · AI 架构师
+            前端开发工程师
           </p>
           
           <div className="flex items-center gap-2 text-gray-500 text-sm font-mono">
@@ -73,9 +73,11 @@ export default function AboutPage() {
         {/* 简介 */}
         <div className="mb-20">
           <p className="text-gray-400 text-lg leading-relaxed text-center max-w-2xl mx-auto">
-            2年工作经验，专注前端工程与 AI 应用方向。
+            热衷于探索前沿技术与视觉美学的全栈开发者。
             <br />
-            期望薪资 10-15K，寻求在杭州的发展机会。
+            追逐新鲜热门的技术栈，痴迷于打造极致的用户体验。
+            <br />
+            从前端的精雕细琢到后端的架构探索，永远保持好奇心与上进心。
           </p>
         </div>
 
