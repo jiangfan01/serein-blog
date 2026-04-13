@@ -65,6 +65,12 @@ export function IntroAnimation() {
 
     return () => {
       ctx.revert();
+      // Kill all ScrollTriggers associated with this component
+      ScrollTrigger.getAll().forEach(trigger => {
+        if (trigger.vars.trigger === section) {
+          trigger.kill();
+        }
+      });
     };
   }, []);
 
