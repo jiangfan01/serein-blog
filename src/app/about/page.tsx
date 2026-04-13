@@ -2,33 +2,40 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, Code2, MessageCircle, Hash } from "lucide-react";
+import { Mail } from "lucide-react";
 import avatarImage from "@/assets/images/avatar.jpg";
+import githubIcon from "@/assets/images/svg/github-fill.svg";
+import wechatIcon from "@/assets/images/svg/wechat-fill.svg";
+import qqIcon from "@/assets/images/svg/QQ.svg";
 
 const contactInfo = [
   {
     icon: Mail,
+    iconType: "lucide" as const,
     label: "邮箱",
     value: "jf1431037397@gmail.com",
     href: "mailto:jf1431037397@gmail.com",
     display: "jf1431037397@gmail.com"
   },
   {
-    icon: Code2,
+    iconSvg: githubIcon,
+    iconType: "svg" as const,
     label: "GitHub",
     value: "jiangfan01",
     href: "https://github.com/jiangfan01",
     display: "github.com/jiangfan01"
   },
   {
-    icon: MessageCircle,
+    iconSvg: wechatIcon,
+    iconType: "svg" as const,
     label: "微信",
     value: "Devoted-serein",
     href: null,
     display: "Devoted-serein"
   },
   {
-    icon: Hash,
+    iconSvg: qqIcon,
+    iconType: "svg" as const,
     label: "QQ",
     value: "1431037397",
     href: null,
@@ -89,11 +96,21 @@ export default function AboutPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {contactInfo.map((contact) => {
-              const Icon = contact.icon;
               const content = (
                 <div className="group flex items-start gap-4 p-6 hover:bg-white/[0.02] transition-colors rounded-lg">
                   <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center group-hover:bg-[var(--accent)]/20 transition-colors">
-                    <Icon className="w-5 h-5 text-[var(--accent)]" />
+                    {contact.iconType === "lucide" && contact.icon ? (
+                      <contact.icon className="w-5 h-5 text-[var(--accent)]" />
+                    ) : contact.iconType === "svg" && contact.iconSvg ? (
+                      <Image
+                        src={contact.iconSvg}
+                        alt={contact.label}
+                        width={20}
+                        height={20}
+                        className="text-[var(--accent)]"
+                        style={{ filter: 'brightness(0) saturate(100%) invert(64%) sepia(35%) saturate(456%) hue-rotate(122deg) brightness(91%) contrast(87%)' }}
+                      />
+                    ) : null}
                   </div>
                   
                   <div className="flex-1 min-w-0">
