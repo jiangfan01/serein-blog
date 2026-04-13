@@ -1,0 +1,80 @@
+---
+title: 防抖与节流
+description: 前端性能优化中的防抖和节流技术
+---
+
+# 防抖（Debounce）与节流（Throttle）
+
+它们都是前端性能优化中**控制高频触发事件**的常用技术，例如：滚动、输入、窗口大小调整等。
+
+## 防抖（Debounce）
+
+> 多次触发，只执行最后一次！
+
+- 每次事件触发后都会重置计时器，**等用户停止操作一段时间后才执行函数**
+- 常用于 **输入框搜索联想、防止按钮多次点击提交**
+
+### 示例代码
+
+```js
+const debounce = (fn, delay = 300) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn(...args);
+    }, delay);
+  };
+};
+```
+
+## 节流（Throttle）
+
+> 限制单位时间内函数只能执行一次！
+
+- 无论触发多少次事件，在指定时间间隔内只执行一次
+- 常用于 **滚动监听、页面 resize、游戏帧率控制**
+
+### 示例代码
+
+```js
+const throttle = (fn, delay = 300) => {
+  let lastTime = 0;
+  return (...args) => {
+    const now = Date.now();
+    if (now - lastTime > delay) {
+      fn(...args);
+      lastTime = now;
+    }
+  };
+};
+```
+
+## 使用 Lodash
+
+你也可以使用 Lodash 库中提供的 `_.debounce` 和 `_.throttle` 方法：
+
+```js
+import { debounce, throttle } from 'lodash';
+
+const debouncedFn = debounce(() => {
+  console.log("触发了防抖函数");
+}, 300);
+
+const throttledFn = throttle(() => {
+  console.log("触发了节流函数");
+}, 300);
+```
+
+## 对比总结
+
+| 特性       | 防抖（Debounce）                   | 节流（Throttle）                     |
+|------------|-------------------------------------|--------------------------------------|
+| 执行频率   | 停止触发后执行一次                 | 固定时间间隔内执行一次               |
+| 典型场景   | 搜索框输入、按钮防止重复点击       | 页面滚动、窗口 resize、鼠标移动监听 |
+| 控制方式   | 重置延迟                            | 时间间隔检查                         |
+
+## 小结口诀
+
+- 输入框建议用 **防抖**，避免每个字都请求接口
+- 滚动监听建议用 **节流**，防止回调执行过频

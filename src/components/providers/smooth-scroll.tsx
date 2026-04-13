@@ -10,6 +10,14 @@ export function SmoothScroll() {
   const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
+    // 在 notes 页面禁用 Lenis 平滑滚动
+    const isNotesPage = pathname?.startsWith('/notes');
+    if (isNotesPage) {
+      // 确保 html 没有 lenis 相关 class
+      document.documentElement.classList.remove('lenis', 'lenis-smooth');
+      return;
+    }
+
     const lenis = new Lenis({
       duration: 1.15,
       smoothWheel: true,

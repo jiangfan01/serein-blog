@@ -1,0 +1,60 @@
+# 三种判断数据类型的方式
+
+JavaScript 提供了多种方式来判断变量的数据类型，以下是三种最常用的方法：
+
+## 1. typeof 操作符
+
+用于判断**基本数据类型**，返回一个表示类型的字符串。
+
+```js
+typeof 123            // "number"
+typeof "hello"        // "string"
+typeof undefined      // "undefined"
+typeof null           // "object" ❌（历史遗留 Bug）
+typeof []             // "object"
+typeof function() {}  // "function"
+```
+
+- **优点**：简单快速
+- **缺点**：对于 `null`、`array`、`object` 无法准确区分
+
+## 2. instanceof 运算符
+
+用于判断一个对象是否是某个构造函数的实例，检查原型链上是否存在目标类型。
+
+```js
+[] instanceof Array             // true
+{} instanceof Object           // true
+new Date() instanceof Date     // true
+123 instanceof Number          // false ❌（基本类型）
+
+const num = new Number(123);
+num instanceof Number          // true ✅（包装对象）
+```
+
+- **优点**：适用于引用类型（Array、Function、Date...）
+- **缺点**：不能判断基本数据类型
+
+## 3. Object.prototype.toString.call() 方法（推荐）
+
+这是判断所有类型最**准确可靠**的方法，尤其适合判断复杂对象类型。
+
+```js
+Object.prototype.toString.call("hello")   // [object String]
+Object.prototype.toString.call(123)       // [object Number]
+Object.prototype.toString.call(null)      // [object Null]
+Object.prototype.toString.call([])        // [object Array]
+Object.prototype.toString.call({})        // [object Object]
+Object.prototype.toString.call(() => {})  // [object Function]
+```
+
+- **优点**：能准确判断所有类型，包括 `null` 和 `array`
+- **缺点**：语法稍长
+
+## 总结对比
+
+| 方法 | 能判断基本类型 | 能判断引用类型 | 准确度 | 是否推荐 |
+|------|----------------|----------------|--------|----------|
+| `typeof` | ✅ | 部分支持 | 中等 | ✅ |
+| `instanceof` | ❌ | ✅ | 中等 | 视情况 |
+| `Object.prototype.toString.call()` | ✅ | ✅ | 高 | ✅✅✅ |

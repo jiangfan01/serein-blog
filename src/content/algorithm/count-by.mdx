@@ -1,0 +1,64 @@
+# countBy 筛选
+
+## 题目描述
+
+实现一个函数 `countBy`，根据数组元素经过某个函数处理后的结果进行分组，并统计每组的数量。
+
+类似于 lodash 中的 `_.countBy`。
+
+### 示例
+
+```js
+countBy([6.1, 4.2, 6.3], Math.floor)
+// => { '4': 1, '6': 2 }
+
+countBy(['one', 'two', 'three'], 'length')
+// => { '3': 2, '5': 1 }
+```
+
+## 解法一：使用 for of 遍历
+
+```js
+function countBy(array) {
+  const result = {};
+
+  for (const item of array) {
+    result[item] = (result[item] || 0) + 1;
+  }
+
+  return result;
+}
+```
+
+## 解法二：使用 reduce
+
+```js
+function countBy(array, iteratee) {
+  return array.reduce((acc, item) => {
+    const key = typeof iteratee === 'function' ? iteratee(item) : item[iteratee];
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+```
+
+## 解法三：使用 Map（可选更强类型支持）
+
+```js
+function countBy(array, iteratee) {
+  const map = new Map();
+
+  for (const item of array) {
+    const key = typeof iteratee === 'function' ? iteratee(item) : item[iteratee];
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+
+  return Object.fromEntries(map);
+}
+```
+
+## 思路解析
+
+- `iteratee` 可以是函数，也可以是属性名（如 'length'）
+- 每个元素根据规则归类（分组），然后统计各组数量
+- 注意要处理 `undefined` 值或异常情况

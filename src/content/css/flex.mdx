@@ -1,0 +1,66 @@
+---
+title: Flex 布局
+description: Flexbox 弹性盒子布局详解
+---
+
+# Flexbox 布局详解
+
+## 什么是 Flexbox？
+
+Flexbox（弹性盒子布局）是 CSS3 引入的一种用于在容器中分配空间和排列内容的布局模型，特别适合于一维布局（横向或纵向）。
+
+## 容器属性（父元素）
+
+| 属性               | 说明                                                                                   | 示例值                    |
+|--------------------|----------------------------------------------------------------------------------------|---------------------------|
+| `display`          | 定义弹性容器                                                                           | `flex`、`inline-flex`  |
+| `flex-direction`   | 主轴方向，决定子元素排列方向                                                           | `row`、`column`、`row-reverse`、`column-reverse` |
+| `flex-wrap`        | 是否换行                                                                             | `nowrap`、`wrap`、`wrap-reverse`                |
+| `justify-content`  | 主轴对齐方式                                                                   | `flex-start`、`center`、`space-between`、`space-around`、`space-evenly` |
+| `align-items`      | 交叉轴对齐方式                                                                 | `stretch`、`flex-start`、`center`、`flex-end`、`baseline` |
+| `align-content`    | 多行时交叉轴的对齐方式                                                | `stretch`、`flex-start`、`center`、`space-between`、`space-around` |
+
+## 项目属性（子元素）
+
+| 属性         | 说明                                      | 示例值                           |
+|--------------|-------------------------------------------|--------------------------------|
+| `order`     | 定义项目排列顺序，数字越小越靠前，默认0  | 任意整数                        |
+| `flex-grow` | 放大比例，默认0，不分配多余空间           | 数字（如1表示占据剩余空间）      |
+| `flex-shrink` | 缩小比例，默认1，空间不足时缩小比例      | 数字                           |
+| `flex-basis` | 项目在主轴上的初始大小，默认 `auto`    | 长度单位或百分比                 |
+| `flex`      | `flex-grow`, `flex-shrink`, `flex-basis` 的简写 | `flex: 1 0 auto`              |
+| `align-self` | 覆盖父容器的 `align-items`，设置单个项目的交叉轴对齐 | `auto`、`flex-start`、`center`、`flex-end` |
+
+## 典型用法示例
+
+```css
+.container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.item {
+  flex: 1 1 200px;
+  order: 2;
+}
+
+.item-special {
+  order: 1; /* 提前显示 */
+  flex-grow: 2; /* 占更多空间 */
+}
+```
+
+## 优点
+
+- 简洁灵活，解决传统布局（浮动、定位）难题
+- 轻松实现水平和垂直居中
+- 自动分配多余空间
+- 易于响应式设计
+
+## 注意事项
+
+- Flexbox 是一维布局，适合排列一行或一列
+- 复杂二维布局推荐使用 CSS Grid

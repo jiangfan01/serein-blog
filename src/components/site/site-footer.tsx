@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
@@ -13,9 +14,7 @@ export function SiteFooter() {
         <div className="grid gap-12 md:grid-cols-[1.5fr_1fr_1fr]">
           {/* Brand section */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold tracking-tight text-[var(--text-strong)]">
-              Serein Blog
-            </h3>
+            <Logo />
             <p className="max-w-sm text-[var(--font-size-body)] leading-relaxed text-[var(--text-secondary)]">
               专注于 AI 工作流系统、流式用户体验和前端工程的作品集与笔记本
             </p>
@@ -29,7 +28,7 @@ export function SiteFooter() {
             <ul className="space-y-3">
               {[
                 { label: '首页', href: '/' },
-                { label: '项目', href: '/projects' },
+                // { label: '项目', href: '/projects' },
                 { label: '笔记', href: '/notes' },
                 { label: '关于', href: '/about' },
               ].map((link) => (
@@ -84,4 +83,3 @@ export function SiteFooter() {
     </footer>
   );
 }
-

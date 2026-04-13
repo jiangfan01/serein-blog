@@ -1,0 +1,157 @@
+# JavaScript 数组常用方法
+
+JavaScript 提供了丰富的数组方法，帮助我们进行增删改查、遍历、排序等操作。
+
+## 增删改
+
+### push() / pop()
+
+- `push()`：向数组末尾添加元素，返回新长度
+- `pop()`：移除并返回最后一个元素
+
+```js
+const arr = [1, 2];
+arr.push(3);     // [1, 2, 3]
+arr.pop();       // [1, 2]
+```
+
+### unshift() / shift()
+
+- `unshift()`：向数组开头添加元素
+- `shift()`：移除数组第一个元素
+
+```js
+arr.unshift(0);  // [0, 1, 2]
+arr.shift();     // [1, 2]
+```
+
+### splice(start, deleteCount, ...items)
+
+添加/删除/替换数组中任意位置的元素
+
+```js
+arr.splice(1, 1, "a");  // 替换
+arr.splice(0, 0, "x");  // 添加
+arr.splice(2, 1);       // 删除
+```
+
+## 遍历与查找
+
+### forEach()
+
+遍历数组，无返回值
+
+```js
+arr.forEach((item, index) => {
+  console.log(index, item);
+});
+```
+
+### map()
+
+遍历并生成一个新数组
+
+```js
+const newArr = arr.map(x => x * 2);
+```
+
+### filter()
+
+过滤出符合条件的元素组成新数组
+
+```js
+const result = arr.filter(x => x > 1);
+```
+
+### find()
+
+返回第一个符合条件的元素
+
+```js
+const first = arr.find(x => x > 1);
+```
+
+## 判断与查找
+
+### includes()
+
+判断数组是否包含某元素
+
+```js
+arr.includes(2);  // true
+```
+
+### indexOf() / lastIndexOf()
+
+返回元素第一次/最后一次出现的位置
+
+```js
+arr.indexOf("a");     // 1
+arr.lastIndexOf("a"); // 3
+```
+
+## 排序与反转
+
+### sort()
+
+对数组元素进行排序（默认按字符串）
+
+```js
+[3, 1, 4].sort();               // [1, 3, 4] ❌ 错误按字符串
+[3, 1, 4].sort((a, b) => a - b); // ✅ 正确排序
+```
+
+### reverse()
+
+反转数组顺序
+
+```js
+arr.reverse();
+```
+
+## 合并与提取
+
+### concat()
+
+合并两个或多个数组
+
+```js
+const result = arr.concat([4, 5]);
+```
+
+### slice(start, end)
+
+提取数组的部分内容（不修改原数组）
+
+```js
+const sub = arr.slice(1, 3);
+```
+
+## 其它常用
+
+### reduce()
+
+聚合计算数组值
+
+```js
+const sum = [1, 2, 3].reduce((acc, cur) => acc + cur, 0); // 6
+```
+
+### flat(depth)
+
+展平嵌套数组
+
+```js
+[1, [2, [3]]].flat(2); // [1, 2, 3]
+```
+
+## 小结
+
+| 分类 | 方法 |
+|------|------|
+| 增删改 | push, pop, shift, unshift, splice |
+| 遍历 | forEach, map, filter, find |
+| 判断查找 | includes, indexOf, some, every |
+| 排序反转 | sort, reverse |
+| 合并提取 | concat, slice |
+| 高阶操作 | reduce, flat |

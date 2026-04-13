@@ -1,0 +1,65 @@
+# CSS 清除浮动的方法
+
+## 1. 使用"空标签清除法"
+
+在浮动元素后添加一个空的块级元素，并设置清除浮动：
+
+```css
+.clearfix {
+  clear: both;
+}
+```
+
+HTML:
+
+```html
+<div class="float-left">浮动元素</div>
+<div class="clearfix"></div>
+```
+
+## 2. 使用父元素的 overflow 属性
+
+给父容器设置 `overflow: hidden;` 或 `overflow: auto;`，让父元素自动包裹浮动子元素：
+
+```css
+.container {
+  overflow: hidden;
+}
+```
+
+## 3. 使用伪元素清除浮动（推荐）
+
+通过给父元素添加伪元素，利用 `clear: both` 来清除浮动：
+
+```css
+.clearfix::after {
+  content: "";
+  display: block;
+  clear: both;
+  height: 0;
+  visibility: hidden;
+}
+```
+
+HTML：
+
+```html
+<div class="clearfix">
+  <div class="float-left">浮动元素</div>
+</div>
+```
+
+## 4. 使用 Flexbox 或 Grid 布局替代浮动
+
+现代布局推荐使用 Flexbox 或 CSS Grid，避免使用浮动带来的布局问题。
+
+## 小结
+
+| 方法 | 优缺点 | 备注 |
+|------|--------|------|
+| 空标签清除 | 简单但增加无意义标签 | 不推荐 |
+| overflow 清除 | 简洁，但可能影响子元素溢出 | 常用，易用 |
+| 伪元素清除（clearfix） | 不增加额外标签，兼容性好 | 推荐，行业标准 |
+| Flexbox/Grid | 现代布局，根本避免浮动问题 | 需要兼容性支持 |
+
+建议优先使用伪元素清除法或现代布局技术，保持代码整洁和可维护。

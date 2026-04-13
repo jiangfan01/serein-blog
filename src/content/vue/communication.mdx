@@ -1,0 +1,69 @@
+---
+title: Vue 组件通信
+description: Vue 中各种组件通信方式汇总
+---
+
+# Vue 的组件通信方式汇总
+
+## 1. 父子组件通信
+
+- **父传子：** 使用 `props`，数据是**单向传递**的（父 → 子）
+- **子传父：** 使用 `$emit` 触发自定义事件。推荐在 Vue3 中使用 `defineEmits()` 显式声明事件
+
+## 2. 兄弟组件通信
+
+- 通过**状态提升**（将共享状态提升至它们的共同父组件）
+
+## 3. 事件总线（Vue 2）
+
+借助中央事件总线（event bus）通信：
+
+```js
+// Vue 2 中写法
+EventBus.$emit('eventName', data);
+EventBus.$on('eventName', callback);
+```
+
+> ⚠️ Vue 3 已不推荐使用 event bus，建议使用轻量库 `mitt` 代替
+
+## 4. provide / inject（跨层级通信）
+
+- **祖先组件**使用 `provide()` 提供数据
+- **任意后代组件**通过 `inject()` 获取该数据
+
+适合用在深层嵌套、祖孙通信等场景。
+
+## 5. 全局状态管理（Vuex / Pinia）
+
+用于中大型项目的复杂通信。**Vue 3 推荐使用 Pinia**，相比 Vuex 更轻量、类型更好。
+
+```ts
+const userStore = useUserStore();
+userStore.username = '张三';
+```
+
+## 6. URL 传参通信（借助 Vue Router）
+
+通过路由参数传递数据：
+
+```ts
+router.push({ name: 'Detail', params: { id: 123 } });
+```
+
+适合在页面跳转或刷新保留状态的场景。
+
+## 总结
+
+| 通信方式         | 适用场景             | 特点                     |
+|------------------|----------------------|--------------------------|
+| props / emit      | 父子组件             | 简单直接，推荐使用       |
+| 状态提升          | 兄弟组件             | 单一数据源，数据流清晰   |
+| provide / inject | 跨层级组件           | 跨多层嵌套，适合祖孙关系 |
+| mitt / EventBus  | 非父子、轻量通信     | Vue3 中推荐 mitt         |
+| Vuex / Pinia     | 全局状态管理         | 大型项目最佳实践         |
+| 路由传参          | 跨页通信             | 可持久，但非响应式       |
+
+**建议按项目规模选择通信方式：**
+- 小项目用 props / emit
+- 中型项目可用 provide / inject / mitt
+- 大型项目推荐 Pinia 管理全局状态

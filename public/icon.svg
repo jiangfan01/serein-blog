@@ -1,0 +1,14 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 标准 S 用贝塞尔曲线 -->
+  <path 
+    d="M21 6 C21 6 19 4 15 4 C10 4 7 6.5 7 10 C7 13.5 10 15 16 16 C22 17 25 19 25 22.5 C25 26 22 28 17 28 C13 28 11 26 11 26" 
+    stroke="#2f9b92" 
+    stroke-width="2.5" 
+    stroke-linecap="round"
+    fill="none"
+  />
+  <!-- 雨滴 -->
+  <circle cx="8" cy="29" r="1.5" fill="#2f9b92"/>
+  <circle cx="4" cy="25" r="1" fill="#2f9b92"/>
+  <circle cx="3" cy="20" r="1" fill="#2f9b92"/>
+</svg>

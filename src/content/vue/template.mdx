@@ -1,0 +1,129 @@
+# Vue 模板语法
+
+Vue 使用基于 HTML 的模板语法，将 DOM 与组件数据进行声明式绑定。
+
+## 插值表达式
+
+### 文本插值
+
+```html
+<span>{{ message }}</span>
+```
+
+### 原始 HTML
+
+```html
+<div v-html="rawHtml"></div>
+```
+
+## 指令（Directives）
+
+### 常见指令
+
+| 指令 | 作用 |
+|------|------|
+| `v-bind` | 绑定属性 |
+| `v-model` | 表单双向绑定 |
+| `v-if` | 条件渲染（完全移除/插入 DOM） |
+| `v-else-if` | 条件判断 |
+| `v-else` | 条件兜底 |
+| `v-show` | 条件显示（控制 display 属性） |
+| `v-for` | 列表渲染 |
+| `v-on` | 事件绑定（语法糖为 @） |
+| `v-slot` | 插槽内容传递 |
+| `v-pre` | 跳过编译 |
+| `v-cloak` | 防止闪烁 |
+| `v-once` | 只渲染一次，不再响应式更新 |
+
+## 指令语法细节
+
+### v-bind 简写
+
+```html
+<!-- 完整写法 -->
+<img v-bind:src="imgUrl" />
+
+<!-- 简写 -->
+<img :src="imgUrl" />
+```
+
+### v-on 简写
+
+```html
+<!-- 完整写法 -->
+<button v-on:click="doSomething"></button>
+
+<!-- 简写 -->
+<button @click="doSomething"></button>
+```
+
+## 列表渲染 v-for
+
+```html
+<ul>
+  <li v-for="(item, index) in items" :key="index">
+    {{ index }} - {{ item }}
+  </li>
+</ul>
+```
+
+> 建议始终添加 `:key` 提升渲染性能
+
+## 条件渲染
+
+```html
+<div v-if="isShow">展示内容</div>
+<div v-else-if="isOther">其他内容</div>
+<div v-else>默认内容</div>
+```
+
+## 双向绑定 v-model
+
+适用于 input/textarea/select 等表单元素：
+
+```html
+<input v-model="username" />
+```
+
+## 事件修饰符
+
+| 修饰符 | 含义 |
+|--------|------|
+| `.stop` | 阻止冒泡 |
+| `.prevent` | 阻止默认事件 |
+| `.capture` | 使用捕获模式 |
+| `.once` | 只触发一次 |
+| `.self` | 只在自身触发 |
+
+```html
+<button @click.stop.prevent="submit">提交</button>
+```
+
+## 计算属性
+
+```html
+<p>姓名：{{ fullName }}</p>
+
+<script>
+export default {
+  computed: {
+    fullName() {
+      return this.first + ' ' + this.last;
+    }
+  }
+};
+</script>
+```
+
+## 小结
+
+| 特性 | 示例 | 说明 |
+|------|------|------|
+| 文本插值 | `{{ title }}` | 输出响应式变量 |
+| 属性绑定 | `:src="imgUrl"` | 动态绑定属性 |
+| 条件渲染 | `v-if / v-show` | 控制节点显示与否 |
+| 列表渲染 | `v-for="item in list"` | 渲染数组数据 |
+| 事件监听 | `@click="handleClick"` | 响应用户操作 |
+| 表单双绑 | `v-model="username"` | 实现输入和数据联动 |
+
+模板语法的本质：Vue 模板最终会被编译为 JavaScript 渲染函数（render function），并结合响应式系统自动触发更新。

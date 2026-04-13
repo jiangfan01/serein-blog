@@ -1,0 +1,98 @@
+# 数组去重
+
+## 题目描述
+
+给定一个整数数组 `nums`，请你编写一个函数，返回去重后的新数组，保持原有顺序。
+
+### 示例
+
+```js
+输入：nums = [1, 2, 2, 3, 1]
+输出：[1, 2, 3]
+```
+
+### 函数签名
+
+```js
+function removeDuplicates(nums) { /* ... */ }
+```
+
+## 解法讲解
+
+### 解法一：使用 Set（最推荐）
+
+Set 是 ES6 新增的数据结构，天然去重。
+
+```js
+function removeDuplicates(nums) {
+  return [...new Set(nums)];
+}
+```
+
+- 时间复杂度：O(n)
+- 空间复杂度：O(n)
+- 优势：代码最简洁，适用于大部分情况
+
+### 解法二：手动哈希 + includes（保序）
+
+```js
+function removeDuplicates(nums) {
+  const res = [];
+  for (const num of nums) {
+    if (!res.includes(num)) {
+      res.push(num);
+    }
+  }
+  return res;
+}
+```
+
+- 时间复杂度：O(n²)，因为 includes 是线性查找
+- 空间复杂度：O(n)
+- 缺点：效率不如 Set
+
+### 解法三：先排序后去重（不保顺序）
+
+```js
+function removeDuplicates(nums) {
+  nums.sort((a, b) => a - b);
+  const res = [];
+  for (let i = 0; i < nums.length; i++) {
+    if (i === 0 || nums[i] !== nums[i - 1]) {
+      res.push(nums[i]);
+    }
+  }
+  return res;
+}
+```
+
+- 时间复杂度：O(n log n)（排序）
+- 优点：对原数组有序处理适用
+- 缺点：改变原顺序
+
+### 解法四：Object 哈希法（适合整数）
+
+```js
+function removeDuplicates(nums) {
+  const seen = {};
+  const res = [];
+  for (const num of nums) {
+    if (!seen[num]) {
+      seen[num] = true;
+      res.push(num);
+    }
+  }
+  return res;
+}
+```
+
+- 时间复杂度：O(n)
+- 缺点：数字和字符串可能混淆，慎用
+- 更推荐 Map 或 Set 替代
+
+## 数组去重方法对比总结
+
+- Set 用的是 ES6 的 Set 集合，简洁且保持元素原始顺序，性能很好，适合大多数场景
+- includes 是最直观的判断重复，时间复杂度高，代码量多，不推荐
+- 排序 + 去重 不保持顺序，但可以通过排序快速去重，适用于不在乎顺序的情况
+- 对象哈希 利用对象键去重，性能接近 Set，但写法稍复杂

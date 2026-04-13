@@ -1,0 +1,93 @@
+---
+title: 事件机制
+description: JavaScript 事件冒泡、捕获和事件委托
+---
+
+# JS 中的事件传播机制与事件委托
+
+## 一、事件传播机制简介
+
+事件传播分为 **三个阶段**：
+
+1. **捕获阶段（Capturing Phase）**：事件从 `window` 向目标元素传递
+2. **目标阶段（Target Phase）**：事件到达目标元素
+3. **冒泡阶段（Bubbling Phase）**：事件从目标元素向上传递到 `window`
+
+## 二、事件冒泡（Event Bubbling）
+
+> 默认行为。事件由目标元素向上传播到父级、祖先元素，直到 `document`
+
+### 示例
+
+```html
+<div id="outer">
+  <button id="inner">点击我</button>
+</div>
+```
+
+```js
+outer.addEventListener('click', () => console.log('outer'));
+inner.addEventListener('click', () => console.log('inner'));
+```
+
+输出：
+```
+inner
+outer
+```
+
+### 阻止冒泡
+
+```js
+inner.addEventListener('click', (e) => {
+  e.stopPropagation();
+});
+```
+
+## 三、事件捕获（Event Capturing）
+
+> 可选行为。事件从 `window → document → html → body → ...` 向目标元素传递
+
+### 如何监听捕获阶段事件
+
+```js
+element.addEventListener('click', handler, true); // 第三个参数为 true
+```
+
+## 四、事件委托（Event Delegation）
+
+事件委托是一种通过 **父元素统一监听**，来处理 **子元素事件** 的技巧。
+
+### 原理
+
+- 利用冒泡机制
+- 在父级绑定事件，事件冒泡触发时判断触发源（`event.target`）
+
+### 优点
+
+- 提高性能（避免重复绑定）
+- 动态绑定新元素事件无需额外添加监听器
+
+### 示例
+
+```js
+document.getElementById('list').addEventListener('click', (e) => {
+  if (e.target.tagName === 'LI') {
+    console.log('点击了', e.target.textContent);
+  }
+});
+```
+
+## 总结对比
+
+| 概念         | 说明                            | 默认行为 |
+|--------------|----------------------------------|----------|
+| 事件捕获     | 从外到内触发（父 → 子）         | ❌       |
+| 事件冒泡     | 从内到外触发（子 → 父）         | ✅       |
+| 事件委托     | 父元素监听子元素事件的技巧      | ✅       |
+
+## 实际开发建议
+
+- 多使用 **事件委托**，提升性能与代码灵活性
+- 使用 `stopPropagation()` 控制事件传播
+- `addEventListener` 第三个参数可控制监听阶段（true 为捕获）

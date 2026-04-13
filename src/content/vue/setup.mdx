@@ -1,0 +1,53 @@
+# Vue3 的 setup
+
+## 什么是 setup？
+
+`setup()` 是 Vue 3 中最核心的概念之一，也是 Composition API 的入口函数。它用于编写组件的响应式逻辑、变量定义、生命周期等。
+
+setup 相当于 Vue2 的逻辑准备区，只不过用一个 setup 代替了 Vue2 的所有逻辑，它的执行时间等同于 Vue2 中的 `beforeCreated`。
+
+## 语法糖写法
+
+```vue
+<script setup>
+// 直接在这里编写逻辑
+</script>
+```
+
+## setup 与 Options API 对比
+
+| 特性 | setup 中 | Options API 中 |
+|------|----------|----------------|
+| this | ❌ 无法使用 | ✅ 可用，指向组件实例 |
+| 数据声明 | ref / reactive | data() return 对象 |
+| 方法 | 普通函数或箭头函数 | methods 对象 |
+| 生命周期 | onXxx 组合式 API | mounted / created 等选项 |
+
+## 基本用法
+
+```vue
+<script setup>
+import { ref, onMounted } from 'vue'
+
+const count = ref(0)
+
+function increment() {
+  count.value++
+}
+
+onMounted(() => {
+  console.log('组件已挂载')
+})
+</script>
+
+<template>
+  <button @click="increment">{{ count }}</button>
+</template>
+```
+
+## 特点
+
+- 更简洁的代码组织
+- 更好的 TypeScript 支持
+- 更灵活的逻辑复用
+- 无需 return 暴露变量（使用 `<script setup>` 时）

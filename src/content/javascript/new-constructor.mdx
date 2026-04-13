@@ -1,0 +1,75 @@
+# JavaScript 构造函数与 new 操作符
+
+JavaScript 中可以使用构造函数（Constructor Function）结合 `new` 操作符来创建对象的"实例"，这是一种模拟面向对象的方式。
+
+## 什么是构造函数？
+
+构造函数本质上是一个普通函数，命名通常**首字母大写**，用于创建具有相同结构的对象。
+
+```js
+function Person(name, age) {
+  this.name = name;
+  this.age = age;
+  this.sayHi = function () {
+    console.log("Hi, I'm " + this.name);
+  };
+}
+```
+
+## 使用 new 创建实例
+
+```js
+const p1 = new Person("Tom", 20);
+p1.sayHi(); // Hi, I'm Tom
+```
+
+## new 操作符内部做了什么？
+
+`new Person("Tom")` 实际上做了以下四件事：
+
+1. **创建一个空对象**：`const obj = {}`
+2. **设置原型指向**：`obj.__proto__ = Person.prototype`
+3. **绑定 this 并执行函数**：`Person.call(obj, "Tom")`
+4. **返回对象**：`return obj`
+
+### 模拟实现
+
+```js
+function myNew(Constructor, ...args) {
+  const obj = {};
+  obj.__proto__ = Constructor.prototype;
+  const result = Constructor.apply(obj, args);
+  return typeof result === "object" && result !== null ? result : obj;
+}
+```
+
+## 构造函数的特点
+
+- 必须用 `new` 调用，普通函数调用 `this` 指向全局（或 undefined）
+- 构造函数返回对象（可选），否则默认返回 this（新创建的对象）
+- 可以通过 `prototype` 添加方法和属性共享
+
+## 使用 class 替代（ES6+）
+
+构造函数可以被 `class` 更优雅地替代：
+
+```js
+class Person {
+  constructor(name, age) {
+    this.name = name;
+    this.age = age;
+  }
+  sayHi() {
+    console.log("Hi, I'm " + this.name);
+  }
+}
+const p = new Person("Jerry", 22);
+```
+
+## 小结
+
+| 概念 | 说明 |
+|------|------|
+| 构造函数 | 用于批量创建结构一致的对象 |
+| new 操作符 | 自动完成创建对象、绑定 this、设置原型、返回实例 |
+| class（ES6） | 构造函数的语法糖，更加规范和易于阅读 |

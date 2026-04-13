@@ -1,0 +1,66 @@
+# Vue 的 nextTick
+
+## 什么是 nextTick？
+
+Vue 的 DOM 更新是**异步执行的**。当数据变化时，Vue 并不会立即更新 DOM，而是把更新任务放入微任务队列中。
+
+`nextTick` 的作用是：**等待 Vue 完成 DOM 更新后再执行回调函数**。
+
+## 典型使用场景
+
+- 需要在 **DOM 更新后访问最新的 DOM 元素**
+- 操作 DOM 时保证其为最新状态（如手动获取宽高、调用滚动、聚焦）
+
+## 使用方式（Vue3）
+
+### 在 setup 中使用
+
+```ts
+import { nextTick, ref, onMounted } from 'vue';
+
+const count = ref(0);
+const el = ref(null);
+
+onMounted(() => {
+  count.value++;
+
+  nextTick(() => {
+    // DOM 已更新，可访问最新的 DOM
+    console.log(el.value?.offsetHeight);
+  });
+});
+```
+
+## 更新流程示意
+
+1. 修改响应式数据
+2. DOM 不会立刻更新
+3. 进入微任务队列，等待本轮事件循环结束
+4. DOM 更新完成后，执行 `nextTick` 中的回调
+
+## 配合动画/第三方库常见写法
+
+```ts
+await nextTick();
+// 此时 DOM 已更新
+startAnimation();
+```
+
+或：
+
+```ts
+nextTick(() => {
+  // DOM 已完成更新
+  doSomethingWithUpdatedDOM();
+});
+```
+
+## 小结
+
+| 特点 | 描述 |
+|------|------|
+| 更新时机 | DOM 更新之后 |
+| 类型 | 返回 Promise 或接收回调函数 |
+| 常见用途 | DOM 操作、动画、聚焦等 |
+
+建议：只在需要访问更新后的 DOM 时使用 `nextTick`，否则不需要额外调用。

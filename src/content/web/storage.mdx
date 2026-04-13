@@ -1,0 +1,95 @@
+---
+title: 浏览器存储
+description: Cookie、localStorage、sessionStorage 详解
+---
+
+# 浏览器中的 Cookie、localStorage、sessionStorage
+
+## 一句话总结
+
+| 特性              | Cookie                  | localStorage         | sessionStorage       |
+|-------------------|--------------------------|----------------------|----------------------|
+| 存储大小限制      | ~4KB                    | ~5MB                 | ~5MB                 |
+| 生命周期          | 可设置过期时间           | 永久保存（除非手动删除） | 页面关闭即清除        |
+| 是否随请求发送     | ✅ 自动随请求发送          | ❌ 不发送             | ❌ 不发送             |
+| API 使用方式      | document.cookie          | window.localStorage  | window.sessionStorage |
+| 安全性            | 较差，建议配合 HttpOnly、Secure 使用 | 相对安全             | 相对安全             |
+| 典型应用场景      | 登录凭证、身份认证 | 本地缓存，如主题色、设置 | 单页临时状态 |
+
+## Cookie 详解
+
+### 特点
+
+- **用于服务器通信**：每次请求都会自动附带在 HTTP 请求头中
+- 可设置 `Expires` 或 `Max-Age` 控制存活时间
+- 通常用于：登录凭证、身份识别（如 JWT）、统计用户行为等
+
+### 缺点
+
+- 每次请求都带上，影响性能
+- 存储空间小
+- 安全性差，容易被脚本读取（除非设置 HttpOnly）
+
+### JS 操作示例
+
+```js
+// 设置
+document.cookie = "token=abc123; path=/; max-age=3600";
+
+// 读取
+console.log(document.cookie); // "token=abc123"
+```
+
+## localStorage 详解
+
+### 特点
+
+- 键值对形式，**永久存储**（除非主动清除）
+- 跨页面可访问，同一域名下共享
+
+### 使用场景
+
+- 保存主题、用户偏好、本地缓存数据等
+- 保存不敏感的信息（不可存 token）
+
+### JS 操作示例
+
+```js
+localStorage.setItem('theme', 'dark');
+console.log(localStorage.getItem('theme')); // "dark"
+localStorage.removeItem('theme');
+```
+
+## sessionStorage 详解
+
+### 特点
+
+- 生命周期为**当前页面会话**
+- 页面或标签关闭就清空
+- 同样以键值对形式存储
+
+### 使用场景
+
+- 页面临时状态、表单缓存、Tab 页缓存、切换状态等
+
+### JS 操作示例
+
+```js
+sessionStorage.setItem('tabIndex', '2');
+console.log(sessionStorage.getItem('tabIndex')); // "2"
+sessionStorage.clear();
+```
+
+## localStorage 和 sessionStorage 区别
+
+| 项目           | localStorage             | sessionStorage           |
+|----------------|--------------------------|--------------------------|
+| 生命周期        | 永久（除非手动删除）     | 页面关闭即清除            |
+| 是否跨页面可用  | ✅ 是                    | ❌ 否（仅当前窗口）         |
+| 典型用途        | 用户设置、缓存数据       | 临时数据，如编辑内容       |
+
+## 实际项目中的使用建议
+
+- 登录认证：**推荐使用 HttpOnly Cookie 存 token**，防止 XSS
+- 本地缓存：用 **localStorage** 存用户偏好等非敏感数据
+- 页面状态：用 **sessionStorage** 缓存当前页面状态、临时内容

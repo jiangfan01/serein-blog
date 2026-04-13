@@ -1,0 +1,56 @@
+---
+title: this 指向
+description: JavaScript 中 this 的指向问题详解
+---
+
+# JavaScript 中的 this 指向问题
+
+## 基础规则
+
+- 在 **非严格模式** 下，`this` 默认指向 `window`（全局对象）
+- 在 **严格模式**（`'use strict'`）下，`this` 为 `undefined`
+- 一般规则：**谁调用函数，`this` 就指向谁**
+
+## 特殊情况：箭头函数中的 this
+
+- **箭头函数不绑定自己的 `this`**
+- 它的 `this` 指向定义它的 **外部上下文中的 `this`**
+
+```js
+const obj = {
+  name: "test",
+  say: () => {
+    console.log(this.name); // undefined
+  }
+};
+```
+
+## 如何修改 this 指向
+
+| 方法    | 用法 | 特点 |
+|---------|------|------|
+| `call`  | `fn.call(thisArg, arg1, arg2...)` | 立即调用，参数逐个传递 |
+| `apply` | `fn.apply(thisArg, [args])`     | 立即调用，参数数组形式传递 |
+| `bind`  | `fn.bind(thisArg)`               | 返回一个新的函数，不立即调用 |
+
+## 示例对比
+
+```js
+function sayName(age) {
+  console.log(this.name, age);
+}
+
+const person = { name: "张三" };
+
+sayName.call(person, 18);     // 张三 18
+sayName.apply(person, [20]);  // 张三 20
+
+const boundFn = sayName.bind(person);
+boundFn(25);                  // 张三 25
+```
+
+## 小结
+
+- 普通函数 `this`：由调用方式决定
+- 箭头函数 `this`：取定义时的上下文
+- `call/apply/bind`：手动改变函数内部 `this` 指向

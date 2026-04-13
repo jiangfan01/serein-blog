@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   },
   description:
     "A personal AI engineering blog for projects, notes, interview prep, and frontend architecture writeups.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -33,6 +38,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full bg-[var(--app-bg)] text-[var(--app-fg)]">
         <AppProviders>

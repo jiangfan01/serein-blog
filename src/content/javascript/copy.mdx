@@ -1,0 +1,53 @@
+---
+title: 深拷贝与浅拷贝
+description: JavaScript 中的深拷贝和浅拷贝详解
+---
+
+# 浅拷贝和深拷贝
+
+## 浅拷贝的定义
+
+浅拷贝复制对象的第一层属性。如果属性是基本类型，拷贝的是值；如果是引用类型（对象、数组等），拷贝的是引用地址，导致拷贝对象和原对象共享同一份引用数据。
+
+## 深拷贝的定义
+
+深拷贝会递归复制对象所有层级的属性，拷贝后的对象与原对象完全独立，互不影响。
+
+## 浅拷贝示例
+
+```js
+const obj1 = { a: 1, b: { c: 2 } };
+const shallowCopy = Object.assign({}, obj1);
+
+shallowCopy.b.c = 99;
+console.log(obj1.b.c); // 99，原对象也被修改了
+```
+
+## 深拷贝示例
+
+```js
+const obj2 = { a: 1, b: { c: 2 } };
+const deepCopy = JSON.parse(JSON.stringify(obj2));
+
+deepCopy.b.c = 99;
+console.log(obj2.b.c); // 2，原对象不受影响
+```
+
+## 常见浅拷贝方法
+
+- `Object.assign({}, obj)`
+- 展开运算符 `{ ...obj }`
+- `Array.prototype.slice()`
+- `Array.prototype.concat()`
+
+## 常见深拷贝方法
+
+- `JSON.parse(JSON.stringify(obj))` - 简单但有限制
+- 递归实现
+- `structuredClone()` - 现代浏览器支持
+- lodash 的 `_.cloneDeep()`
+
+## 注意事项
+
+- JSON 方法不支持函数、undefined、Date、RegExp 等特殊数据类型
+- 复杂对象推荐使用递归实现深拷贝，或者使用第三方库如 lodash 的 `_.cloneDeep`

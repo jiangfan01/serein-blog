@@ -72,10 +72,10 @@ export function HomePage() {
           <div className="max-w-7xl mx-auto relative z-10">
             <div className="flex flex-col items-center text-center">
               <span className="font-mono text-[var(--accent)] tracking-[0.4em] uppercase text-xs mb-8 block">
-                全栈开发 · AI 架构师
+                前端开发工程师
               </span>
               
-              <h1 className="text-[clamp(3rem,10vw,8rem)] font-black tracking-tighter text-white leading-[0.95] mb-12">
+              <h1 className="text-[clamp(3rem,10vw,8rem)] font-black tracking-tighter text-[var(--text-strong)] leading-[0.95] mb-12">
                 让我们一起
                 <br />
                 <span className="text-[var(--accent)] italic" style={{
@@ -85,25 +85,10 @@ export function HomePage() {
                 </span>
               </h1>
 
-              <div className="max-w-2xl text-gray-400 text-lg md:text-xl leading-relaxed mb-12">
+              <div className="max-w-2xl text-[var(--text-secondary)] text-lg md:text-xl leading-relaxed mb-12">
                 融合技术精度与创意灵魂。构建可扩展的数字生态系统，让性能与高端编辑美学完美结合。
               </div>
 
-              <div className="flex flex-wrap gap-8 justify-center items-center">
-                <Link
-                  href="/projects"
-                  className="group inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors text-lg font-bold"
-                >
-                  <span>开始项目</span>
-                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-2" />
-                </Link>
-                <Link
-                  href="/about"
-                  className="text-gray-400 hover:text-white transition-colors text-lg font-bold border-b-2 border-gray-600 hover:border-white pb-1"
-                >
-                  查看归档
-                </Link>
-              </div>
             </div>
           </div>
 
@@ -120,7 +105,7 @@ export function HomePage() {
                 <div className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-6 uppercase">
                   / 技术能力
                 </div>
-                <h2 className="text-6xl md:text-8xl font-black text-white mb-8 tracking-tighter leading-[0.9]">
+                <h2 className="text-6xl md:text-8xl font-black text-[var(--text-strong)] mb-8 tracking-tighter leading-[0.9]">
                   架构
                   <br />
                   <span className="text-[var(--accent)]" style={{ textShadow: '0 0 30px rgba(47, 155, 146, 0.3)' }}>
@@ -129,21 +114,21 @@ export function HomePage() {
                 </h2>
               </div>
               <div className="max-w-md lg:mt-24">
-                <p className="text-gray-400 text-lg leading-relaxed border-l-2 border-[var(--accent)]/30 pl-8">
+                <p className="text-[var(--text-secondary)] text-lg leading-relaxed border-l-2 border-[var(--accent)]/30 pl-8">
                   精选工业级技术，以其性能、可扩展性和开发体验而选择。
                 </p>
               </div>
             </div>
 
             {/* Architectural List */}
-            <div className="border-t border-white/20">
+            <div className="border-t border-[var(--border-default)]">
               {/* Group 01: Frontend */}
-              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
-                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-[var(--border-default)] items-start hover:bg-[var(--surface-secondary)]/50 transition-colors">
+                <div className="md:col-span-1 font-mono text-[var(--text-tertiary)] text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
                   01
                 </div>
                 <div className="md:col-span-3">
-                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                  <h3 className="text-2xl font-bold text-[var(--text-strong)] uppercase tracking-tighter mb-4 md:mb-0">
                     前端
                     <br />
                     工程
@@ -161,11 +146,11 @@ export function HomePage() {
                           rel="noopener noreferrer"
                           className="flex flex-col gap-2 group/item"
                         >
-                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                          <span className="text-[var(--text-strong)] font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
                             {tech.name}
                           </span>
-                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                          <span className="text-[var(--text-tertiary)] font-mono text-[10px] uppercase tracking-widest">
                             {tech.category}
                           </span>
                         </a>
@@ -175,12 +160,12 @@ export function HomePage() {
               </div>
 
               {/* Group 02: AI */}
-              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
-                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-[var(--border-default)] items-start hover:bg-[var(--surface-secondary)]/50 transition-colors">
+                <div className="md:col-span-1 font-mono text-[var(--text-tertiary)] text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
                   02
                 </div>
                 <div className="md:col-span-3">
-                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                  <h3 className="text-2xl font-bold text-[var(--text-strong)] uppercase tracking-tighter mb-4 md:mb-0">
                     AI
                     <br />
                     集成
@@ -198,11 +183,11 @@ export function HomePage() {
                           rel="noopener noreferrer"
                           className="flex flex-col gap-2 group/item"
                         >
-                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                          <span className="text-[var(--text-strong)] font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
                             {tech.name}
                           </span>
-                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                          <span className="text-[var(--text-tertiary)] font-mono text-[10px] uppercase tracking-widest">
                             LLM / Agent
                           </span>
                         </a>
@@ -212,12 +197,12 @@ export function HomePage() {
               </div>
 
               {/* Group 03: Backend */}
-              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
-                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-[var(--border-default)] items-start hover:bg-[var(--surface-secondary)]/50 transition-colors">
+                <div className="md:col-span-1 font-mono text-[var(--text-tertiary)] text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
                   03
                 </div>
                 <div className="md:col-span-3">
-                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                  <h3 className="text-2xl font-bold text-[var(--text-strong)] uppercase tracking-tighter mb-4 md:mb-0">
                     后端 &
                     <br />
                     基础设施
@@ -235,11 +220,11 @@ export function HomePage() {
                           rel="noopener noreferrer"
                           className="flex flex-col gap-2 group/item"
                         >
-                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                          <span className="text-[var(--text-strong)] font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
                             {tech.name}
                           </span>
-                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                          <span className="text-[var(--text-tertiary)] font-mono text-[10px] uppercase tracking-widest">
                             {tech.category}
                           </span>
                         </a>
@@ -249,12 +234,12 @@ export function HomePage() {
               </div>
 
               {/* Group 04: State & Tools */}
-              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
-                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-[var(--border-default)] items-start hover:bg-[var(--surface-secondary)]/50 transition-colors">
+                <div className="md:col-span-1 font-mono text-[var(--text-tertiary)] text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
                   04
                 </div>
                 <div className="md:col-span-3">
-                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                  <h3 className="text-2xl font-bold text-[var(--text-strong)] uppercase tracking-tighter mb-4 md:mb-0">
                     状态管理
                     <br />
                     & 工具
@@ -272,11 +257,11 @@ export function HomePage() {
                           rel="noopener noreferrer"
                           className="flex flex-col gap-2 group/item"
                         >
-                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                          <span className="text-[var(--text-strong)] font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
                             {tech.name}
                           </span>
-                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                          <span className="text-[var(--text-tertiary)] font-mono text-[10px] uppercase tracking-widest">
                             {tech.category}
                           </span>
                         </a>
@@ -292,7 +277,7 @@ export function HomePage() {
         <section className="py-32 px-6 md:px-16 overflow-hidden relative z-10">
           <div className="max-w-7xl mx-auto">
             <div className="mb-24">
-              <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold text-white tracking-tight leading-none">
+              <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold text-[var(--text-strong)] tracking-tight leading-none">
                 我的
                 <br />
                 <span className="text-[var(--accent)] italic">项目</span>
@@ -309,10 +294,10 @@ export function HomePage() {
                     {/* 左侧：编号和分类 */}
                     <div className="md:col-span-2">
                       <div className="flex flex-col gap-4">
-                        <span className="text-6xl font-black text-white/10 group-hover:text-[var(--accent)]/20 transition-colors">
+                        <span className="text-6xl font-black text-[var(--text-strong)]/10 group-hover:text-[var(--accent)]/20 transition-colors">
                           {project.id}
                         </span>
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-gray-600">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-tertiary)]">
                           {project.category}
                         </span>
                       </div>
@@ -320,11 +305,11 @@ export function HomePage() {
 
                     {/* 右侧：内容 */}
                     <div className="md:col-span-10 space-y-6">
-                      <h3 className="text-4xl md:text-5xl font-bold text-white group-hover:text-[var(--accent)] transition-colors">
+                      <h3 className="text-4xl md:text-5xl font-bold text-[var(--text-strong)] group-hover:text-[var(--accent)] transition-colors">
                         {project.title}
                       </h3>
 
-                      <p className="text-gray-400 text-lg leading-relaxed max-w-4xl">
+                      <p className="text-[var(--text-secondary)] text-lg leading-relaxed max-w-4xl">
                         {project.description}
                       </p>
 
@@ -332,7 +317,7 @@ export function HomePage() {
                         {project.tags.map(tag => (
                           <span
                             key={tag}
-                            className="font-mono text-xs text-gray-500 px-3 py-1 border border-gray-800 rounded-full"
+                            className="font-mono text-xs text-[var(--text-tertiary)] px-3 py-1 border border-[var(--border-default)] rounded-full"
                           >
                             {tag}
                           </span>
@@ -344,13 +329,13 @@ export function HomePage() {
                           href={project.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors group/link text-lg font-bold pt-8"
+                          className="inline-flex items-center gap-3 text-[var(--text-strong)] hover:text-[var(--accent)] transition-colors group/link text-lg font-bold pt-8"
                         >
                           <span>查看项目</span>
                           <ArrowRight className="h-5 w-5 transform group-hover/link:translate-x-2 transition-transform" />
                         </a>
                       ) : (
-                        <span className="inline-flex items-center gap-3 text-gray-600 text-lg font-bold pt-8">
+                        <span className="inline-flex items-center gap-3 text-[var(--text-tertiary)] text-lg font-bold pt-8">
                           <span>内部项目</span>
                         </span>
                       )}
@@ -359,7 +344,7 @@ export function HomePage() {
 
                   {/* 分隔线 */}
                   {index < projects.length - 1 && (
-                    <div className="mt-32 h-px bg-white/10" />
+                    <div className="mt-32 h-px bg-[var(--border-subtle)]" />
                   )}
                 </div>
               ))}
@@ -370,23 +355,23 @@ export function HomePage() {
         {/* CTA Section */}
         <section className="py-48 px-6 md:px-16 text-center relative z-10">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-[clamp(3rem,8vw,6rem)] font-black text-white mb-12 tracking-tighter">
+            <h2 className="text-[clamp(3rem,8vw,6rem)] font-black text-[var(--text-strong)] mb-12 tracking-tighter">
               准备好{' '}
               <span className="text-[var(--accent)] italic">开始</span>
               了吗？
             </h2>
             
-            <p className="text-gray-400 text-xl mb-16 max-w-2xl mx-auto">
+            <p className="text-[var(--text-secondary)] text-xl mb-16 max-w-2xl mx-auto">
               接受精选合作伙伴关系和架构咨询。让我们创造一些有意义的东西。
             </p>
 
-            <a
-              href="mailto:hello@serein.dev"
-              className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors text-2xl font-black group"
+            <Link
+              href="/about"
+              className="inline-flex items-center gap-3 text-[var(--text-strong)] hover:text-[var(--accent)] transition-colors text-2xl font-black group"
             >
               <span>联系我</span>
               <ArrowRight className="h-6 w-6 transform group-hover:translate-x-2 transition-transform" />
-            </a>
+            </Link>
           </div>
         </section>
       </div>

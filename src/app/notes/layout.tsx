@@ -1,6 +1,15 @@
-import { Footer, Layout, Navbar } from "nextra-theme-docs";
+import { Layout, Navbar } from "nextra-theme-docs";
 import { getPageMap } from "nextra/page-map";
 import "./notes.css";
+
+// 自定义 Logo 组件 - 不要用 Link，因为 Nextra navbar 已经包裹了一个 <a>
+function NotesLogo() {
+  return (
+    <span className="flex items-center gap-2">
+      <b style={{ color: '#f2f4f7', fontSize: '1.125rem' }}>Serein Blog</b>
+    </span>
+  );
+}
 
 export default async function NotesLayout({
   children,
@@ -11,12 +20,13 @@ export default async function NotesLayout({
 
   return (
     <Layout
-      docsRepositoryBase="https://github.com/jiangfan01/serein-blog/tree/main/src/content"
-      footer={<Footer>笔记 · 技术沉淀 · 持续更新</Footer>}
-      navbar={<Navbar logo={<b>Serein Blog</b>} />}
+      navbar={<Navbar logo={<NotesLogo />} />}
       pageMap={pageMap}
       sidebar={{ defaultMenuCollapseLevel: 1 }}
       toc={{ backToTop: "返回顶部", title: "本页目录" }}
+      darkMode={true}
+      editLink={null}
+      feedback={{ content: null }}
     >
       {children}
     </Layout>

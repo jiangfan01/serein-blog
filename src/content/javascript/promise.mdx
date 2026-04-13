@@ -1,0 +1,98 @@
+---
+title: Promise 与 async/await
+description: JavaScript 异步编程详解
+---
+
+# Promise、A+ 规范与 async/await
+
+## 一、Promise 是什么？
+
+`Promise` 是用于**管理异步操作**的一种机制，代表一个**未来才会完成的操作**。
+
+### 创建基本语法
+
+```js
+const promise = new Promise((resolve, reject) => {
+  // 异步操作
+  if (成功) resolve(result);
+  else reject(error);
+});
+```
+
+## 二、Promise 的三种状态
+
+1. **pending**：初始状态，未完成
+2. **fulfilled**：成功，调用 `resolve()`
+3. **rejected**：失败，调用 `reject()`
+
+状态不可逆，一旦确定就不可更改。
+
+## 三、Promise A+ 规范核心点
+
+| 特性              | 描述 |
+|-------------------|------|
+| 状态不可逆         | 一旦 `resolve` 或 `reject` 调用，状态固定 |
+| then 必须返回新的 Promise | 可链式调用，避免回调地狱 |
+| 支持链式调用       | `then().then()` 可无限级 |
+| 异常捕获机制       | 支持 `catch` 捕获任意中断或异常 |
+
+## 四、常用 Promise 方法
+
+### Promise.then / catch / finally
+
+```js
+promise
+  .then(res => console.log(res))
+  .catch(err => console.error(err))
+  .finally(() => console.log("done"));
+```
+
+### Promise.all()
+
+所有 Promise 都成功，才成功；任意一个失败就立即失败。
+
+### Promise.race()
+
+哪个 promise 先完成（无论成功失败），就用那个结果。
+
+### Promise.allSettled()
+
+全部执行完后返回每个 Promise 的状态（不会中断）。
+
+## 五、async / await
+
+async / await 是基于 Promise 的语法糖，使异步代码更像同步代码，提升可读性。
+
+### 使用方法
+
+- `async` 修饰函数，返回一个 Promise
+- `await` 等待 Promise 结果，**只能在 async 函数中使用**
+
+```js
+async function fetchData() {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    console.log(data);
+  } catch (err) {
+    console.error(err);
+  }
+}
+```
+
+## 注意事项
+
+| 事项            | 说明 |
+|------------------|------|
+| await 后面是 Promise | 否则立即返回值，无阻塞作用 |
+| try/catch 捕获异常 | 代替 `catch` |
+| await 会阻塞当前作用域 | 但不会阻塞整个线程 |
+
+## 小结
+
+| 概念           | 说明 |
+|----------------|------|
+| Promise        | 处理异步任务的标准方式 |
+| A+ 规范        | 规范化了 Promise 行为 |
+| async/await    | 让异步代码更简洁易读 |
+| all / race     | 控制多个 Promise 并发行为 |

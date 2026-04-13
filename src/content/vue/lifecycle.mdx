@@ -1,0 +1,73 @@
+---
+title: Vue 生命周期
+description: Vue 组件生命周期钩子详解
+---
+
+# Vue 生命周期详解
+
+Vue 生命周期是指：**组件从创建、挂载、更新到卸载的整个过程中的钩子函数**。
+
+## Vue 3 Composition API 生命周期
+
+| 生命周期钩子     | 触发时机                     | 说明                           |
+|------------------|------------------------------|--------------------------------|
+| `onBeforeMount` | 组件挂载前                   | DOM 尚未创建，适合初始化逻辑   |
+| `onMounted`     | 组件挂载后                   | DOM 渲染完成，适合 DOM 操作、请求等 |
+| `onBeforeUpdate`| 数据更新前                   | 组件将重新渲染，适合对比前后数据 |
+| `onUpdated`     | 数据更新后                   | DOM 已更新，适合依赖最新 DOM 的逻辑 |
+| `onBeforeUnmount` | 组件卸载前                 | 清理工作如事件解绑、定时器清除 |
+| `onUnmounted`   | 组件卸载完成                 | 组件已被移除，确认清理完成     |
+
+### 示例代码
+
+```ts
+import { onMounted, onUnmounted } from 'vue';
+
+onMounted(() => {
+  console.log('组件已挂载');
+});
+
+onUnmounted(() => {
+  console.log('组件已卸载');
+});
+```
+
+## Vue 2 Options API 生命周期
+
+| 生命周期钩子         | 描述                                      |
+|----------------------|-------------------------------------------|
+| `beforeCreate`       | 实例初始化，data 和 methods 都未创建     |
+| `created`            | 实例创建完成，可访问 data/methods，但无 DOM |
+| `beforeMount`        | 模板编译完成，但 DOM 尚未挂载           |
+| `mounted`            | DOM 挂载完成，常用于请求、DOM 操作等     |
+| `beforeUpdate`       | 数据变更，DOM 还未重新渲染              |
+| `updated`            | 数据变更且 DOM 已重新渲染               |
+| `beforeDestroy`      | 实例销毁前，清除操作                    |
+| `destroyed`          | 实例销毁完成，已解绑所有资源            |
+
+## 生命周期使用场景
+
+| 钩子             | 场景案例                                 |
+|------------------|------------------------------------------|
+| `mounted`       | 发起 API 请求、初始化动画、第三方库挂载 |
+| `beforeUnmount` | 清除定时器、解绑事件、取消订阅          |
+| `updated`       | DOM 更新后需要获取新尺寸或位置的场景    |
+
+## Composition API 生命周期对照表
+
+| Vue2（Options）   | Vue3（Composition） |
+|-------------------|---------------------|
+| beforeCreate       | -                   |
+| created            | -                   |
+| beforeMount        | onBeforeMount       |
+| mounted            | onMounted           |
+| beforeUpdate       | onBeforeUpdate      |
+| updated            | onUpdated           |
+| beforeDestroy      | onBeforeUnmount     |
+| destroyed          | onUnmounted         |
+
+## 小结
+
+- Vue 生命周期让你**精确控制组件的每个阶段行为**
+- Vue3 更推荐使用 Composition API + 生命周期钩子函数
+- 常用组合：`onMounted + onUnmounted`（初始化 + 清理）

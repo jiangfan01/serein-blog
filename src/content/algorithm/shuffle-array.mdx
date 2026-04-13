@@ -1,0 +1,35 @@
+# 打乱有序数组
+
+## 题目描述
+
+实现一个函数，用于将一个升序排列的数组打乱，使其每个排列出现的概率相等（即实现洗牌算法）。
+
+### 示例
+
+```js
+const arr = [1, 2, 3, 4, 5];
+const shuffled = shuffleArray(arr);
+console.log(shuffled); // 输出可能为 [3,1,5,2,4] 等任意顺序
+```
+
+## 解法：Fisher-Yates 洗牌算法
+
+```js
+function shuffleArray(arr) {
+  const result = [...arr]; // 创建副本，避免修改原数组
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1)); // 从0到i随机索引
+    [result[i], result[j]] = [result[j], result[i]]; // 交换元素
+  }
+  return result;
+}
+```
+
+## 思路解析
+
+- 此算法又称"现代洗牌算法"，能确保所有排列的出现概率均等
+- 从后往前遍历数组，每次将当前位置和一个随机位置的元素交换
+- 保证第 `i` 个位置的元素有 `1/(i+1)` 概率在该位置
+- `[...arr]` 用于避免直接修改原数组
+- 时间复杂度：`O(n)`，只需一次遍历
+- 空间复杂度：`O(n)`，返回了一个副本数组

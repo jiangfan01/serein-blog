@@ -1,0 +1,131 @@
+# ES6 展开运算符与剩余参数
+
+## 展开运算符（Spread Operator）
+
+**展开运算符**使用形式为 `...`，可以将**数组、对象、字符串等可迭代对象**展开为独立元素或属性。
+
+### 数组中的使用
+
+#### 数组合并
+
+```js
+const arr1 = [1, 2];
+const arr2 = [3, 4];
+const merged = [...arr1, ...arr2]; // [1, 2, 3, 4]
+```
+
+#### 数组拷贝（浅拷贝）
+
+```js
+const original = [1, 2, 3];
+const copy = [...original];
+```
+
+#### 函数参数展开（代替 apply）
+
+```js
+const nums = [1, 2, 3];
+Math.max(...nums); // 3
+```
+
+### 对象中的使用
+
+#### 对象合并
+
+```js
+const obj1 = { a: 1 };
+const obj2 = { b: 2 };
+const merged = { ...obj1, ...obj2 }; // { a: 1, b: 2 }
+```
+
+#### 对象浅拷贝
+
+```js
+const original = { name: "Tom", age: 18 };
+const copy = { ...original };
+```
+
+#### 修改属性时合并
+
+```js
+const user = { name: "Tom", age: 18 };
+const updated = { ...user, age: 20 }; // age 被覆盖
+```
+
+### 字符串中的使用
+
+```js
+const str = "hello";
+const chars = [...str]; // ['h', 'e', 'l', 'l', 'o']
+```
+
+## 剩余参数（Rest Parameters）
+
+剩余参数使用 `...` 语法，将函数的**多余参数**收集成一个**数组**。
+
+### 基本语法
+
+```js
+function sum(...numbers) {
+  return numbers.reduce((total, n) => total + n, 0);
+}
+
+sum(1, 2, 3); // 6
+```
+
+- `...numbers`：将传入的所有参数以数组形式收集
+- 参数位置必须在最后
+
+### 与 arguments 的区别
+
+| 特性 | `arguments` | `rest 参数` |
+|------|-------------|-------------|
+| 类型 | 类数组 | 真正的数组 |
+| 可用方法 | 需转数组才能用 | 可直接用数组方法 |
+| 箭头函数中是否可用 | ❌ 不可用 | ✅ 可用 |
+| 命名自由度 | 固定名称 | 自定义名称 |
+
+### 配合解构使用
+
+```js
+const [first, ...rest] = [1, 2, 3, 4];
+console.log(first); // 1
+console.log(rest);  // [2, 3, 4]
+```
+
+```js
+const { a, ...others } = { a: 1, b: 2, c: 3 };
+console.log(others); // { b: 2, c: 3 }
+```
+
+## 展开与剩余的区别
+
+| 类型 | 语法 | 位置 | 作用 |
+|------|------|------|------|
+| 展开运算符 | `...` | 赋值/传参/合并 | 展开结构 |
+| 剩余参数（rest） | `...` | 函数参数/解构中 | 收集剩余参数为数组 |
+
+## 注意事项
+
+- 展开的是**一层浅拷贝**，对于嵌套对象/数组，内部引用仍然相同
+- 对象属性合并时，**后面的属性会覆盖前面的**
+- rest 参数只能出现在**参数列表最后一位**
+
+## 实际场景例子
+
+React 中更新 state：
+
+```js
+setUser(prev => ({ ...prev, age: 25 }));
+```
+
+可变参数函数：
+
+```js
+function logger(prefix, ...args) {
+  console.log(prefix, ...args);
+}
+
+logger("[INFO]", "App started", "Port:", 3000);
+// 输出: [INFO] App started Port: 3000
+```

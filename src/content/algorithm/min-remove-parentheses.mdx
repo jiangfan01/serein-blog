@@ -1,0 +1,58 @@
+# 最小括号删除
+
+## 题目描述
+
+给定一个只包含 `'('` 和 `')'` 的字符串 `s`，你需要最少删除多少个括号，使其成为有效括号字符串（所有括号匹配且顺序正确），并返回结果字符串。
+
+### 示例
+
+```js
+minRemoveToMakeValid("lee(t(c)o)de)") // => "lee(t(c)o)de"
+minRemoveToMakeValid("a)b(c)d")       // => "ab(c)d"
+minRemoveToMakeValid("))((")          // => ""
+```
+
+## 解法：栈记录无效括号下标
+
+```js
+function minRemoveToMakeValid(s) {
+  const stack = [];
+  const toRemove = new Set();
+  
+  for (let i = 0; i < s.length; i++) {
+    const char = s[i];
+    if (char === '(') {
+      stack.push(i); // 左括号位置入栈
+    } else if (char === ')') {
+      if (stack.length === 0) {
+        toRemove.add(i); // 没有可匹配的左括号
+      } else {
+        stack.pop(); // 匹配成功，弹出一个左括号位置
+      }
+    }
+  }
+
+  // 剩下的未匹配左括号也要删除
+  for (let index of stack) {
+    toRemove.add(index);
+  }
+
+  // 构造新字符串，跳过无效下标
+  let result = '';
+  for (let i = 0; i < s.length; i++) {
+    if (!toRemove.has(i)) {
+      result += s[i];
+    }
+  }
+
+  return result;
+}
+```
+
+## 思路解析
+
+- 使用一个栈来追踪未匹配的左括号位置
+- 每遇到无法匹配的右括号，也记录它的位置
+- 最后从字符串中排除这些无效的括号即可
+- 时间复杂度：O(n)，只遍历两次
+- 空间复杂度：O(n)，用于存储索引

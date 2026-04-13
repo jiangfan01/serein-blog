@@ -1,0 +1,65 @@
+---
+title: 原型与原型链
+description: JavaScript 原型和原型链机制详解
+---
+
+# JavaScript 的原型与原型链
+
+## 什么是原型
+
+在 JS 中，每个对象在创建时都会关联另一个对象作为它的原型（prototype）。这个原型对象可以通过：
+
+- `Object.getPrototypeOf(obj)`
+- `obj.__proto__`
+
+进行访问。
+
+## 什么是构造函数的 prototype
+
+构造函数（函数对象）都有一个 `prototype` 属性，它指向一个对象：
+- 这个对象会被赋值给通过该构造函数创建的实例的 `__proto__`
+
+```js
+function Person() {}
+const p = new Person();
+console.log(p.__proto__ === Person.prototype); // true
+```
+
+## 什么是原型链（Prototype Chain）
+
+当我们访问一个对象的属性或方法时，如果该对象没有，就会查找其原型对象，逐层向上查找，直到 `null` 为止，这形成了"原型链"。
+
+```js
+p.toString(); 
+// Person -> Object.prototype -> null
+```
+
+> 原型链是一种对象之间的委托机制。
+
+## 原型链的查找规则
+
+1. 先查当前对象本身
+2. 如果没有就去 `__proto__` 查找
+3. 继续向上直到 `Object.prototype`
+4. 最后是 `null`，表示查找终点
+
+## 示例图解
+
+```
+p ---> Person.prototype ---> Object.prototype ---> null
+```
+
+## 常见面试点
+
+| 问题                          | 回答 |
+|-------------------------------|------|
+| 所有对象都有原型吗？         | 是的，除了 `Object.create(null)` 创建的对象 |
+| `__proto__` 和 `prototype` 区别？ | `__proto__` 是实例对象的原型指针；`prototype` 是构造函数的原型对象 |
+| 可以修改原型链吗？            | 可以，通过 `Object.setPrototypeOf()` 或直接赋值 `__proto__` |
+| `instanceof` 如何判断？      | 通过原型链判断：查找实例的原型链上是否包含构造函数的 `prototype` |
+
+## 注意事项
+
+- 不要滥用 `__proto__`，推荐使用标准 API（如 `Object.getPrototypeOf`）
+- 使用原型链可以共享方法，避免重复创建
+- 也要注意原型链过长可能导致性能问题

@@ -1,11 +1,12 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { StaggeredMenu } from "@/components/navigation/staggered-menu";
 import { SiteFooter } from "@/components/site/site-footer";
 
 const menuItems = [
   { label: '首页', ariaLabel: '返回首页', link: '/' },
-  { label: '项目', ariaLabel: '查看项目', link: '/projects' },
+  // { label: '项目', ariaLabel: '查看项目', link: '/projects' },
   { label: '笔记', ariaLabel: '阅读笔记', link: '/notes' },
   { label: '关于', ariaLabel: '了解我', link: '/about' }
 ];
@@ -17,6 +18,14 @@ const socialItems = [
 ];
 
 export function RootLayoutClient({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isNotesPage = pathname?.startsWith('/notes');
+
+  // Notes 页面使用 Nextra 自己的布局，不需要我们的导航和 Footer
+  if (isNotesPage) {
+    return <>{children}</>;
+  }
+
   return (
     <>
       <StaggeredMenu

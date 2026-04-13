@@ -1,0 +1,76 @@
+# CSS 动画详解
+
+## CSS 动画类型
+
+### Transition（过渡）
+
+通过设置属性变化时的动画效果，实现状态的平滑过渡。适合简单状态变化动画。
+
+### Keyframes 动画（@keyframes）
+
+通过定义关键帧，控制动画过程中的多个状态，实现复杂动画。适合连续多步骤动画。
+
+## Transition 基础
+
+| 属性 | 说明 | 示例 |
+|------|------|------|
+| `transition-property` | 需要过渡的CSS属性 | `all`、`opacity` |
+| `transition-duration` | 过渡持续时间 | `0.3s` |
+| `transition-timing-function` | 过渡速度曲线 | `ease`、`linear` |
+| `transition-delay` | 过渡延迟时间 | `0s` |
+
+示例：
+
+```css
+.box {
+  transition: all 0.3s ease;
+}
+.box:hover {
+  transform: scale(1.2);
+}
+```
+
+## Keyframes 动画基础
+
+通过 `@keyframes` 定义动画过程中的多个阶段，使用 `animation` 属性应用动画。
+
+```css
+@keyframes slide {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(100px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.box {
+  animation: slide 2s infinite ease-in-out;
+}
+```
+
+## Animation 属性详解
+
+| 属性 | 说明 | 示例 |
+|------|------|------|
+| `animation-name` | 指定动画名称 | `slide` |
+| `animation-duration` | 动画持续时间 | `2s` |
+| `animation-timing-function` | 速度曲线 | `ease-in-out` |
+| `animation-delay` | 延迟时间 | `0s` |
+| `animation-iteration-count` | 动画循环次数 | `infinite` |
+| `animation-direction` | 动画方向 | `alternate` |
+| `animation-fill-mode` | 动画结束状态保留 | `forwards` |
+
+## 动画性能优化建议
+
+- 尽量使用 `transform` 和 `opacity` 进行动画，避免触发布局重绘
+- 使用 `will-change` 提前告知浏览器优化
+- 减少动画元素数量和持续时间
+- 使用 GPU 加速硬件合成
+
+## 小结
+
+CSS 动画分为简单过渡和复杂关键帧动画两类，合理选择使用场景，配合性能优化，能提升用户体验和界面交互效果。

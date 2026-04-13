@@ -1,176 +1,281 @@
-/* Nextra 主题覆盖 - 匹配 Serein Blog 设计 */
+/* Nextra 主题样式 */
+@import "nextra-theme-docs/style.css";
 
-/* 整体背景 */
-.nextra-nav-container,
-.nextra-sidebar-container,
-.nextra-content,
-article,
-main,
-html[class~="dark"] .nextra-nav-container,
-html[class~="dark"] .nextra-sidebar-container {
-  background: var(--app-bg) !important;
+/* Nextra 主题覆盖 - 使用 next-themes 的 .dark 类 */
+
+/* ========== 禁用 Lenis 平滑滚动 ========== */
+html.lenis,
+html.lenis body,
+.lenis.lenis-smooth,
+.lenis.lenis-smooth [data-lenis-prevent] {
+  scroll-behavior: auto !important;
 }
 
-/* 导航栏 */
-nav.nextra-nav-container {
-  background: rgba(12, 15, 18, 0.8) !important;
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-subtle) !important;
+html.has-scroll-smooth,
+html.has-scroll-smooth body {
+  scroll-behavior: auto !important;
 }
 
-/* 侧边栏 */
-.nextra-sidebar-container {
-  background: var(--app-bg) !important;
-  border-right: 1px solid var(--border-subtle) !important;
+/* ========== 侧边栏滚动修复 ========== */
+aside {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  max-height: calc(100vh - 64px) !important;
 }
 
-/* 侧边栏链接 */
-.nextra-sidebar-container a {
-  color: var(--text-secondary) !important;
-  transition: color 0.2s ease;
+aside > div,
+aside nav,
+[class*="nextra-sidebar"],
+[class*="sidebar-container"] {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
 }
 
-.nextra-sidebar-container a:hover,
-.nextra-sidebar-container a[data-active="true"] {
-  color: var(--accent) !important;
+aside *,
+[class*="sidebar"] * {
+  pointer-events: auto !important;
 }
 
-/* 内容区域 */
-article {
-  color: var(--text-primary) !important;
+[data-lenis-prevent],
+[data-lenis-prevent-wheel],
+[data-lenis-prevent-touch] {
+  overscroll-behavior: auto !important;
+  overflow: auto !important;
 }
 
-/* 标题 */
-article h1 {
-  color: var(--text-strong) !important;
-  font-weight: 800 !important;
+/* ========== 深色模式样式 ========== */
+.dark {
+  color-scheme: dark !important;
 }
 
-article h2,
-article h3,
-article h4 {
-  color: var(--text-strong) !important;
-  font-weight: 700 !important;
-  border-bottom: none !important;
+/* ========== Notes 页面背景 ========== */
+.dark body,
+.dark main {
+  background: #0c0f12 !important;
 }
 
-/* 段落文字 */
-article p {
-  color: var(--text-secondary) !important;
+/* ========== 导航栏 - 无边框 ========== */
+.dark nav,
+.dark header nav,
+.dark [class*="nextra-nav"] {
+  background: rgba(12, 15, 18, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: none !important;
 }
 
-/* 链接 */
-article a {
-  color: var(--accent) !important;
-  text-decoration: none !important;
+.dark nav a,
+.dark nav button {
+  color: #aab3bc !important;
 }
 
-article a:hover {
-  text-decoration: underline !important;
+.dark nav a:hover {
+  color: #2f9b92 !important;
 }
 
-/* 列表 */
-article ul,
-article ol {
-  color: var(--text-secondary) !important;
+.dark nav b,
+.dark nav strong {
+  color: #f2f4f7 !important;
 }
 
-article li {
-  color: var(--text-secondary) !important;
+/* ========== 侧边栏 - 无边框 ========== */
+.dark aside {
+  background: #0c0f12 !important;
+  border: none !important;
 }
 
-article li a {
-  color: var(--accent) !important;
+.dark aside a {
+  color: #aab3bc !important;
+  border: none !important;
+  background: transparent !important;
 }
 
-/* 代码块 */
-article pre {
-  background: var(--surface) !important;
-  border: 1px solid var(--border-subtle) !important;
+.dark aside a:hover {
+  color: #2f9b92 !important;
+}
+
+.dark aside a[data-active="true"],
+.dark aside a.active {
+  color: #2f9b92 !important;
+  font-weight: 500 !important;
+}
+
+.dark aside button {
+  color: #f2f4f7 !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* ========== 主内容区域 ========== */
+.dark main,
+.dark article {
+  background: #0c0f12 !important;
+}
+
+/* ========== 文字样式 ========== */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4 {
+  color: #f2f4f7 !important;
+}
+
+.dark article h2 {
+  border-bottom: 1px solid #20252c !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.dark p,
+.dark li {
+  color: #aab3bc !important;
+}
+
+.dark a {
+  color: #2f9b92 !important;
+}
+
+.dark a:hover {
+  color: #5fb7af !important;
+}
+
+.dark strong,
+.dark b {
+  color: #f2f4f7 !important;
+}
+
+/* ========== 代码 ========== */
+.dark code:not(pre code) {
+  background: #171b20 !important;
+  color: #2f9b92 !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 4px !important;
+}
+
+.dark pre {
+  background: #111419 !important;
+  border: 1px solid #2b323a !important;
   border-radius: 8px !important;
 }
 
-article code {
-  background: var(--surface-secondary) !important;
-  color: var(--accent) !important;
-  padding: 0.2em 0.4em !important;
-  border-radius: 4px !important;
-  font-size: 0.9em !important;
-}
-
-article pre code {
+.dark pre code {
   background: transparent !important;
-  color: var(--text-primary) !important;
-  padding: 0 !important;
+  color: #dde2e8 !important;
 }
 
-/* 表格 */
-article table {
-  border-collapse: collapse !important;
+/* ========== 表格 ========== */
+.dark th {
+  background: #171b20 !important;
+  color: #f2f4f7 !important;
+  border: 1px solid #2b323a !important;
 }
 
-article th {
-  background: var(--surface-secondary) !important;
-  color: var(--text-strong) !important;
-  border: 1px solid var(--border-subtle) !important;
-  padding: 0.75rem 1rem !important;
+.dark td {
+  border: 1px solid #2b323a !important;
+  color: #aab3bc !important;
 }
 
-article td {
-  border: 1px solid var(--border-subtle) !important;
-  padding: 0.75rem 1rem !important;
-  color: var(--text-secondary) !important;
+/* ========== 引用块 ========== */
+.dark blockquote {
+  background: #111419 !important;
+  border-left: 3px solid #2f9b92 !important;
+  color: #aab3bc !important;
 }
 
-/* 引用块 */
-article blockquote {
-  border-left: 3px solid var(--accent) !important;
-  background: var(--surface-secondary) !important;
-  color: var(--text-secondary) !important;
-  padding: 1rem !important;
-  margin: 1rem 0 !important;
-  border-radius: 0 8px 8px 0 !important;
+/* ========== 列表 ========== */
+.dark li::marker {
+  color: #2f9b92 !important;
 }
 
-/* TOC 目录 */
-.nextra-toc {
-  color: var(--text-tertiary) !important;
+/* ========== 分隔线 ========== */
+.dark hr {
+  border-top: 1px solid #20252c !important;
 }
 
-.nextra-toc a {
-  color: var(--text-tertiary) !important;
+/* ========== TOC 目录 ========== */
+.dark [class*="toc"] a {
+  color: #8a949e !important;
 }
 
-.nextra-toc a:hover,
-.nextra-toc a[data-active="true"] {
-  color: var(--accent) !important;
+.dark [class*="toc"] a:hover {
+  color: #2f9b92 !important;
 }
 
-/* 搜索框 */
-.nextra-search input {
-  background: var(--surface) !important;
-  border: 1px solid var(--border-subtle) !important;
-  color: var(--text-primary) !important;
+/* ========== 搜索 ========== */
+.dark input {
+  background: #111419 !important;
+  border: 1px solid #2b323a !important;
+  color: #dde2e8 !important;
 }
 
-/* Footer */
+/* ========== Footer 隐藏 ========== */
 footer {
-  background: var(--app-bg) !important;
-  border-top: 1px solid var(--border-subtle) !important;
-  color: var(--text-tertiary) !important;
+  display: none !important;
 }
 
-/* 分隔线 */
-article hr {
-  border-color: var(--border-subtle) !important;
+/* ========== 浅色模式样式 ========== */
+:root:not(.dark) body,
+:root:not(.dark) main {
+  background: #f5f5f2 !important;
 }
 
-/* 强调文字 */
-article strong {
-  color: var(--text-strong) !important;
+:root:not(.dark) nav,
+:root:not(.dark) header nav {
+  background: rgba(245, 245, 242, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: none !important;
 }
 
-/* 滚动条隐藏 */
-.nextra-sidebar-container::-webkit-scrollbar {
-  display: none;
+:root:not(.dark) nav a,
+:root:not(.dark) nav button {
+  color: #5f6771 !important;
+}
+
+:root:not(.dark) nav a:hover {
+  color: #2f9b92 !important;
+}
+
+:root:not(.dark) aside {
+  background: #f5f5f2 !important;
+  border: none !important;
+}
+
+:root:not(.dark) aside a {
+  color: #5f6771 !important;
+}
+
+:root:not(.dark) aside a:hover {
+  color: #2f9b92 !important;
+}
+
+:root:not(.dark) aside a[data-active="true"],
+:root:not(.dark) aside a.active {
+  color: #2f9b92 !important;
+}
+
+:root:not(.dark) h1,
+:root:not(.dark) h2,
+:root:not(.dark) h3,
+:root:not(.dark) h4 {
+  color: #121417 !important;
+}
+
+:root:not(.dark) p,
+:root:not(.dark) li {
+  color: #5f6771 !important;
+}
+
+:root:not(.dark) code:not(pre code) {
+  background: #e8eae5 !important;
+  color: #0a5c56 !important;
+}
+
+:root:not(.dark) pre {
+  background: #ffffff !important;
+  border: 1px solid #d6d9d2 !important;
+}
+
+:root:not(.dark) pre code {
+  color: #262b31 !important;
 }

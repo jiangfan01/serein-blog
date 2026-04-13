@@ -1,0 +1,58 @@
+# Vue 的 computed 计算属性
+
+## 什么是 computed？
+
+`computed` 是 Vue 中用于**声明响应式计算属性**的 API。它的值由依赖项计算得出，**具备缓存能力**，仅在依赖变化时重新计算。
+
+## 基本用法
+
+```ts
+import { computed, ref } from 'vue';
+
+const count = ref(1);
+const double = computed(() => count.value * 2);
+
+console.log(double.value); // 输出 2
+```
+
+> 当 `count.value` 发生变化时，`double` 会自动更新
+
+## 特点 vs 普通函数
+
+| 特性 | computed | 普通函数（methods） |
+|------|----------|---------------------|
+| 缓存 | ✅ 依赖不变则返回缓存 | ❌ 每次都会重新执行 |
+| 响应式追踪 | ✅ 自动追踪依赖 | ❌ 不会自动收集响应式依赖 |
+| 使用方式 | 可用于模板或 JS 中 | 常用于事件触发时 |
+
+## 计算属性 vs watch
+
+| 比较点 | computed | watch |
+|--------|----------|-------|
+| 是否缓存 | ✅ 是 | ❌ 否 |
+| 是否需要回调 | ❌ 不需要，直接返回值 | ✅ 需要回调函数 |
+| 使用场景 | 显示值、派生状态 | 异步请求、副作用逻辑处理 |
+
+## 带 getter/setter 的计算属性
+
+```ts
+const name = ref('Vue');
+
+const fullName = computed({
+  get: () => name.value + ' 3.0',
+  set: (val) => {
+    name.value = val.replace(' 3.0', '');
+  }
+});
+
+fullName.value = 'Vue 4.0';
+console.log(name.value); // 输出 Vue 4.0
+```
+
+## 小结
+
+- `computed` 更适合用于派生值展示
+- 与 `ref` 或 `reactive` 结合使用更强大
+- 提高性能，减少不必要计算
+
+建议：能用 `computed` 的场景优先使用它，减少手动逻辑，提高代码可读性与响应性。

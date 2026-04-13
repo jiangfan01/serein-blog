@@ -1,0 +1,73 @@
+# Vue 的 keep-alive
+
+## 什么是 keep-alive？
+
+`<keep-alive>` 是 Vue 内置的**抽象组件**，用于缓存被包裹的组件，避免组件重复渲染和销毁，从而提升性能。
+
+## 使用场景
+
+- 页面切换频繁，但需要保留状态
+- 表单输入内容，切换后回来不希望重置
+- Tab 页面切换、缓存子路由组件等
+
+## 基本用法
+
+```vue
+<keep-alive>
+  <component :is="activeView" />
+</keep-alive>
+```
+
+搭配 Vue Router：
+
+```vue
+<keep-alive>
+  <router-view />
+</keep-alive>
+```
+
+## 常用属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `include` | string / RegExp / Array | 指定要缓存的组件名 |
+| `exclude` | string / RegExp / Array | 指定不需要缓存的组件名 |
+| `max` | number | 最多缓存组件实例的个数，超出将自动移除 |
+
+```vue
+<keep-alive include="Home,Profile" max="5">
+  <router-view />
+</keep-alive>
+```
+
+## 专属生命周期钩子
+
+被缓存的组件会触发：
+
+- `activated`：组件被激活（显示）时调用
+- `deactivated`：组件被缓存（隐藏）时调用
+
+```ts
+onActivated(() => {
+  console.log("进入缓存组件");
+});
+
+onDeactivated(() => {
+  console.log("离开缓存组件");
+});
+```
+
+## 工作原理简述
+
+1. 首次加载时正常挂载组件并缓存
+2. 再次访问时，直接使用缓存实例而非重新创建
+3. 离开时不会销毁，只是暂时"冻结"状态
+
+## 小结
+
+| 优点 | 缺点 |
+|------|------|
+| 保留组件状态，切换更流畅 | 长时间缓存可能占用过多内存 |
+| 提升性能，减少重复创建和销毁 | 生命周期管理需特别注意 |
+
+建议搭配 `include`、`max` 过滤和限制缓存范围，提升可控性与稳定性。

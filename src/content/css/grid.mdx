@@ -1,0 +1,76 @@
+# CSS Grid 布局详解
+
+## 什么是 Grid？
+
+CSS Grid 是一种二维网格布局系统，可以同时控制行和列，实现复杂的网页布局。它让布局变得直观且灵活。
+
+## 容器属性（父元素）
+
+| 属性 | 说明 | 示例值 |
+|------|------|--------|
+| `display` | 定义为网格容器 | `grid`、`inline-grid` |
+| `grid-template-columns` | 定义列轨道的大小和数量 | `100px 1fr 2fr` |
+| `grid-template-rows` | 定义行轨道的大小和数量 | `auto 200px` |
+| `gap` | 网格行列间距 | `10px 20px` |
+| `justify-items` | 子项在单元格水平方向对齐 | `start`、`center`、`stretch` |
+| `align-items` | 子项在单元格垂直方向对齐 | `start`、`center`、`stretch` |
+| `justify-content` | 整个网格在容器内的水平方向对齐 | `start`、`center`、`space-between` |
+| `align-content` | 整个网格在容器内的垂直方向对齐 | `start`、`center`、`space-between` |
+
+## 子元素属性（项目）
+
+| 属性 | 说明 | 示例值 |
+|------|------|--------|
+| `grid-column-start` | 指定子元素起始列轨道 | 数字或线名，如 `1`、`span 2` |
+| `grid-column-end` | 指定子元素结束列轨道 | 数字或线名 |
+| `grid-row-start` | 指定子元素起始行轨道 | 数字或线名 |
+| `grid-row-end` | 指定子元素结束行轨道 | 数字或线名 |
+| `grid-area` | 指定子元素占据的网格区域（简写） | `header` 或 `1 / 1 / 3 / 3` |
+
+## 简单示例
+
+```css
+.container {
+  display: grid;
+  grid-template-columns: 150px 1fr 1fr;
+  grid-template-rows: 100px auto 50px;
+  gap: 10px 20px;
+  grid-template-areas:
+    "header header header"
+    "sidebar main main"
+    "footer footer footer";
+}
+
+.header {
+  grid-area: header;
+}
+
+.sidebar {
+  grid-area: sidebar;
+}
+
+.main {
+  grid-area: main;
+}
+
+.footer {
+  grid-area: footer;
+}
+```
+
+## 优点
+
+- 二维布局（同时控制行和列）
+- 语义化强，布局结构清晰
+- 支持区域命名，简化布局管理
+- 灵活分配空间，响应式设计友好
+
+## 注意事项
+
+- 与 Flexbox 不同，Grid 更适合二维布局
+- 兼容性较好，IE10+ 支持部分特性，现代浏览器支持完善
+- 复杂布局时，推荐结合媒体查询实现响应式
+
+## 小结
+
+CSS Grid 是现代前端布局的强大工具，灵活、语义化且功能丰富，适合处理复杂和响应式布局。

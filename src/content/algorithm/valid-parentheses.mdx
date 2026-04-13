@@ -1,0 +1,80 @@
+# 有效的括号
+
+## 题目描述
+
+给定一个只包括 `'('`、`')'`、`'{'`、`'}'`、`'['` 和 `']'` 的字符串 `s`，判断字符串是否有效。
+
+有效字符串需满足：
+- 左括号必须用相同类型的右括号闭合
+- 左括号必须以正确的顺序闭合
+
+### 示例
+
+```js
+isValid("()") // => true
+isValid("()[]{}") // => true
+isValid("(]") // => false
+isValid("([)]") // => false
+isValid("{[]}") // => true
+```
+
+## 解法一：使用栈进行配对判断
+
+```js
+function isValid(s) {
+  const stack = [];
+  const map = {
+    ')': '(',
+    ']': '[',
+    '}': '{',
+  };
+
+  for (let char of s) {
+    if (char === '(' || char === '[' || char === '{') {
+      stack.push(char); // 遇左括号入栈
+    } else {
+      const top = stack.pop(); // 弹出栈顶，检查是否匹配
+      if (top !== map[char]) {
+        return false; // 不匹配则无效
+      }
+    }
+  }
+
+  return stack.length === 0; // 栈为空才是完全匹配
+}
+```
+
+## 解法二：使用数组+指针
+
+```js
+function isValid(s) {
+  const n = s.length;
+  const arr = new Array(n);
+  let top = -1;
+  const map = {
+    ')': '(',
+    ']': '[',
+    '}': '{',
+  };
+  
+  for (const char of s) {
+    if (char === '(' || char === '[' || char === '{') {
+      arr[++top] = char; // 确保左括号推入数组最前
+    } else {
+      if (top < 0 || arr[top] !== map[char]) {
+        return false;
+      }
+      top--; // 移除已经匹配的一对
+    }
+  }
+  return top === -1; // 确保数组为空所有的都匹配完成
+}
+```
+
+## 思路解析
+
+- 括号匹配问题非常适合使用**栈结构**
+- 每遇到左括号，就压入栈中
+- 遇到右括号时，看是否与栈顶元素匹配
+- 最后栈应为空（所有括号都被匹配完）
+- 时间复杂度：O(n)

@@ -1,0 +1,48 @@
+# 用 CSS 画三角形
+
+## 原理
+
+利用元素宽高为 0，通过设置不同边框的颜色和宽度，形成三角形形状。透明边框配合有色边框实现三角效果。
+
+## 示例代码
+
+```css
+.triangle-up {
+  width: 0;
+  height: 0;
+  border-left: 50px solid transparent;  /* 左边透明 */
+  border-right: 50px solid transparent; /* 右边透明 */
+  border-bottom: 100px solid red;       /* 下边实色，形成上三角 */
+}
+```
+
+## 不同方向三角形
+
+| 类名 | 说明 | CSS 边框设置 |
+|------|------|--------------|
+| `.triangle-up` | 上三角形 | border-left/right: transparent; border-bottom: 实色 |
+| `.triangle-down` | 下三角形 | border-left/right: transparent; border-top: 实色 |
+| `.triangle-left` | 左三角形 | border-top/bottom: transparent; border-right: 实色 |
+| `.triangle-right` | 右三角形 | border-top/bottom: transparent; border-left: 实色 |
+
+## 完整示例
+
+```html
+<div class="triangle-up"></div>
+```
+
+```css
+.triangle-up {
+  width: 0;
+  height: 0;
+  border-left: 50px solid transparent;
+  border-right: 50px solid transparent;
+  border-bottom: 100px solid red;
+}
+```
+
+## 小结
+
+- 利用边框宽度控制大小
+- 透明边框与实色边框配合决定方向
+- 纯 CSS 实现，兼容性好，常用于箭头、指示标识等

@@ -1,0 +1,98 @@
+# 数组分块 chunk
+
+## 题目描述
+
+实现一个函数 `chunk`，将数组分成多个长度为 `size` 的区块，并将这些区块组成一个新数组返回。如果数组不能被均分，最后剩余的元素也要组成一个区块。
+
+### 示例
+
+```js
+chunk([1, 2, 3, 4, 5], 2);
+// => [[1, 2], [3, 4], [5]]
+```
+
+### 函数签名
+
+```js
+function chunk(arr, size) {}
+```
+
+## 解法 1：遍历切片法（推荐）
+
+### 思路
+
+- 利用 `for` 循环，每次步进 `size`
+- 使用 `slice(i, i + size)` 截取固定大小子数组
+- 结果数组每次 push 一个分块
+
+### 代码
+
+```js
+function chunk(arr, size) {
+  const res = [];
+  if(size < 1) return []; // size为0的边界情况
+  for (let i = 0; i < arr.length; i += size) {
+    res.push(arr.slice(i, i + size));
+  }
+  return res;
+}
+```
+
+## 解法 2：临时数组缓存法
+
+### 思路
+
+- 使用一个临时子数组保存当前块
+- 遍历时逐个加入，达到 `size` 就 push 到结果中并清空临时数组
+
+### 代码
+
+```js
+function chunk(arr, size) {
+  const res = [];
+  let temp = [];
+  for (let item of arr) {
+    temp.push(item);
+    if (temp.length === size) {
+      res.push(temp);
+      temp = [];
+    }
+  }
+  if (temp.length) res.push(temp); // 剩余部分
+  return res;
+}
+```
+
+## 解法 3：使用 reduce 高阶函数
+
+### 思路
+
+- 利用 `reduce` 累积结果数组
+- 每次判断是否需要新建子数组
+
+### 代码
+
+```js
+function chunk(arr, size) {
+  return arr.reduce((res, curr) => {
+    const last = res[res.length - 1];
+    if (!last || last.length === size) {
+      res.push([curr]);
+    } else {
+      last.push(curr);
+    }
+    return res;
+  }, []);
+}
+```
+
+## 复杂度分析
+
+- 时间复杂度：O(n)
+- 空间复杂度：O(n)
+
+## 适用场景
+
+- 用于分页展示数据
+- 拆分任务块、分组处理
+- chunk 是经典的数组处理函数

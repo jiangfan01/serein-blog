@@ -1,0 +1,157 @@
+# JavaScript 常用字符串方法
+
+JavaScript 字符串是不可变的数据类型，常用方法主要用于查找、修改、截取、格式处理等。
+
+## 基础属性
+
+### length
+
+获取字符串的长度
+
+```js
+"hello".length; // 5
+```
+
+## 查找类
+
+### includes(substring)
+
+判断是否包含某子串（区分大小写）
+
+```js
+"hello world".includes("world"); // true
+```
+
+### indexOf(substring)
+
+返回第一次出现的位置（找不到返回 -1）
+
+```js
+"abcabc".indexOf("b"); // 1
+```
+
+### lastIndexOf(substring)
+
+返回最后一次出现的位置
+
+```js
+"abcabc".lastIndexOf("b"); // 4
+```
+
+### startsWith() / endsWith()
+
+判断是否以某字符串开头或结尾
+
+```js
+"frontend".startsWith("front"); // true
+"frontend".endsWith("end");     // true
+```
+
+## 截取与分割
+
+### slice(start, end)
+
+截取部分字符串，不包含 end
+
+```js
+"hello".slice(1, 4); // "ell"
+```
+
+### substring(start, end)
+
+与 slice 类似，但不支持负数索引
+
+```js
+"hello".substring(1, 4); // "ell"
+```
+
+### substr(start, length)
+
+从指定位置开始截取指定长度
+
+```js
+"hello".substr(1, 3); // "ell"
+```
+
+### split(separator)
+
+将字符串拆分成数组
+
+```js
+"1,2,3".split(","); // ["1", "2", "3"]
+```
+
+## 替换与转换
+
+### replace() / replaceAll()
+
+替换匹配内容（支持正则）
+
+```js
+"hello world".replace("world", "JS"); // "hello JS"
+"aaa".replaceAll("a", "b");           // "bbb"
+```
+
+### toUpperCase() / toLowerCase()
+
+转换大小写
+
+```js
+"Hello".toLowerCase(); // "hello"
+"hello".toUpperCase(); // "HELLO"
+```
+
+## 去除空格
+
+### trim()
+
+去除首尾空格
+
+```js
+"  hello  ".trim(); // "hello"
+```
+
+### trimStart() / trimEnd()
+
+去除开头或结尾空格
+
+## 其他常用方法
+
+### repeat(n)
+
+重复字符串 n 次
+
+```js
+"ha".repeat(3); // "hahaha"
+```
+
+### charAt(index)
+
+获取指定索引的字符
+
+```js
+"abc".charAt(1); // "b"
+```
+
+### charCodeAt(index)
+
+获取字符对应的 Unicode 编码
+
+### padStart(length, padStr) / padEnd()
+
+补全长度（前补/后补）
+
+```js
+"5".padStart(3, "0"); // "005"
+```
+
+## 小结表
+
+| 分类 | 方法 |
+|------|------|
+| 查找 | includes, indexOf, lastIndexOf, startsWith, endsWith |
+| 截取 | slice, substring, substr |
+| 转换 | toUpperCase, toLowerCase, replace, replaceAll |
+| 去空格 | trim, trimStart, trimEnd |
+| 拆分与组合 | split, repeat, padStart, padEnd |
+| 其他 | charAt, charCodeAt |

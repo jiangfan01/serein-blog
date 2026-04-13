@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "nextra-theme-docs/style.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -31,8 +30,8 @@
   --border-default: #d6d9d2;
   --border-strong: #bcc2bb;
 
-  /* Accent */
-  --accent: oklch(0.97 0 0);
+  /* Accent - 浅色模式使用深色调的 teal */
+  --accent: #1a7a72;
   --accent-strong: #0a5c56;
   --accent-soft: #d7ece9;
   --accent-contrast: #f4fbfa;
@@ -95,8 +94,6 @@
   --duration-fast: 160ms;
   --duration-base: 260ms;
   --duration-slow: 420ms;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -126,6 +123,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
 }
 
 @theme inline {
@@ -175,7 +174,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     color-scheme: dark;
     --app-bg: #0c0f12;
     --app-fg: #f2f4f7;
@@ -205,6 +204,38 @@
     --shadow-md: 0 20px 48px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 30px 84px rgba(0, 0, 0, 0.38);
   }
+}
+
+/* next-themes .dark class */
+.dark {
+  color-scheme: dark;
+  --app-bg: #0c0f12;
+  --app-fg: #f2f4f7;
+
+  --surface: #111419;
+  --surface-secondary: #171b20;
+  --surface-tertiary: #1f252c;
+  --surface-inverse: #f3f5f7;
+
+  --text-strong: #f2f4f7;
+  --text-primary: #dde2e8;
+  --text-secondary: #aab3bc;
+  --text-tertiary: #8a949e;
+  --text-quaternary: #6b7280;
+  --text-inverse: #13161a;
+
+  --border-subtle: #20252c;
+  --border-default: #2b323a;
+  --border-strong: #3a444f;
+
+  --accent: #2f9b92;
+  --accent-strong: #5fb7af;
+  --accent-soft: rgba(47, 155, 146, 0.18);
+  --accent-contrast: #eefcfa;
+
+  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 20px 48px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 30px 84px rgba(0, 0, 0, 0.38);
 }
 
 * {
@@ -346,7 +377,6 @@ body::-webkit-scrollbar,
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
@@ -377,4 +407,9 @@ body::-webkit-scrollbar,
   html {
     @apply font-sans;
   }
+}
+
+::view-transition-old(root), ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
 }

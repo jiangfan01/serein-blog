@@ -1,0 +1,58 @@
+---
+title: 事件循环
+description: JavaScript 事件循环机制详解
+---
+
+# JavaScript 的事件循环机制（Event Loop）
+
+## JS 是单线程语言
+
+JavaScript 的执行机制基于事件循环，所有任务分为两类：
+
+- **同步任务**：直接进入主线程执行
+- **异步任务**：进入任务队列（Event Queue）
+
+## 事件循环流程
+
+1. 执行主线程上的同步任务
+2. 清空**微任务队列**（microtasks）
+3. 执行**一个**宏任务（macrotask）
+4. 再次清空微任务，循环往复
+
+## 常见任务类型
+
+| 任务类型    | 示例                       | 优先级 |
+|-------------|----------------------------|--------|
+| 宏任务（macrotask） | `setTimeout`、`setInterval`、`setImmediate` | 低     |
+| 微任务（microtask） | `Promise.then`、`MutationObserver` | 高     |
+
+## 示例代码
+
+```js
+console.log('start');
+
+setTimeout(() => {
+  console.log('setTimeout');
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log('promise');
+});
+
+console.log('end');
+```
+
+### 输出顺序
+
+```
+start
+end
+promise
+setTimeout
+```
+
+## 小结
+
+- 微任务优先于宏任务
+- 每次宏任务执行完都会清空一次微任务队列
+- 事件循环让 JS 能异步处理任务而不阻塞主线程

@@ -1,0 +1,61 @@
+---
+title: 跨域解决方案
+description: 浏览器跨域问题及常见解决方法
+---
+
+# 跨域及常见应对方法
+
+## 什么是跨域
+
+跨域指浏览器出于安全策略限制，阻止网页从一个源（协议 + 域名 + 端口）去请求另一个源的资源。
+
+例如，页面地址是 `http://example.com` 请求 `http://api.otherdomain.com` 就属于跨域。
+
+## 跨域表现
+
+- AJAX 请求时浏览器报跨域错误，控制台提示跨域相关信息
+- 浏览器阻止前端访问响应内容
+
+## 常见跨域应对方法
+
+### 1. CORS（跨域资源共享）
+
+服务器在响应头添加 `Access-Control-Allow-Origin` 指定允许访问的域名。
+
+支持复杂请求时，浏览器会先发 OPTIONS 预检请求。
+
+```
+Access-Control-Allow-Origin: https://example.com
+Access-Control-Allow-Methods: GET, POST, PUT
+Access-Control-Allow-Headers: Content-Type
+```
+
+### 2. JSONP（仅支持 GET 请求）
+
+通过动态插入 `<script>` 标签绕过跨域限制。服务器返回一段调用指定回调函数的 JavaScript 代码。
+
+缺点：仅支持 GET，存在安全隐患。
+
+### 3. 代理服务器
+
+在同源服务器上设置代理，将请求转发给目标服务器。对浏览器来说是同源请求，绕过跨域限制。
+
+常见代理工具有 webpack devServer、nginx 等。
+
+### 4. document.domain
+
+仅限于主域相同的子域之间通信。设置 `document.domain` 为相同的主域名。
+
+### 5. window.postMessage
+
+用于跨窗口或跨 iframe 安全通信。通过发送消息实现跨域数据交换。
+
+## 跨域方案对比
+
+| 方法           | 优点               | 缺点                 | 适用场景                  |
+| -------------- | ------------------ | -------------------- | ------------------------- |
+| CORS           | 标准方案，灵活支持多请求类型 | 需要服务器配合         | 绝大多数跨域请求           |
+| JSONP          | 简单，兼容旧浏览器 | 仅支持 GET，安全风险   | 简单的跨域 GET 请求        |
+| 代理服务器     | 浏览器无感知       | 需搭建和配置代理       | 开发环境或私有服务器代理   |
+| document.domain| 简单，适用子域间通信 | 仅限同一主域子域      | 主域相同子域间通信         |
+| postMessage    | 安全，适合跨窗口通信 | 只能跨窗口或 iframe   | 跨窗口、iframe 的跨域通信  |

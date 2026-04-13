@@ -1,0 +1,89 @@
+# Vue 的 Slot 插槽
+
+## 什么是 Slot？
+
+`<slot>` 是 Vue 提供的一种**内容分发机制**，用于组件封装时向子组件传递结构化内容，实现**灵活布局与复用**。
+
+## 基本用法（默认插槽）
+
+父组件向子组件插入内容：
+
+```vue
+<!-- 父组件 -->
+<Dialog>
+  <p>这是插入的内容</p>
+</Dialog>
+
+<!-- 子组件 -->
+<template>
+  <div class="dialog">
+    <slot></slot> <!-- 渲染插入的内容 -->
+  </div>
+</template>
+```
+
+## 具名插槽
+
+为插槽命名，实现多区域分发。
+
+```vue
+<!-- 父组件 -->
+<Dialog>
+  <template #header>
+    <h3>标题</h3>
+  </template>
+  <template #footer>
+    <button>关闭</button>
+  </template>
+</Dialog>
+
+<!-- 子组件 -->
+<template>
+  <div class="dialog">
+    <header><slot name="header" /></header>
+    <main><slot /></main>
+    <footer><slot name="footer" /></footer>
+  </div>
+</template>
+```
+
+## 作用域插槽（scoped slot）
+
+当父组件需要**访问子组件内部数据**时使用。
+
+### 子组件暴露数据
+
+```vue
+<!-- 子组件 -->
+<slot :user="user"></slot>
+```
+
+### 父组件接收并使用
+
+```vue
+<!-- 父组件 -->
+<UserCard>
+  <template #default="{ user }">
+    <p>{{ user.name }}</p>
+  </template>
+</UserCard>
+```
+
+## 默认内容（fallback content）
+
+如果父组件没有传内容，则显示默认内容：
+
+```vue
+<slot>暂无内容</slot>
+```
+
+## 小结
+
+| 插槽类型 | 特点说明 |
+|----------|----------|
+| 默认插槽 | 最基础形式，内容自动注入组件中 |
+| 具名插槽 | 多区域内容插入，适合复杂布局组件 |
+| 作用域插槽 | 子传父结构 + 数据，适合表格、列表类组件 |
+| 默认内容 | 无传入内容时显示默认内容 |
+
+插槽机制是 Vue 封装高复用组件的核心能力，灵活使用能大幅提升组件通用性。
