@@ -1,15 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-declare global {
-  var prisma: PrismaClient | undefined;
-}
-
-export const prisma =
-  globalThis.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalThis.prisma = prisma;
-}
+/**
+ * 数据库暂未启用，这里保留统一入口，避免后续接库时到处改引用路径。
+ * 正式启用 PostgreSQL / Prisma 后，再恢复 PrismaClient 实例化。
+ */
+export const prisma = null;
