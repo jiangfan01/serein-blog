@@ -1,0 +1,30 @@
+---
+title: SSE Multi-Session Architecture
+description: A condensed explanation of how to keep streaming connections alive across route changes.
+---
+
+# SSE Multi-Session Architecture
+
+The system can be explained in three layers:
+
+1. **Get the stream** with `fetch + ReadableStream`
+2. **Parse the stream** into events like `message`, `tool_call`, `steps`, and `complete`
+3. **Manage globally** with a singleton manager and write state by `sessionId`
+
+## Why the singleton exists
+
+If the SSE connection is created inside a page component, route changes will tear it down together with the component lifecycle.
+
+The fix is to move connection ownership out of React and into an application-level manager.
+
+## Responsibilities
+
+- `GlobalSSEManager`: manages connections, retries, and reconnection
+- `multiSessionStore`: stores messages and execution state per session
+- React components: render store data only
+
+## Performance
+
+Streaming events should not trigger a render for every tiny chunk.
+
+Use a buffer and `requestAnimationFrame` to batch writes before updating the store, then flush everything immediately on terminal events like `complete` or `error`.
