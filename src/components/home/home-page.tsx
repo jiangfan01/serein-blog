@@ -1,104 +1,301 @@
 "use client";
 
 import Link from "next/link";
-import { useRef } from "react";
+import { ArrowRight } from "lucide-react";
 import { IntroAnimation } from "@/components/intro/intro-animation-final";
-import { ArrowUpRight, Mail } from "lucide-react";
-import { AnimatedButton } from "@/components/ui/animated-button";
-import { TechStackSection } from "@/components/home/tech-stack-section";
+import { techStack } from "@/data/tech-stack";
+import { LineWaves } from "@/components/effects/line-waves";
 
 const projects = [
   {
     id: "01",
-    title: "SSE 多会话聊天系统",
-    description: "流式架构与 React 生命周期分离，使用单例连接管理和缓冲渲染技术",
-    tags: ["React", "SSE", "WebSocket"],
-    year: "2024"
+    title: "100 CITY",
+    description: "聚焦营销领域的智能工作平台，支持通过自然语言完成营销内容生产、对话协作与工作流编排。主导 SSE 架构重构，实现多会话流式响应与跨页面状态衔接；负责工作流画布、多维表格、富文本编辑等核心能力建设。",
+    tags: ["React", "SSE", "React Flow", "Zustand"],
+    category: "AI 工作平台",
+    url: "https://100.city/cityChat",
+    gradient: "from-cyan-500 to-blue-500"
   },
   {
     id: "02",
-    title: "AI 工作流编排器",
-    description: "基于图的编排界面，支持阶段管理、分支逻辑、节点编辑和配置转换",
-    tags: ["React Flow", "AI", "Workflow"],
-    year: "2024"
+    title: "极义 GEO",
+    description: "面向 GEO 场景的业务平台，覆盖官网展示、后台配置、代理站交付能力。作为全栈开发参与 0 到 1 建设，独立完成贴牌/代理站能力，支持主站与子站双模式运行，实现多库实例接入与数据隔离。",
+    tags: ["React", "Golang", "Gin", "MySQL"],
+    category: "全栈平台",
+    gradient: "from-purple-500 to-pink-500"
   },
   {
     id: "03",
-    title: "Agent 工具实验场",
-    description: "用于提示词、工具调用、交互循环和面向产品的 AI 实验的实践空间",
-    tags: ["LLM", "Agent", "Tools"],
-    year: "2024"
-  }
+    title: "实时热点聚合平台",
+    description: "面向内容创作的实时热点聚合平台，聚合多平台热门数据，结合 Agent 能力分析热点匹配情况，输出多角度分析及口播稿内容。独立完成前后端开发，设计提示词与生成逻辑编排。",
+    tags: ["React", "Golang", "Agent", "内容生成"],
+    category: "AI 内容平台",
+    gradient: "from-orange-500 to-red-500"
+  },
+  {
+    id: "04",
+    title: "茄子 AI",
+    description: "多模型 AI 工作流平台，支持画布式编排串联对话、图片、视频及数字人能力。基于 React Flow 实现工作流画布，接入 GPT、Gemini、图片模型、视频模型等多类生成能力，完成从文案到多媒体内容的完整链路。",
+    tags: ["Next.js 16", "PostgreSQL", "Prisma", "React Flow"],
+    category: "AI 工作流",
+    gradient: "from-green-500 to-teal-500"
+  },
 ];
 
 export function HomePage() {
-  const contentRef = useRef<HTMLDivElement>(null);
-
   return (
     <>
       <IntroAnimation />
       
-      <div ref={contentRef} className="relative bg-[var(--app-bg)]">
-        {/* Hero Section - Full Screen */}
-        <section className="relative min-h-screen flex items-center justify-center px-6 md:px-10">
-          <div className="mx-auto w-full max-w-7xl">
-            <div className="space-y-8">
-              <div className="space-y-4">
-                <p className="text-[var(--font-size-caption)] uppercase tracking-[0.32em] text-[var(--accent)]">
-                  AI 前端工程师
-                </p>
-                <h1 className="text-[clamp(2.5rem,8vw,6rem)] font-bold leading-[1.05] tracking-[-0.04em] text-[var(--text-strong)]">
-                  构建流畅的
-                  <br />
-                  <span className="text-[var(--accent)]">AI 交互体验</span>
-                </h1>
-              </div>
-              
-              <p className="max-w-2xl text-[clamp(1.125rem,2vw,1.5rem)] leading-relaxed text-[var(--text-secondary)]">
-                专注于 AI 工作流系统、流式用户体验和前端工程。
-                <br />
-                让复杂的系统变得简单易用。
-              </p>
+      <div className="relative bg-[var(--app-bg)]">
+        {/* LineWaves Background */}
+        <div className="fixed inset-0 pointer-events-none opacity-40 z-0">
+          <LineWaves
+            speed={0.3}
+            innerLineCount={32}
+            outerLineCount={36}
+            warpIntensity={1}
+            rotation={-45}
+            edgeFadeWidth={0}
+            colorCycleSpeed={1}
+            brightness={0.2}
+            color1="#2f9b92"
+            color2="#2f9b92"
+            color3="#2f9b92"
+            enableMouseInteraction
+            mouseInfluence={2}
+          />
+        </div>
 
-              <div className="flex flex-wrap gap-4 pt-4">
-                <AnimatedButton
+        {/* Hero Section */}
+        <section className="relative min-h-screen flex items-center justify-center px-6 md:px-16 overflow-hidden">
+          <div className="max-w-7xl mx-auto relative z-10">
+            <div className="flex flex-col items-center text-center">
+              <span className="font-mono text-[var(--accent)] tracking-[0.4em] uppercase text-xs mb-8 block">
+                全栈开发 · AI 架构师
+              </span>
+              
+              <h1 className="text-[clamp(3rem,10vw,8rem)] font-black tracking-tighter text-white leading-[0.95] mb-12">
+                让我们一起
+                <br />
+                <span className="text-[var(--accent)] italic" style={{
+                  textShadow: '0 0 30px rgba(47, 155, 146, 0.3)'
+                }}>
+                  创造些什么
+                </span>
+              </h1>
+
+              <div className="max-w-2xl text-gray-400 text-lg md:text-xl leading-relaxed mb-12">
+                融合技术精度与创意灵魂。构建可扩展的数字生态系统，让性能与高端编辑美学完美结合。
+              </div>
+
+              <div className="flex flex-wrap gap-8 justify-center items-center">
+                <Link
                   href="/projects"
-                  variant="slide"
-                  slideDirection="left"
-                  showIcon
-                  primary
+                  className="group inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors text-lg font-bold"
                 >
-                  查看项目
-                </AnimatedButton>
-                <AnimatedButton
+                  <span>开始项目</span>
+                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-2" />
+                </Link>
+                <Link
                   href="/about"
-                  variant="shine"
+                  className="text-gray-400 hover:text-white transition-colors text-lg font-bold border-b-2 border-gray-600 hover:border-white pb-1"
                 >
-                  关于我
-                </AnimatedButton>
+                  查看归档
+                </Link>
               </div>
             </div>
           </div>
 
-          {/* Scroll Indicator */}
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce">
-            <span className="text-sm text-[var(--text-tertiary)]">向下滚动</span>
-            <div className="h-8 w-[1px] bg-gradient-to-b from-[var(--text-tertiary)] to-transparent" />
+          {/* Decorative Glows */}
+          <div className="absolute top-1/4 -left-20 w-[500px] h-[500px] bg-[var(--accent)]/10 rounded-full blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-0 -right-20 w-[600px] h-[600px] bg-[var(--accent)]/5 rounded-full blur-[150px] pointer-events-none" />
+        </section>
+
+        {/* Tech Stack Section - Architectural List Layout */}
+        <section className="py-40 px-6 md:px-16 relative z-10">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col lg:flex-row justify-between items-start mb-32 gap-12">
+              <div className="max-w-2xl">
+                <div className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-6 uppercase">
+                  / 技术能力
+                </div>
+                <h2 className="text-6xl md:text-8xl font-black text-white mb-8 tracking-tighter leading-[0.9]">
+                  架构
+                  <br />
+                  <span className="text-[var(--accent)]" style={{ textShadow: '0 0 30px rgba(47, 155, 146, 0.3)' }}>
+                    技术栈
+                  </span>
+                </h2>
+              </div>
+              <div className="max-w-md lg:mt-24">
+                <p className="text-gray-400 text-lg leading-relaxed border-l-2 border-[var(--accent)]/30 pl-8">
+                  精选工业级技术，以其性能、可扩展性和开发体验而选择。
+                </p>
+              </div>
+            </div>
+
+            {/* Architectural List */}
+            <div className="border-t border-white/20">
+              {/* Group 01: Frontend */}
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
+                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+                  01
+                </div>
+                <div className="md:col-span-3">
+                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                    前端
+                    <br />
+                    工程
+                  </h3>
+                </div>
+                <div className="md:col-span-8">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
+                    {techStack
+                      .filter(t => ['前端框架', 'UI 库', '动画'].includes(t.category))
+                      .map(tech => (
+                        <a
+                          key={tech.name}
+                          href={tech.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col gap-2 group/item"
+                        >
+                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
+                            {tech.name}
+                          </span>
+                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                            {tech.category}
+                          </span>
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 02: AI */}
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
+                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+                  02
+                </div>
+                <div className="md:col-span-3">
+                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                    AI
+                    <br />
+                    集成
+                  </h3>
+                </div>
+                <div className="md:col-span-8">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
+                    {techStack
+                      .filter(t => t.category === 'AI 工具')
+                      .map(tech => (
+                        <a
+                          key={tech.name}
+                          href={tech.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col gap-2 group/item"
+                        >
+                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
+                            {tech.name}
+                          </span>
+                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                            LLM / Agent
+                          </span>
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 03: Backend */}
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
+                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+                  03
+                </div>
+                <div className="md:col-span-3">
+                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                    后端 &
+                    <br />
+                    基础设施
+                  </h3>
+                </div>
+                <div className="md:col-span-8">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
+                    {techStack
+                      .filter(t => ['后端框架', '数据库 & ORM'].includes(t.category))
+                      .map(tech => (
+                        <a
+                          key={tech.name}
+                          href={tech.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col gap-2 group/item"
+                        >
+                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
+                            {tech.name}
+                          </span>
+                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                            {tech.category}
+                          </span>
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 04: State & Tools */}
+              <div className="group grid grid-cols-1 md:grid-cols-12 py-16 border-b border-white/20 items-start hover:bg-white/[0.02] transition-colors">
+                <div className="md:col-span-1 font-mono text-gray-600 text-sm tracking-widest group-hover:text-[var(--accent)] transition-colors">
+                  04
+                </div>
+                <div className="md:col-span-3">
+                  <h3 className="text-2xl font-bold text-white uppercase tracking-tighter mb-4 md:mb-0">
+                    状态管理
+                    <br />
+                    & 工具
+                  </h3>
+                </div>
+                <div className="md:col-span-8">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
+                    {techStack
+                      .filter(t => ['状态管理', '可视化', '实时通信', '语言'].includes(t.category))
+                      .map(tech => (
+                        <a
+                          key={tech.name}
+                          href={tech.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col gap-2 group/item"
+                        >
+                          <span className="text-white font-bold text-lg group-hover/item:text-[var(--accent)] transition-colors flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full group-hover/item:shadow-[0_0_15px_rgba(47,155,146,0.8)] transition-all" />
+                            {tech.name}
+                          </span>
+                          <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                            {tech.category}
+                          </span>
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Skills Section - Split Layout with Category Menu */}
-        <TechStackSection />
-
-        {/* Projects Section - Full Screen Each */}
-        <section className="relative border-t border-[var(--border-subtle)]">
-          <div className="mx-auto w-full max-w-7xl px-6 md:px-10 py-32">
-            <div className="mb-20">
-              <p className="text-[var(--font-size-caption)] uppercase tracking-[0.32em] text-[var(--accent)] mb-6">
-                精选作品
-              </p>
-              <h2 className="text-[clamp(2rem,5vw,4rem)] font-bold leading-[1.1] tracking-[-0.03em] text-[var(--text-strong)]">
-                近期项目
+        {/* Projects Section */}
+        <section className="py-32 px-6 md:px-16 overflow-hidden relative z-10">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-24">
+              <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold text-white tracking-tight leading-none">
+                我的
+                <br />
+                <span className="text-[var(--accent)] italic">项目</span>
               </h2>
             </div>
 
@@ -106,54 +303,63 @@ export function HomePage() {
               {projects.map((project, index) => (
                 <div
                   key={project.id}
-                  className="group relative"
+                  className="group"
                 >
-                  <div className="flex flex-col md:flex-row gap-12 items-start">
-                    {/* Project Number */}
-                    <div className="text-[8rem] font-bold leading-none text-[var(--border-default)] group-hover:text-[var(--accent)] transition-colors">
-                      {project.id}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+                    {/* 左侧：编号和分类 */}
+                    <div className="md:col-span-2">
+                      <div className="flex flex-col gap-4">
+                        <span className="text-6xl font-black text-white/10 group-hover:text-[var(--accent)]/20 transition-colors">
+                          {project.id}
+                        </span>
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-gray-600">
+                          {project.category}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Project Info */}
-                    <div className="flex-1 space-y-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                          <h3 className="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-[var(--text-strong)] group-hover:text-[var(--accent)] transition-colors">
-                            {project.title}
-                          </h3>
-                          <span className="text-sm text-[var(--text-tertiary)]">
-                            {project.year}
-                          </span>
-                        </div>
-                        <p className="text-[clamp(1rem,1.5vw,1.25rem)] leading-relaxed text-[var(--text-secondary)]">
-                          {project.description}
-                        </p>
-                      </div>
+                    {/* 右侧：内容 */}
+                    <div className="md:col-span-10 space-y-6">
+                      <h3 className="text-4xl md:text-5xl font-bold text-white group-hover:text-[var(--accent)] transition-colors">
+                        {project.title}
+                      </h3>
 
-                      <div className="flex flex-wrap gap-2">
-                        {project.tags.map((tag) => (
+                      <p className="text-gray-400 text-lg leading-relaxed max-w-4xl">
+                        {project.description}
+                      </p>
+
+                      <div className="flex flex-wrap gap-3">
+                        {project.tags.map(tag => (
                           <span
                             key={tag}
-                            className="rounded-full border border-[var(--border-default)] px-4 py-2 text-sm text-[var(--text-primary)]"
+                            className="font-mono text-xs text-gray-500"
                           >
                             {tag}
                           </span>
                         ))}
                       </div>
 
-                      <Link
-                        href={`/projects/${project.id}`}
-                        className="inline-flex items-center gap-2 text-[var(--accent)] font-medium hover:gap-4 transition-all"
-                      >
-                        查看详情
-                        <ArrowUpRight className="h-5 w-5" />
-                      </Link>
+                      {project.url ? (
+                        <a
+                          href={project.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors group/link text-lg font-bold pt-4"
+                        >
+                          <span>查看项目</span>
+                          <ArrowRight className="h-5 w-5 transform group-hover/link:translate-x-2 transition-transform" />
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-3 text-gray-600 text-lg font-bold pt-4">
+                          <span>内部项目</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Divider */}
+                  {/* 分隔线 */}
                   {index < projects.length - 1 && (
-                    <div className="mt-32 h-[1px] bg-gradient-to-r from-transparent via-[var(--border-default)] to-transparent" />
+                    <div className="mt-32 h-px bg-white/10" />
                   )}
                 </div>
               ))}
@@ -161,59 +367,26 @@ export function HomePage() {
           </div>
         </section>
 
-        {/* Contact Section - Full Screen */}
-        <section className="relative min-h-screen flex items-center justify-center border-t border-[var(--border-subtle)] px-6 md:px-10">
-          <div className="mx-auto w-full max-w-7xl text-center">
-            <div className="space-y-12">
-              <div className="space-y-6">
-                <p className="text-[var(--font-size-caption)] uppercase tracking-[0.32em] text-[var(--accent)]">
-                  联系方式
-                </p>
-                <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold leading-[1.05] tracking-[-0.04em] text-[var(--text-strong)]">
-                  让我们一起
-                  <br />
-                  <span className="text-[var(--accent)]">创造些什么</span>
-                </h2>
-              </div>
+        {/* CTA Section */}
+        <section className="py-48 px-6 md:px-16 text-center relative z-10">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-[clamp(3rem,8vw,6rem)] font-black text-white mb-12 tracking-tighter">
+              准备好{' '}
+              <span className="text-[var(--accent)] italic">开始</span>
+              了吗？
+            </h2>
+            
+            <p className="text-gray-400 text-xl mb-16 max-w-2xl mx-auto">
+              接受精选合作伙伴关系和架构咨询。让我们创造一些有意义的东西。
+            </p>
 
-              <p className="mx-auto max-w-2xl text-[clamp(1.125rem,2vw,1.5rem)] leading-relaxed text-[var(--text-secondary)]">
-                对项目合作、技术交流或任何想法感兴趣？
-                <br />
-                随时联系我。
-              </p>
-
-              <div className="flex flex-wrap items-center justify-center gap-6 pt-8">
-                <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-3 rounded-full border-2 border-[var(--border-strong)] px-8 py-4 text-base font-medium text-[var(--text-primary)] transition-all hover:scale-105 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                  </svg>
-                  GitHub
-                </a>
-                <a
-                  href="https://twitter.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-3 rounded-full border-2 border-[var(--border-strong)] px-8 py-4 text-base font-medium text-[var(--text-primary)] transition-all hover:scale-105 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                  Twitter
-                </a>
-                <a
-                  href="mailto:your@email.com"
-                  className="group flex items-center gap-3 rounded-full bg-[var(--accent)] px-8 py-4 text-base font-medium text-white transition-all hover:scale-105"
-                >
-                  <Mail className="h-5 w-5" />
-                  发送邮件
-                </a>
-              </div>
-            </div>
+            <a
+              href="mailto:hello@serein.dev"
+              className="inline-flex items-center gap-3 text-white hover:text-[var(--accent)] transition-colors text-2xl font-black group"
+            >
+              <span>联系我</span>
+              <ArrowRight className="h-6 w-6 transform group-hover:translate-x-2 transition-transform" />
+            </a>
           </div>
         </section>
       </div>
