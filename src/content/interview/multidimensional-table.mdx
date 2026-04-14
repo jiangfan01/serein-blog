@@ -1,0 +1,414 @@
+# 多维表格模块开发指南
+
+> 本文档帮助你快速理解多维表格（MDT）模块的架构、数据流和各组件职责。
+
+## 一、模块概览
+
+多维表格是一个类似飞书多维表格的功能模块，基于 AG-Grid 实现，支持多种字段类型、单元格编辑、异步任务状态等功能。
+
+### 目录结构
+
+```
+apps/web/src/pages/MultiDimensionTable/
+├── index.tsx                 # 路由入口（重定向到 TablePage）
+├── pages/
+│   └── TablePage.tsx         # 主页面组件（核心！）
+├── components/
+│   ├── TableView/            # AG-Grid 表格视图
+│   │   ├── index.tsx         # 表格主组件
+│   │   ├── CellRenderers/    # 单元格渲染器（只读展示）
+│   │   └── CellEditors/      # 单元格编辑器（编辑模式）
+│   ├── FileSidebar/          # 左侧文件夹/表格列表
+│   ├── TableTabs/            # 表格标签页切换
+│   ├── Toolbar/              # 顶部工具栏
+│   ├── ColumnHeader.tsx      # 自定义列头
+│   ├── FilterPanel/          # 筛选面板
+│   ├── RowDetailDrawer/      # 行详情抽屉
+│   ├── AddFieldDrawer/       # 添加字段抽屉
+│   ├── OperationLogDrawer/   # 操作历史抽屉
+│   └── ...
+├── hooks/                    # 自定义 Hooks
+├── store/                    # Zustand 状态管理
+├── types/                    # TypeScript 类型定义
+├── utils/                    # 工具函数
+└── constants/                # 常量定义
+```
+
+---
+
+## 二、核心概念
+
+### 2.1 数据模型
+
+```
+File（文件夹）
+  └── Table（表格）
+        ├── Fields（字段/列定义）
+        └── Records（记录/行数据）
+```
+
+- **File**: 文件夹，用于组织多个表格
+- **Table**: 表格，包含字段定义和数据记录
+- **Field**: 字段（列），定义数据类型和配置
+- **Record**: 记录（行），存储实际数据
+
+### 2.2 字段类型
+
+| 类型 | 说明 | 渲染器 | 编辑器 |
+|------|------|--------|--------|
+| `text` | 单行文本 | TextCellRenderer | TextCellEditor |
+| `number` | 数字 | TextCellRenderer | NumberCellEditor |
+| `select` | 单选 | SelectCellRenderer | SelectCellEditor |
+| `multi_select` | 多选 | MultiSelectCellRenderer | MultiSelectCellEditor |
+| `link` | 链接 | SocialLinkCard | LinkCellEditor |
+| `images` | 图片 | ImagesCellRenderer | ImagesCellEditor |
+| `video` | 视频 | VideoCellRenderer | VideoCellEditor |
+| `attachment` | 附件 | AttachmentCellRenderer | AttachmentCellEditor |
+| `json` | JSON | JsonCellRenderer | JsonCellEditor |
+| `ai` | AI 生成 | AiCellRenderer | - |
+
+---
+
+## 三、数据流架构
+
+### 3.1 API 层
+
+```
+api/MultiDimensionTable/mdtApi.ts    # API 请求函数
+api/adapters/mdtAdapter.ts           # 数据适配器（snake_case → camelCase）
+```
+
+**重要规则**：
+- 后端返回 `snake_case`（如 `field_id`）
+- 前端使用 `camelCase`（如 `fieldId`）
+- 适配器负责转换
+
+### 3.2 Hooks 层
+
+| Hook | 职责 |
+|------|------|
+| `useMdtFiles` | 文件夹列表、表格详情、操作日志 |
+| `useMdtFields` | 字段 CRUD 操作 |
+| `useMdtRecords` | 记录 CRUD、异步状态轮询 |
+| `useTableRouting` | URL 路由参数管理 |
+| `useSortOrder` | 排序状态管理 |
+| `useTableSelection` | 行选择状态 |
+| `useHistoryRestore` | 历史版本还原 |
+
+### 3.3 数据流图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        TablePage.tsx                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ useMdtFiles │  │useMdtFields │  │   useMdtRecords     │  │
+│  │ (表格详情)   │  │ (字段CRUD)  │  │ (记录+异步状态轮询) │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
+│         │                │                     │             │
+│         └────────────────┼─────────────────────┘             │
+│                          ▼                                   │
+│                    ┌───────────┐                             │
+│                    │ TableView │                             │
+│                    │ (AG-Grid) │                             │
+│                    └───────────┘                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 四、核心组件详解
+
+### 4.1 TablePage.tsx（主页面）
+
+这是整个模块的"大脑"，负责：
+
+1. **路由管理**: 从 URL 获取 `fileId` 和 `tableId`
+2. **数据获取**: 调用各种 hooks 获取数据
+3. **状态协调**: 管理历史模式、筛选、排序等状态
+4. **事件处理**: 处理单元格编辑、字段操作等
+
+```tsx
+// 关键状态
+const [historyMode, setHistoryMode] = useState(null);  // 历史模式快照
+const [filters, setFilters] = useState([]);            // 筛选条件
+const { sortField, sortOrder } = useSortOrder();       // 排序状态
+
+// 关键数据
+const { data: tableDetail } = useMdtTableDetail(tablePublicId);
+const { records, cellAsyncStatus } = useMdtRecordsQuery(tableId, filters);
+```
+
+### 4.2 TableView/index.tsx（表格视图）
+
+基于 AG-Grid 的表格组件，负责：
+
+1. **列定义生成**: 根据 fields 生成 AG-Grid 的 columnDefs
+2. **单元格渲染**: 根据字段类型选择对应的 Renderer
+3. **单元格编辑**: 根据字段类型选择对应的 Editor
+4. **事件处理**: 单元格值变更、右键菜单等
+
+```tsx
+// 列定义生成逻辑
+const columnDefs = useMemo(() => {
+  return fields.map(field => ({
+    field: field.id,
+    headerName: field.name,
+    cellRenderer: getCellRenderer(field),      // 根据类型选渲染器
+    cellEditor: getCellEditor(field),          // 根据类型选编辑器
+    // ...
+  }));
+}, [fields]);
+```
+
+### 4.3 CellRenderers（单元格渲染器）
+
+渲染器只负责**展示**，不处理编辑。
+
+```tsx
+// 示例：TextCellRenderer
+export function TextCellRenderer(props: ICellRendererParams) {
+  const value = props.value;
+  if (!value) return null;
+  return <span className="truncate">{value}</span>;
+}
+```
+
+**特殊渲染器**：
+- `SocialLinkCard`: 当 link 字段有 `linkProfiles` 配置时，显示头像+昵称
+- `withAsyncStatus`: HOC，为渲染器添加异步状态指示器
+
+### 4.4 CellEditors（单元格编辑器）
+
+编辑器负责**编辑模式**的交互。
+
+```tsx
+// 示例：TextCellEditor
+export const TextCellEditor = forwardRef((props, ref) => {
+  const [value, setValue] = useState(props.value);
+  
+  useImperativeHandle(ref, () => ({
+    getValue: () => value,  // AG-Grid 调用获取新值
+  }));
+  
+  return <Input value={value} onChange={e => setValue(e.target.value)} />;
+});
+```
+
+---
+
+## 五、异步任务状态系统
+
+### 5.1 概念
+
+某些操作（如小红书复刻）是异步的，需要轮询状态。
+
+### 5.2 状态值
+
+| 状态 | 说明 |
+|------|------|
+| `pending` | 等待中 |
+| `generating` | 生成中 |
+| `done` | 完成 |
+| `error` | 错误 |
+
+### 5.3 实现流程
+
+```
+1. useMdtRecords 获取 records 时，同时获取 cellAsyncStatus
+2. 如果有 pending/generating 状态，启动 3 秒轮询
+3. TableView 将 cellAsyncStatus 传给 withAsyncStatus HOC
+4. withAsyncStatus 在单元格上显示状态指示器
+5. ColumnHeader 显示列级别的状态汇总
+```
+
+### 5.4 关键代码
+
+```tsx
+// useMdtRecords.ts
+const { data, refetch } = useQuery({
+  queryKey: ['mdt-records', tableId],
+  queryFn: () => fetchRecords(tableId),
+});
+
+// 轮询逻辑
+useEffect(() => {
+  const hasRunning = Object.values(cellAsyncStatus).some(
+    status => status === 'pending' || status === 'generating'
+  );
+  if (hasRunning) {
+    const timer = setInterval(refetch, 3000);
+    return () => clearInterval(timer);
+  }
+}, [cellAsyncStatus]);
+```
+
+---
+
+## 六、Link 字段的博主资料渲染
+
+### 6.1 背景
+
+当 link 类型字段配置了 `link_profiles` 时，单元格显示博主头像+昵称，而不是普通链接。
+
+### 6.2 数据结构
+
+```json
+{
+  "type": "link",
+  "config": {
+    "link_profiles": {
+      "911": {
+        "url": "https://...",
+        "avatar": "https://...",
+        "nickname": "博主名",
+        "platform": "xiaohongshu"
+      }
+    }
+  }
+}
+```
+
+### 6.3 渲染逻辑
+
+```tsx
+// SocialLinkCard.tsx
+export function SocialLinkCard({ value, fieldConfig, recordId }) {
+  const linkProfile = fieldConfig?.linkProfiles?.[recordId];
+  
+  if (linkProfile) {
+    // 显示头像 + 昵称
+    return (
+      <a href={linkProfile.url}>
+        <Avatar src={linkProfile.avatar} />
+        <span>{linkProfile.nickname}</span>
+      </a>
+    );
+  }
+  
+  // 普通链接显示
+  return <a href={value}>{value}</a>;
+}
+```
+
+---
+
+## 七、历史记录功能
+
+### 7.1 功能说明
+
+- 查看表格的操作历史
+- 预览历史版本的数据
+- 还原到指定版本
+
+### 7.2 组件
+
+- `OperationLogDrawer`: 历史记录抽屉
+- `HistoryModeBanner`: 历史模式提示条
+
+### 7.3 流程
+
+```
+1. 打开 OperationLogDrawer
+2. 点击某条历史记录
+3. 调用 fetchSnapshot(tableId, revision) 获取快照
+4. 进入历史模式，表格显示快照数据（只读）
+5. 可选择"还原"或"退出"
+```
+
+---
+
+## 八、常见开发场景
+
+### 8.1 添加新字段类型
+
+1. 在 `types/index.ts` 添加类型定义
+2. 创建 `CellRenderers/XxxCellRenderer.tsx`
+3. 创建 `CellEditors/XxxCellEditor.tsx`
+4. 在 `utils/columnDefs.tsx` 注册渲染器和编辑器
+5. 在 `utils/fieldTypeIcon.tsx` 添加图标
+
+### 8.2 修改单元格渲染逻辑
+
+1. 找到对应的 `CellRenderers/XxxCellRenderer.tsx`
+2. 修改渲染逻辑
+3. 如果需要异步状态，使用 `withAsyncStatus` HOC 包装
+
+### 8.3 修改单元格编辑逻辑
+
+1. 找到对应的 `CellEditors/XxxCellEditor.tsx`
+2. 修改编辑逻辑
+3. 确保 `getValue()` 返回正确的值
+
+### 8.4 添加新的工具栏功能
+
+1. 在 `components/Toolbar/index.tsx` 添加按钮
+2. 实现对应的处理函数
+3. 如果需要弹窗，创建新的 Modal 组件
+
+---
+
+## 九、关键文件速查表
+
+| 文件 | 职责 |
+|------|------|
+| `pages/TablePage.tsx` | 主页面，数据协调中心 |
+| `components/TableView/index.tsx` | AG-Grid 表格组件 |
+| `utils/columnDefs.tsx` | 列定义生成、渲染器/编辑器映射 |
+| `hooks/useMdtRecords.ts` | 记录数据、异步状态轮询 |
+| `hooks/useMdtFields.ts` | 字段 CRUD |
+| `hooks/useMdtFiles.ts` | 文件夹、表格详情 |
+| `api/adapters/mdtAdapter.ts` | 数据适配（snake_case → camelCase） |
+| `store/tableStore.ts` | 全局状态（当前表格、历史版本等） |
+| `types/index.ts` | TypeScript 类型定义 |
+
+---
+
+## 十、调试技巧
+
+### 10.1 查看 AG-Grid 状态
+
+```tsx
+// 在 TableView 中
+const onGridReady = (params) => {
+  window.gridApi = params.api;  // 暴露到全局
+};
+
+// 控制台调试
+gridApi.getSelectedRows()
+gridApi.refreshCells({ force: true })
+```
+
+### 10.2 查看数据流
+
+```tsx
+// 在 hooks 中添加日志
+console.log('[useMdtRecords] records:', records);
+console.log('[useMdtRecords] cellAsyncStatus:', cellAsyncStatus);
+```
+
+### 10.3 强制刷新表格
+
+```tsx
+// 触发表格刷新事件
+window.dispatchEvent(new CustomEvent('table-refresh'));
+```
+
+---
+
+## 十一、注意事项
+
+1. **数据命名**: 前端始终使用 camelCase，适配器负责转换
+2. **主题颜色**: 使用 CSS 变量（如 `var(--text-primary)`），不要硬编码颜色
+3. **响应式**: 使用 Tailwind 断点类，移动优先
+4. **性能**: AG-Grid 的 `refreshCells` 开销大，谨慎使用
+5. **类型安全**: 所有数据都要有 TypeScript 类型定义
+
+---
+
+## 十二、相关文档
+
+- `docs/异步任务状态架构设计.md` - 异步状态系统设计
+- `docs/历史记录功能接口文档.md` - 历史记录 API 文档
+- `docs/筛选功能接口文档.md` - 筛选功能 API 文档
+- `.kiro/steering/theme-colors.md` - 主题颜色规范
+- `.kiro/steering/api-data-convention.md` - API 数据命名规范

@@ -1,30 +1,1405 @@
+# SSE 流式架构分析文档
+
+> 100city Web 应用 SSE (Server-Sent Events) 流式数据处理完整架构分析
+
+## 📋 目录
+
+1. [架构概览](#架构概览)
+2. [核心层级](#核心层级)
+3. [数据流转](#数据流转)
+4. [单例设计](#单例设计)
+5. [组件消费](#组件消费)
+6. [性能优化](#性能优化)
+7. [错误处理](#错误处理)
+
 ---
-title: SSE Multi-Session Architecture
-description: A condensed explanation of how to keep streaming connections alive across route changes.
+
+## 🏗️ 架构概览
+
+### 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         SSE 服务器                               │
+│                    (后端推送实时事件)                             │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ SSE Stream
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                   API 层 (agentStreamApi.ts)                     │
+│  - sendAgentStreamRequest()  发送消息并建立 SSE 连接             │
+│  - subscribeAgentExecution() 订阅正在执行的流（断线重连）        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ Response.body (ReadableStream)
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              SSE 解析层 (sseParser.ts / sseUtils.ts)            │
+│  - parseSSEStream()      解析 SSE 协议格式                       │
+│  - createSSEStream()     创建 SSE 流迭代器                       │
+│  - parseSSEData()        安全解析 JSON 数据                      │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ SSEEvent { event, data }
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│            流处理层 (agentStreamService.ts)                      │
+│  - processSSEStream()    核心流处理逻辑                          │
+│  - handleBrowserTaskReady() 浏览器插件通信                       │
+│  - StreamingJsonParser   流式 JSON 解析器                        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ StreamEvent[]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│          单例管理层 (globalSSEManager.ts) ⭐ 核心               │
+│  - 管理多会话 SSE 连接生命周期                                   │
+│  - 连接池管理（最大 10 个并发）                                  │
+│  - 自动重试机制（最多 3 次）                                     │
+│  - 事件回调分发到 Store                                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ 事件回调
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│           状态管理层 (multiSessionStore.ts) ⭐ 核心             │
+│  - 多会话状态管理（Map 结构）                                    │
+│  - 消息生命周期管理                                              │
+│  - 批量事件处理优化                                              │
+│  - 断线重连逻辑                                                  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ StreamEvent[] → ProcessedEvent[]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│         事件处理层 (streamEventProcessor.ts) ⭐ 核心            │
+│  - processStreamEvents() 将原始事件转换为渲染友好格式            │
+│  - 合并连续消息、工具调用配对                                    │
+│  - 步骤分组、去重处理                                            │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ ProcessedEvent[]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              渲染层 (StreamEventRenderer.tsx)                    │
+│  - 根据事件类型路由到不同组件                                    │
+│  - RAF 优化高频更新                                              │
+│  - 懒加载组件                                                    │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ React Components
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      UI 组件层                                   │
+│  - StepsRenderer         执行计划卡片                            │
+│  - StepContentRenderer   步骤详情                                │
+│  - ToolRenderer          工具调用卡片                            │
+│  - TypedMessageRenderer  结构化消息                              │
+│  - MarkdownRenderer      Markdown 渲染                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
-# SSE Multi-Session Architecture
+## 🔧 核心层级
 
-The system can be explained in three layers:
+### 1. API 层 (services/stream/agentStreamApi.ts)
 
-1. **Get the stream** with `fetch + ReadableStream`
-2. **Parse the stream** into events like `message`, `tool_call`, `steps`, and `complete`
-3. **Manage globally** with a singleton manager and write state by `sessionId`
+**职责**: 与后端建立 SSE 连接
 
-## Why the singleton exists
+**核心方法**:
 
-If the SSE connection is created inside a page component, route changes will tear it down together with the component lifecycle.
+```typescript
+// 发送消息并建立 SSE 连接
+export const sendAgentStreamRequest = async (data: AgentStreamRequest): Promise<Response> => {
+  const response = await fetch(`${baseURL}/agent_adk/chat/send`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream", // ⭐ 关键：指定接收 SSE 流
+    },
+    credentials: "include",
+    body: JSON.stringify({ ...data, stream: true }),
+  });
+  return response; // 返回 Response 对象，包含 body: ReadableStream
+};
 
-The fix is to move connection ownership out of React and into an application-level manager.
+// 订阅正在执行的流（断线重连）
+export const subscribeAgentExecution = async (executionId: string): Promise<Response> => {
+  const response = await fetch(`${baseURL}/agent_adk/chat/executions/${executionId}/subscribe`, {
+    method: "GET",
+    headers: { Accept: "text/event-stream" },
+    credentials: "include",
+  });
+  return response;
+};
+```
 
-## Responsibilities
+**关键点**:
+- 必须使用 `fetch` 而非 `axios`（axios 不支持流式响应）
+- `Accept: text/event-stream` 告诉服务器返回 SSE 格式
+- 返回的 `Response.body` 是 `ReadableStream<Uint8Array>`
 
-- `GlobalSSEManager`: manages connections, retries, and reconnection
-- `multiSessionStore`: stores messages and execution state per session
-- React components: render store data only
+---
 
-## Performance
+### 2. SSE 解析层 (utils/stream/sseParser.ts)
 
-Streaming events should not trigger a render for every tiny chunk.
+**职责**: 解析 SSE 协议格式
 
-Use a buffer and `requestAnimationFrame` to batch writes before updating the store, then flush everything immediately on terminal events like `complete` or `error`.
+**SSE 协议格式**:
+```
+event: message
+data: {"content": "Hello"}
+
+event: tool_call
+data: {"tool_name": "search"}
+
+event: complete
+data: {}
+```
+
+**核心方法**:
+
+```typescript
+export async function* parseSSEStream(options: StreamOptions): AsyncGenerator<SSEEvent> {
+  const decoder = new TextDecoder("utf-8");
+  const reader = readableStream.getReader();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // 处理完整的事件 (以 \n\n 分隔)
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n\n")) !== -1) {
+      const chunk = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 2);
+
+      const event = processBuffer(chunk + "\n\n", currentEvent);
+      if (event && (event.data || event.event)) {
+        yield event; // ⭐ 生成器模式，逐个返回事件
+      }
+    }
+  }
+}
+```
+
+**关键点**:
+- 使用 `AsyncGenerator` 实现流式迭代
+- 按 `\n\n` 分隔事件
+- 支持 `event`、`data`、`id`、`retry` 字段
+
+---
+
+### 3. 流处理层 (services/stream/agentStreamService.ts)
+
+**职责**: 处理 SSE 流，解析不同事件类型
+
+**核心方法**:
+
+```typescript
+export async function processSSEStream(
+  readableStream: ReadableStream<Uint8Array>,
+  options: SSEProcessorOptions
+): Promise<void> {
+  const { handlers, handleSessionInfo = false, debug = false } = options;
+  const state = createSSEProcessorState();
+
+  // 遍历 SSE 流
+  for await (const chunk of createSSEStream({ readableStream })) {
+    const { event: eventType = "message", data } = chunk;
+
+    // 根据事件类型分发处理
+    switch (eventType) {
+      case "message":
+        // 处理普通消息 + 流式 JSON 解析
+        const result = state.streamingJsonParser.feed(content);
+        if (result.plainText) {
+          addEventToBuffer({ type: StreamEventType.MESSAGE, content: result.plainText });
+        }
+        if (result.inTypedMode) {
+          addEventToBuffer({ type: StreamEventType.TYPED_MESSAGE, toolData: result.partialData });
+        }
+        break;
+
+      case "tool_call":
+        const event = parseToolCallEvent(data);
+        addEventToBuffer(event);
+        break;
+
+      case "complete":
+        handlers.onEvent(parseCompleteEvent());
+        break;
+
+      // ... 其他事件类型
+    }
+  }
+}
+```
+
+**支持的事件类型**:
+| SSE 事件类型 | StreamEventType | 说明 |
+|-------------|----------------|------|
+| `message` | MESSAGE | 普通文本消息 |
+| `message` (含 `<typed>`) | TYPED_MESSAGE | 结构化消息（如图表、卡片） |
+| `reasoning` | REASONING | 深度思考内容 |
+| `steps` | STEPS | 执行计划步骤 |
+| `tool_call` | TOOL_CALL | 工具调用开始 |
+| `tool_call_end` | TOOL_END | 工具调用结束 |
+| `step_message` | STEP_MESSAGE | 步骤内消息 |
+| `step_tool_call` | STEP_TOOL_CALL | 步骤内工具调用 |
+| `complete` | COMPLETE | 流完成 |
+| `error` | ERROR | 错误 |
+| `paused` | PAUSED | 用户暂停 |
+
+**流式 JSON 解析器**:
+
+```typescript
+// 检测并解析 <typed type="chart">{"data": ...}</typed> 格式
+class StreamingJsonParser {
+  feed(chunk: string) {
+    this.buffer += chunk;
+
+    // 检测 <typed type="xxx"> 开头
+    if (!this.inTypedMode && this.buffer.includes("<typed type=")) {
+      this.inTypedMode = true;
+      this.type = extractType(this.buffer);
+    }
+
+    // 在 typed 模式下，持续收集 JSON 数据
+    if (this.inTypedMode) {
+      const jsonContent = extractJsonBetweenTags(this.buffer);
+      this.partialData = parsePartialJson(jsonContent); // 增量解析
+    }
+
+    // 检测 </typed> 结束
+    if (this.buffer.includes("</typed>")) {
+      this.isComplete = true;
+    }
+
+    return {
+      plainText: extractPlainText(this.buffer),
+      inTypedMode: this.inTypedMode,
+      type: this.type,
+      partialData: this.partialData,
+      isComplete: this.isComplete,
+    };
+  }
+}
+```
+
+---
+
+### 4. 单例管理层 (services/stream/globalSSEManager.ts) ⭐
+
+**职责**: 全局 SSE 连接管理，独立于 React 生命周期
+
+**设计模式**: 单例模式
+
+**核心功能**:
+
+```typescript
+class GlobalSSEManager {
+  private static instance: GlobalSSEManager;
+  private connections: Map<string, SSEConnectionInfo> = new Map();
+  private eventCallback: SSEEventCallback | null = null;
+  private readonly MAX_CONNECTIONS = 10; // 最大并发连接数
+  private readonly MAX_RETRY = 3; // 最大重试次数
+
+  // 单例模式
+  static getInstance(): GlobalSSEManager {
+    if (!GlobalSSEManager.instance) {
+      GlobalSSEManager.instance = new GlobalSSEManager();
+    }
+    return GlobalSSEManager.instance;
+  }
+
+  // 创建 SSE 连接
+  createConnection(sessionId: string, executionId: string, source: ConnectionSource): boolean {
+    // 1. 检查是否已有活跃连接
+    if (this.hasActiveConnection(sessionId)) return false;
+
+    // 2. 检查并发上限
+    if (this.getActiveConnectionCount() >= this.MAX_CONNECTIONS) {
+      this.eventCallback?.(sessionId, { type: StreamEventType.ERROR, content: "已达到最大并发会话数" });
+      return false;
+    }
+
+    // 3. 创建连接信息
+    const connectionInfo: SSEConnectionInfo = {
+      sessionId,
+      executionId,
+      status: "connecting",
+      source,
+      retryCount: 0,
+      createdAt: Date.now(),
+      abortController: new AbortController(),
+    };
+
+    this.connections.set(sessionId, connectionInfo);
+
+    // 4. 异步建立连接
+    this.establishConnection(sessionId, executionId);
+    return true;
+  }
+
+  // 建立 SSE 连接
+  private async establishConnection(sessionId: string, executionId: string): Promise<void> {
+    try {
+      const response = await subscribeAgentExecution(executionId);
+      if (!response.body) {
+        this.handleConnectionComplete(sessionId);
+        return;
+      }
+
+      connectionInfo.status = "connected";
+
+      // 处理 SSE 流
+      await processSSEStream(response.body, {
+        handlers: {
+          onEvent: (event) => this.handleSSEEvent(sessionId, event),
+          onError: (error) => this.handleConnectionError(sessionId, error),
+        },
+      });
+
+      this.handleConnectionComplete(sessionId);
+    } catch (error) {
+      this.handleConnectionError(sessionId, error.message);
+    }
+  }
+
+  // 处理 SSE 事件
+  private handleSSEEvent(sessionId: string, event: StreamEvent): void {
+    // 调用回调，将事件传递给 Store
+    this.eventCallback?.(sessionId, event);
+
+    // 检查是否是结束事件
+    if (event.type === StreamEventType.COMPLETE || event.type === StreamEventType.ERROR) {
+      this.handleConnectionComplete(sessionId);
+    }
+  }
+
+  // 处理连接错误（包含重试逻辑）
+  private handleConnectionError(sessionId: string, error: string): void {
+    const connectionInfo = this.connections.get(sessionId);
+    connectionInfo.retryCount++;
+
+    if (connectionInfo.retryCount < this.MAX_RETRY) {
+      const retryDelay = 1000 * connectionInfo.retryCount;
+      setTimeout(() => {
+        if (this.connections.has(sessionId)) {
+          this.establishConnection(sessionId, connectionInfo.executionId);
+        }
+      }, retryDelay);
+    } else {
+      // 重试耗尽，发送错误事件
+      this.eventCallback?.(sessionId, {
+        type: StreamEventType.ERROR,
+        content: `连接失败: ${error}`,
+      });
+      this.connections.delete(sessionId);
+    }
+  }
+
+  // 关闭连接
+  closeConnection(sessionId: string): void {
+    const connectionInfo = this.connections.get(sessionId);
+    if (connectionInfo) {
+      connectionInfo.abortController?.abort();
+      connectionInfo.status = "disconnected";
+    }
+    this.connections.delete(sessionId);
+  }
+}
+
+// 导出单例实例
+export const globalSSEManager = GlobalSSEManager.getInstance();
+```
+
+**关键特性**:
+1. **单例模式**: 全局唯一实例，独立于 React 组件生命周期
+2. **连接池管理**: 最多 10 个并发连接
+3. **自动重试**: 失败后最多重试 3 次，间隔递增（1s, 2s, 3s）
+4. **事件回调**: 通过回调将事件分发到 Store
+5. **生命周期管理**: 自动清理完成/错误的连接
+
+---
+
+### 5. 状态管理层 (store/multiSessionStore.ts) ⭐
+
+**职责**: 多会话状态管理，消息生命周期管理
+
+**数据结构**:
+
+```typescript
+interface SessionState {
+  sessionId: string;
+  messages: ConversationMessage[]; // 消息列表
+  executionId: string | null; // 当前执行 ID
+  replyStatus: ReplyStatus; // 回复状态
+  isStreaming: boolean; // 是否正在流式传输
+  streamingMessageId: string | null; // 当前流式消息 ID
+  hasLoadedHistory: boolean; // 是否已加载历史
+  agentId: string | null;
+  lastAccessTime: number; // 最后访问时间（LRU）
+  reconnectControl: {
+    lastExecutionId: string | null;
+    attempts: number; // 重连尝试次数
+    cooldownUntil: number; // 冷却时间
+  };
+}
+
+interface MultiSessionStore {
+  sessions: Map<string, SessionState>; // ⭐ 使用 Map 管理多会话
+  currentViewingSessionId: string | null; // 当前查看的会话
+  
+  // 会话管理
+  initSession(sessionId: string, agentId?: string): void;
+  removeSession(sessionId: string): void;
+  
+  // 消息管理
+  addUserMessage(sessionId: string, content: string): string;
+  startAssistantMessage(sessionId: string): string;
+  addStreamEvent(sessionId: string, messageId: string, event: StreamEvent): void;
+  completeAssistantMessage(sessionId: string, messageId: string): void;
+  
+  // SSE 事件处理
+  handleSSEEvent(sessionId: string, event: StreamEvent): void;
+  
+  // 断线重连
+  syncSessionsFromSidebar(sessions: ChatSessionItem[]): void;
+}
+```
+
+**核心方法**:
+
+#### 1. 初始化会话
+```typescript
+initSession: (sessionId: string, agentId?: string) => {
+  if (state.sessions.has(sessionId)) {
+    // 已存在，只更新访问时间
+    return;
+  }
+
+  const newSession: SessionState = {
+    sessionId,
+    messages: [],
+    executionId: null,
+    replyStatus: "idle",
+    isStreaming: false,
+    streamingMessageId: null,
+    hasLoadedHistory: false,
+    agentId: agentId || null,
+    lastAccessTime: Date.now(),
+    reconnectControl: { lastExecutionId: null, attempts: 0, cooldownUntil: 0 },
+  };
+
+  state.sessions.set(sessionId, newSession);
+  cleanupOldSessions(); // LRU 清理
+}
+```
+
+#### 2. 处理 SSE 事件（批量优化）
+
+```typescript
+handleSSEEvent: (sessionId: string, event: StreamEvent) => {
+  // 结束事件立即处理
+  if (event.type === StreamEventType.COMPLETE || event.type === StreamEventType.ERROR) {
+    const bufferedEvents = flushEventBuffer(sessionId);
+    if (bufferedEvents.length > 0) {
+      addBatchStreamEvents(sessionId, streamingMessageId, bufferedEvents);
+    }
+    completeAssistantMessage(sessionId, streamingMessageId, event);
+    return;
+  }
+
+  // 其他事件：使用批量处理优化
+  scheduleEventBatch(sessionId, event, () => {
+    const events = flushEventBuffer(sessionId);
+    if (events.length > 0) {
+      addBatchStreamEvents(sessionId, streamingMessageId, events);
+    }
+  });
+}
+```
+
+**批量处理优化**:
+```typescript
+// 使用 requestAnimationFrame 合并多个事件更新
+function scheduleEventBatch(sessionId: string, event: StreamEvent, processCallback: () => void) {
+  const buffer = eventBuffers.get(sessionId) || [];
+  buffer.push(event);
+  eventBuffers.set(sessionId, buffer);
+
+  if (pendingUpdates.has(sessionId)) return;
+
+  const frameId = requestAnimationFrame(() => {
+    pendingUpdates.delete(sessionId);
+    processCallback();
+  });
+
+  pendingUpdates.set(sessionId, frameId);
+}
+```
+
+#### 3. 断线重连逻辑
+```typescript
+syncSessionsFromSidebar: (sessions: ChatSessionItem[]) => {
+  sessions.forEach((item) => {
+    const needsReconnect =
+      (item.replyStatus === "running" || item.replyStatus === "pending") &&
+      !globalSSEManager.hasActiveConnection(item.id) &&
+      item.executionId &&
+      item.subscriberDisconnected === true;
+
+    if (needsReconnect) {
+      // 先加载历史消息
+      getChatSessionMessages(item.id).then((response) => {
+        loadHistoryMessages(item.id, response.data);
+        // 然后建立 SSE 连接
+        globalSSEManager.createConnection(item.id, item.executionId, "reconnect");
+      });
+    }
+  });
+}
+```
+
+**重连防护机制**:
+- 最大重连次数: 2 次/execution
+- 冷却时间: 5 秒
+- 防止同一个 execution 频繁重连
+
+---
+
+### 6. 事件处理层 (utils/stream/streamEventProcessor.ts) ⭐
+
+**职责**: 将原始 `StreamEvent[]` 转换为渲染友好的 `ProcessedEvent[]`
+
+**核心逻辑**:
+
+```typescript
+export const processStreamEvents = (events: StreamEvent[]): ProcessedEvent[] => {
+  const processed: ProcessedEvent[] = [];
+
+  // 1. 先处理 steps 事件 → 合并所有步骤状态
+  const allStepsEvents = events.filter((e) => e.type === StreamEventType.STEPS);
+  const stepsMap = new Map<number, StepItem>();
+
+  allStepsEvents.forEach((event) => {
+    const { type, steps, step_id, status } = event.toolData || {};
+    if (type === "init" && steps) {
+      steps.forEach((step) => stepsMap.set(step.id, step));
+    } else if (type === "update") {
+      const id = step_id ?? stepId;
+      if (stepsMap.has(id)) {
+        stepsMap.set(id, { ...stepsMap.get(id), status });
+      }
+    }
+  });
+
+  const mergedSteps = Array.from(stepsMap.values()).sort((a, b) => a.id - b.id);
+  if (mergedSteps.length > 0) {
+    processed.push({
+      type: "steps",
+      toolData: { type: "init", steps: mergedSteps },
+      originalEvents: allStepsEvents,
+    });
+  }
+
+  // 2. 处理 step_message 和 step_tool_call → 按 stepId 分组
+  const stepGroups = new Map<number, Array<{ type: "message" | "tool"; content?: string; toolData?: any }>>();
+
+  stepMessageEvents.forEach((event) => {
+    const stepId = getCurrentStepId(allStepsEvents, event.timestamp);
+    if (stepId && event.content) {
+      if (!stepGroups.has(stepId)) stepGroups.set(stepId, []);
+      stepGroups.get(stepId)!.push({ type: "message", content: event.content });
+    }
+  });
+
+  stepToolEvents.forEach((event) => {
+    const stepId = getCurrentStepId(allStepsEvents, event.timestamp);
+    if (stepId) {
+      if (!stepGroups.has(stepId)) stepGroups.set(stepId, []);
+      stepGroups.get(stepId)!.push({ type: "tool", toolData: event.toolData });
+    }
+  });
+
+  // 为每个步骤创建 step_group
+  stepGroups.forEach((items, stepId) => {
+    const stepTitle = stepTitles.get(stepId);
+    if (stepTitle && items.length > 0) {
+      processed.push({
+        type: "step_group",
+        stepTitle,
+        toolData: { orderedContent: items, stepId },
+        originalEvents: [{ id: `step-group-${stepId}` }],
+      });
+    }
+  });
+
+  // 3. 处理其他事件（message, tool, reasoning 等）
+  let i = 0;
+  while (i < sortedEvents.length) {
+    const event = sortedEvents[i];
+
+    switch (event.type) {
+      case StreamEventType.MESSAGE:
+        // 合并连续的 message 事件
+        const messageEvents = [event];
+        let j = i + 1;
+        while (j < sortedEvents.length && sortedEvents[j].type === StreamEventType.MESSAGE) {
+          messageEvents.push(sortedEvents[j]);
+          j++;
+        }
+        const combinedContent = messageEvents.map((e) => e.content || "").join("").trim();
+        processed.push({ type: "message", content: combinedContent, originalEvents: messageEvents });
+        i = j;
+        break;
+
+      case StreamEventType.TOOL_CALL:
+        // 查找对应的 TOOL_END 事件
+        const endEvent = sortedEvents.find((e) => e.type === StreamEventType.TOOL_END && e.id === event.id);
+        processed.push({
+          type: "tool",
+          toolData: endEvent ? { ...event.toolData, ...endEvent.toolData } : event.toolData,
+          isComplete: !!endEvent,
+          originalEvents: endEvent ? [event, endEvent] : [event],
+        });
+        i++;
+        break;
+
+      case StreamEventType.TYPED_MESSAGE:
+        // 使用 id 去重，只保留最新的 typed_message 事件
+        const existingIndex = processed.findIndex((p) => p.type === "typed_message" && p.originalEvents[0]?.id === event.id);
+        const typedMessageProcessed = {
+          type: "typed_message",
+          messageType: event.toolData?.messageType,
+          messageData: event.toolData?.messageData,
+          isComplete: event.toolData?.isComplete,
+          originalEvents: [event],
+        };
+        if (existingIndex >= 0) {
+          processed[existingIndex] = typedMessageProcessed; // 更新
+        } else {
+          processed.push(typedMessageProcessed); // 添加
+        }
+        i++;
+        break;
+
+      // ... 其他事件类型
+    }
+  }
+
+  return processed;
+};
+```
+
+**处理策略**:
+1. **steps 事件**: 合并所有步骤状态，生成一个 "steps" ProcessedEvent
+2. **step_group 事件**: 按 stepId 分组，生成多个 "step_group" ProcessedEvent
+3. **message 事件**: 合并连续的消息
+4. **tool 事件**: 配对 TOOL_CALL 和 TOOL_END
+5. **typed_message 事件**: 使用 id 去重，支持流式更新
+
+---
+
+### 7. 渲染层 (components/stream/renders/StreamEventRenderer.tsx)
+
+**职责**: 根据 `ProcessedEvent` 类型路由到不同组件
+
+**核心逻辑**:
+
+```typescript
+export const StreamEventRenderer: React.FC<StreamEventRendererProps> = React.memo(
+  ({ processedEvents, isStreaming, isPaused }) => {
+    // RAF 优化高频更新
+    const [optimizedEvents, setOptimizedEvents] = React.useState(processedEvents);
+    const rafIdRef = React.useRef<number | null>(null);
+
+    React.useEffect(() => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+
+      rafIdRef.current = requestAnimationFrame(() => {
+        setOptimizedEvents(processedEvents);
+        rafIdRef.current = null;
+      });
+
+      return () => {
+        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      };
+    }, [processedEvents]);
+
+    return (
+      <div className="space-y-2">
+        {optimizedEvents.map((item, i) => {
+          const key = `${item.originalEvents.map((e) => e.id).join("_")}_${i}`;
+
+          switch (item.type) {
+            case "steps":
+              return <StepsRenderer key={key} stepsData={item.toolData} />;
+
+            case "step_group":
+              return <StepContentRenderer key={key} title={item.stepTitle} toolData={item.toolData} />;
+
+            case "message":
+              return <MarkdownRenderer key={key} content={item.content} />;
+
+            case "typed_message":
+              return (
+                <TypedMessageRenderer
+                  key={key}
+                  messageType={item.messageType}
+                  messageData={item.messageData}
+                  isStreaming={isStreaming && i === optimizedEvents.length - 1}
+                />
+              );
+
+            case "tool":
+              return <ToolRenderer key={key} toolData={item.toolData} isComplete={item.isComplete} />;
+
+            case "reasoning":
+              return <ReasoningRenderer key={key} content={item.content} />;
+
+            case "error":
+              return <ErrorRenderer key={key} event={item.originalEvents[0]} />;
+
+            default:
+              return null;
+          }
+        })}
+
+        {/* 动态显示思考中 */}
+        {isStreaming && !isPaused && <Loader />}
+      </div>
+    );
+  }
+);
+```
+
+**渲染组件映射**:
+| ProcessedEvent 类型 | 渲染组件 | 说明 |
+|-------------------|---------|------|
+| `steps` | `StepsRenderer` | 执行计划卡片 |
+| `step_group` | `StepContentRenderer` | 步骤详情（消息 + 工具） |
+| `message` | `MarkdownRenderer` | Markdown 渲染 |
+| `typed_message` | `TypedMessageRenderer` | 结构化消息（图表、卡片） |
+| `tool` | `ToolRenderer` | 工具调用卡片 |
+| `reasoning` | `ReasoningRenderer` | 深度思考 |
+| `error` | `ErrorRenderer` | 错误提示 |
+
+---
+
+## 🔄 数据流转
+
+### 完整数据流
+
+```
+用户发送消息
+    ↓
+useChatStreamMessage.sendMessage()
+    ↓
+multiSessionStore.addUserMessage()          // 添加用户消息
+multiSessionStore.startAssistantMessage()   // 创建助手消息（初始状态：thinking）
+    ↓
+sendAgentStreamRequest()                    // 发送 HTTP 请求
+    ↓
+processSSEStream()                          // 处理 SSE 流
+    ↓
+for await (const chunk of createSSEStream()) {
+  // 解析 SSE 事件
+  parseToolCallEvent(data)
+  parseMessageEvent(data)
+  ...
+    ↓
+  handlers.onEvent(event)                   // 回调到 Store
+}
+    ↓
+multiSessionStore.handleSSEEvent(sessionId, event)
+    ↓
+scheduleEventBatch()                        // 批量处理优化
+    ↓
+requestAnimationFrame(() => {
+  addBatchStreamEvents(sessionId, messageId, events)
+      ↓
+  message.streamEvents.push(...events)      // 添加原始事件
+  message.processedEvents = processStreamEvents(streamEvents)  // 转换为渲染格式
+})
+    ↓
+React 组件订阅 Store
+    ↓
+const messages = useMultiSessionStore((state) => state.getMessagesForDisplay(sessionId))
+    ↓
+<StreamEventRenderer processedEvents={message.processedEvents} />
+    ↓
+根据 ProcessedEvent.type 路由到不同组件
+    ↓
+UI 渲染
+```
+
+### 断线重连流程
+
+```
+页面刷新 / 切换路由
+    ↓
+侧边栏加载会话列表
+    ↓
+multiSessionStore.syncSessionsFromSidebar(sessions)
+    ↓
+检查每个会话是否需要重连:
+  - replyStatus === "running" || "pending"
+  - !globalSSEManager.hasActiveConnection(sessionId)
+  - executionId 存在
+  - subscriberDisconnected === true
+    ↓
+需要重连:
+  1. getChatSessionMessages(sessionId)      // 加载历史消息
+  2. loadHistoryMessages(sessionId, data)   // 填充到 Store
+  3. globalSSEManager.createConnection(sessionId, executionId, "reconnect")
+    ↓
+subscribeAgentExecution(executionId)        // 订阅正在执行的流
+    ↓
+processSSEStream()                          // 继续处理 SSE 流
+    ↓
+handleSSEEvent()                            // 更新到最后一条 assistant 消息
+```
+
+---
+
+## 🎯 单例设计
+
+### GlobalSSEManager 单例模式
+
+**为什么使用单例?**
+1. **独立于 React 生命周期**: 组件卸载不影响 SSE 连接
+2. **全局连接池管理**: 统一管理所有会话的 SSE 连接
+3. **避免重复连接**: 同一个 sessionId 只能有一个活跃连接
+4. **资源管理**: 统一的连接清理和错误处理
+
+**实现方式**:
+
+```typescript
+class GlobalSSEManager {
+  private static instance: GlobalSSEManager;
+  private connections: Map<string, SSEConnectionInfo> = new Map();
+
+  // 私有构造函数，防止外部实例化
+  private constructor() {
+    console.log("[GlobalSSEManager] 初始化");
+  }
+
+  // 获取单例实例
+  static getInstance(): GlobalSSEManager {
+    if (!GlobalSSEManager.instance) {
+      GlobalSSEManager.instance = new GlobalSSEManager();
+    }
+    return GlobalSSEManager.instance;
+  }
+}
+
+// 导出单例实例
+export const globalSSEManager = GlobalSSEManager.getInstance();
+```
+
+**使用方式**:
+```typescript
+// 在任何地方都可以访问同一个实例
+import { globalSSEManager } from "~/services/stream/globalSSEManager";
+
+// 创建连接
+globalSSEManager.createConnection(sessionId, executionId, "frontend_initiated");
+
+// 关闭连接
+globalSSEManager.closeConnection(sessionId);
+
+// 检查连接状态
+const hasConnection = globalSSEManager.hasActiveConnection(sessionId);
+```
+
+**与 Store 的协作**:
+```typescript
+// Store 初始化时设置回调
+useEffect(() => {
+  globalSSEManager.setEventCallback((sessionId, event) => {
+    useMultiSessionStore.getState().handleSSEEvent(sessionId, event);
+  });
+}, []);
+```
+
+---
+
+## 🎨 组件消费
+
+### 1. 在页面中使用
+
+```typescript
+// pages/NewChat/ChatPage.tsx
+import useMultiSessionStore from "~/store/multiSessionStore";
+import { StreamEventRenderer } from "~/components/stream/renders/StreamEventRenderer";
+
+function ChatPage() {
+  const sessionId = "session_123";
+  const messages = useMultiSessionStore((state) => state.getMessagesForDisplay(sessionId));
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role === "user" ? (
+            <UserMessageCard content={message.content} />
+          ) : (
+            <StreamEventRenderer
+              processedEvents={message.processedEvents || []}
+              isStreaming={message.isStreaming}
+              isPaused={message.status === "paused"}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### 2. 发送消息
+
+```typescript
+import { useChatStreamMessage } from "~/hooks/useStreamMessage";
+
+function ChatInput() {
+  const { sendMessage } = useChatStreamMessage({
+    onStartNewTurn: (message) => {
+      console.log("开始新对话:", message);
+    },
+    onSessionInfo: (info) => {
+      console.log("会话信息:", info);
+    },
+  });
+
+  const handleSend = () => {
+    sendMessage("你好", {
+      agentId: "agent_123",
+      sessionId: "session_123",
+      isPreview: false,
+      enable_browser_automation: true,
+    });
+  };
+
+  return <button onClick={handleSend}>发送</button>;
+}
+```
+
+### 3. 消息结构
+
+```typescript
+interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  
+  // 助手消息特有字段
+  streamEvents?: StreamEvent[];           // 原始事件数组
+  processedEvents?: ProcessedEvent[];     // 处理后的事件数组
+  isStreaming?: boolean;                  // 是否正在流式传输
+  status?: MessageStatus;                 // 消息状态
+  
+  // 附件
+  attachments?: Array<{ file_id: string; file_name: string; url: string }>;
+  reference_images?: Array<{ image_type: string; image_id: string }>;
+  
+  // 投票
+  vote?: "none" | "like" | "dislike";
+}
+```
+
+---
+
+## ⚡ 性能优化
+
+### 1. 批量事件处理
+
+**问题**: SSE 事件频繁触发，导致频繁的 React 渲染
+
+**解决方案**: 使用 `requestAnimationFrame` 批量处理事件
+
+```typescript
+function scheduleEventBatch(sessionId: string, event: StreamEvent, processCallback: () => void) {
+  // 将事件添加到缓冲区
+  const buffer = eventBuffers.get(sessionId) || [];
+  buffer.push(event);
+  eventBuffers.set(sessionId, buffer);
+
+  // 如果已有待处理的更新，跳过
+  if (pendingUpdates.has(sessionId)) return;
+
+  // 使用 requestAnimationFrame 批量处理
+  const frameId = requestAnimationFrame(() => {
+    pendingUpdates.delete(sessionId);
+    processCallback();
+  });
+
+  pendingUpdates.set(sessionId, frameId);
+}
+```
+
+**效果**: 将多个事件合并为一次渲染，减少渲染次数
+
+### 2. RAF 优化渲染
+
+**问题**: `processedEvents` 频繁更新，导致组件频繁重渲染
+
+**解决方案**: 在渲染层使用 `requestAnimationFrame` 优化
+
+```typescript
+const [optimizedEvents, setOptimizedEvents] = React.useState(processedEvents);
+const rafIdRef = React.useRef<number | null>(null);
+
+React.useEffect(() => {
+  if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+
+  rafIdRef.current = requestAnimationFrame(() => {
+    setOptimizedEvents(processedEvents);
+    rafIdRef.current = null;
+  });
+
+  return () => {
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+  };
+}, [processedEvents]);
+```
+
+**效果**: 将高频更新限制在浏览器刷新率（60fps）
+
+### 3. React.memo 优化
+
+**问题**: 父组件更新导致子组件不必要的重渲染
+
+**解决方案**: 使用 `React.memo` 包裹组件
+
+```typescript
+export const StreamEventRenderer: React.FC<StreamEventRendererProps> = React.memo(
+  ({ processedEvents, isStreaming }) => {
+    // ...
+  }
+);
+
+const ReasoningComponent = React.memo(
+  ({ event }: { event: ProcessedEvent }) => {
+    // ...
+  },
+  (prev, next) => prev.event.content === next.event.content
+);
+```
+
+### 4. 懒加载组件
+
+**问题**: 首次加载时加载所有组件，影响性能
+
+**解决方案**: 使用 `React.lazy` 懒加载组件
+
+```typescript
+const ToolRenderer = React.lazy(() => import("./ToolRenderer"));
+const StepsRenderer = React.lazy(() => import("./StepsRenderer"));
+
+// 使用 Suspense 包裹
+<Suspense fallback={<LazyFallback />}>
+  <ToolRenderer toolData={toolData} />
+</Suspense>
+```
+
+### 5. LRU 缓存清理
+
+**问题**: 会话数量过多，占用内存
+
+**解决方案**: 使用 LRU 策略清理旧会话
+
+```typescript
+cleanupOldSessions: () => {
+  const MAX_CACHED_SESSIONS = 20;
+
+  // 按访问时间排序
+  const sortedSessions = Array.from(state.sessions.entries())
+    .sort(([, a], [, b]) => b.lastAccessTime - a.lastAccessTime);
+
+  // 保留最近访问的会话
+  const newSessions = new Map<string, SessionState>();
+  let kept = 0;
+
+  for (const [sessionId, session] of sortedSessions) {
+    const hasActiveConnection = globalSSEManager.hasActiveConnection(sessionId);
+    const isCurrentSession = sessionId === state.currentViewingSessionId;
+
+    if (kept < MAX_CACHED_SESSIONS || hasActiveConnection || isCurrentSession) {
+      newSessions.set(sessionId, session);
+      kept++;
+    } else {
+      globalSSEManager.closeConnection(sessionId);
+    }
+  }
+
+  return { sessions: newSessions };
+}
+```
+
+---
+
+## 🛡️ 错误处理
+
+### 1. 连接错误处理
+
+**GlobalSSEManager 自动重试**:
+
+```typescript
+private handleConnectionError(sessionId: string, error: string): void {
+  const connectionInfo = this.connections.get(sessionId);
+  connectionInfo.retryCount++;
+
+  if (connectionInfo.retryCount < this.MAX_RETRY) {
+    // 重试，间隔递增（1s, 2s, 3s）
+    const retryDelay = 1000 * connectionInfo.retryCount;
+    setTimeout(() => {
+      if (this.connections.has(sessionId)) {
+        this.establishConnection(sessionId, connectionInfo.executionId);
+      }
+    }, retryDelay);
+  } else {
+    // 重试耗尽，发送错误事件
+    this.eventCallback?.(sessionId, {
+      type: StreamEventType.ERROR,
+      content: `连接失败: ${error}`,
+    });
+    this.connections.delete(sessionId);
+  }
+}
+```
+
+### 2. 并发限制
+
+**防止过多并发连接**:
+```typescript
+createConnection(sessionId: string, executionId: string): boolean {
+  // 检查并发上限
+  if (this.getActiveConnectionCount() >= this.MAX_CONNECTIONS) {
+    this.eventCallback?.(sessionId, {
+      type: StreamEventType.ERROR,
+      content: "已达到最大并发会话数（10个），请等待其他会话完成后再试",
+    });
+    return false;
+  }
+  // ...
+}
+```
+
+### 3. 重连防护
+
+**防止频繁重连**:
+```typescript
+interface SessionState {
+  reconnectControl: {
+    lastExecutionId: string | null;
+    attempts: number;              // 重连尝试次数
+    cooldownUntil: number;         // 冷却时间
+  };
+}
+
+// 检查是否可以重连
+const sameExecution = reconnectControl.lastExecutionId === item.executionId;
+const attempts = sameExecution ? reconnectControl.attempts : 0;
+const inCooldown = reconnectControl.cooldownUntil > Date.now();
+const exceededAttempts = attempts >= MAX_AUTO_RECONNECT_PER_EXECUTION;
+
+const needsReconnect = baseNeedsReconnect && !inCooldown && !exceededAttempts;
+```
+
+### 4. 降级到历史加载
+
+**SSE 连接失败时降级**:
+```typescript
+fallbackToHistory: async (sessionId: string) => {
+  try {
+    const response = await getChatSessionMessages(sessionId);
+    if (response.success && response.data) {
+      get().loadHistoryMessages(sessionId, response.data);
+    }
+  } catch (error) {
+    console.error(`[MultiSessionStore] 历史加载异常:`, error);
+  }
+}
+```
+
+### 5. 手动重试
+
+**用户手动重试连接**:
+```typescript
+retrySSEConnection: (sessionId: string) => {
+  const session = get().sessions.get(sessionId);
+  if (!session?.executionId) return false;
+
+  // 清除错误状态
+  get().clearSessionError(sessionId);
+
+  // 尝试重新建立连接
+  const success = globalSSEManager.createConnection(sessionId, session.executionId, "reconnect");
+
+  if (success) {
+    set((state) => {
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        replyStatus: "running",
+        isStreaming: true,
+      });
+      return { sessions: newSessions };
+    });
+  }
+
+  return success;
+}
+```
+
+---
+
+## 📊 关键指标
+
+### 性能指标
+
+| 指标 | 目标 | 实现方式 |
+|------|------|---------|
+| 事件处理延迟 | < 16ms (60fps) | RAF 批量处理 |
+| 渲染帧率 | 60fps | RAF 优化 + React.memo |
+| 内存占用 | < 100MB | LRU 清理 + 懒加载 |
+| 并发连接数 | 最多 10 个 | 连接池管理 |
+| 重连成功率 | > 95% | 自动重试 + 降级 |
+
+### 可靠性指标
+
+| 指标 | 目标 | 实现方式 |
+|------|------|---------|
+| 连接成功率 | > 99% | 自动重试 3 次 |
+| 断线重连成功率 | > 95% | 历史加载 + SSE 订阅 |
+| 错误恢复时间 | < 5s | 自动重试 + 降级 |
+| 数据完整性 | 100% | 事件排序 + 去重 |
+
+---
+
+## 🎯 最佳实践
+
+### 1. 事件处理
+
+✅ **推荐**:
+```typescript
+// 使用批量处理
+addBatchStreamEvents(sessionId, messageId, events);
+
+// 使用 RAF 优化
+scheduleEventBatch(sessionId, event, processCallback);
+```
+
+❌ **不推荐**:
+```typescript
+// 逐个添加事件，导致频繁渲染
+events.forEach(event => addStreamEvent(sessionId, messageId, event));
+```
+
+### 2. 组件优化
+
+✅ **推荐**:
+```typescript
+// 使用 React.memo 优化
+export const StreamEventRenderer = React.memo(({ processedEvents }) => {
+  // ...
+});
+
+// 使用懒加载
+const ToolRenderer = React.lazy(() => import("./ToolRenderer"));
+```
+
+❌ **不推荐**:
+```typescript
+// 不使用优化，导致不必要的重渲染
+export const StreamEventRenderer = ({ processedEvents }) => {
+  // ...
+};
+```
+
+### 3. 连接管理
+
+✅ **推荐**:
+```typescript
+// 使用 globalSSEManager 管理连接
+globalSSEManager.createConnection(sessionId, executionId, "frontend_initiated");
+
+// 组件卸载时不关闭连接（由 Store 管理）
+```
+
+❌ **不推荐**:
+```typescript
+// 在组件中直接管理 SSE 连接
+useEffect(() => {
+  const eventSource = new EventSource(url);
+  return () => eventSource.close(); // 组件卸载时关闭连接
+}, []);
+```
+
+### 4. 错误处理
+
+✅ **推荐**:
+```typescript
+// 提供降级方案
+try {
+  await globalSSEManager.createConnection(sessionId, executionId);
+} catch (error) {
+  await fallbackToHistory(sessionId);
+}
+
+// 提供手动重试
+<button onClick={() => retrySSEConnection(sessionId)}>重试</button>
+```
+
+❌ **不推荐**:
+```typescript
+// 不处理错误，直接抛出
+await globalSSEManager.createConnection(sessionId, executionId);
+```
+
+---
+
+## 📝 总结
+
+### 核心优势
+
+1. **单例设计**: `GlobalSSEManager` 独立于 React 生命周期，全局管理 SSE 连接
+2. **多会话支持**: 使用 `Map` 结构管理多个会话，支持并发
+3. **性能优化**: RAF 批量处理 + React.memo + 懒加载
+4. **可靠性**: 自动重试 + 断线重连 + 降级方案
+5. **可扩展性**: 清晰的分层架构，易于扩展新功能
+
+### 技术亮点
+
+- **流式 JSON 解析**: 支持 `<typed>` 标签的增量解析
+- **事件批量处理**: 使用 `requestAnimationFrame` 合并事件
+- **LRU 缓存**: 自动清理旧会话，控制内存占用
+- **连接池管理**: 最多 10 个并发连接，防止资源耗尽
+- **重连防护**: 冷却时间 + 最大重连次数，防止频繁重连
+
+### 适用场景
+
+- ✅ AI 对话流式输出
+- ✅ 实时数据推送
+- ✅ 多会话并发
+- ✅ 断线重连
+- ✅ 跨端同步（PC + 小程序）
+
+---
+
+## 📚 相关文件
+
+### 核心文件
+
+| 文件路径 | 职责 |
+|---------|------|
+| `services/stream/globalSSEManager.ts` | 全局 SSE 连接管理（单例） |
+| `services/stream/agentStreamService.ts` | SSE 流处理逻辑 |
+| `services/stream/agentStreamApi.ts` | SSE API 接口 |
+| `store/multiSessionStore.ts` | 多会话状态管理 |
+| `utils/stream/streamEventProcessor.ts` | 事件处理转换 |
+| `utils/stream/sseParser.ts` | SSE 协议解析 |
+| `components/stream/renders/StreamEventRenderer.tsx` | 事件渲染器 |
+| `hooks/useStreamMessage.ts` | 流消息 Hook |

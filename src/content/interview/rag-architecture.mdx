@@ -1,0 +1,108 @@
+# RAG 知识库检索架构
+
+## 背景
+
+在 Serein Blog 中实现了一个基于 RAG（Retrieval-Augmented Generation）的 AI 问答助手，用户可以针对博客笔记内容提问，系统会检索相关内容后结合 LLM 生成回答。
+
+## 整体架构
+
+```
+用户提问
+  ↓
+Embedding（SiliconFlow BAAI/bge-m3）
+  ↓
+向量相似度检索（PostgreSQL + pgvector）
+  ↓
+拼接上下文 → LangChain Prompt
+  ↓
+LLM 流式生成（Kimi API）
+  ↓
+SSE 流式输出 → 前端打字机渲染
+```
+
+## 技术选型
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| LLM | Kimi (Moonshot) | OpenAI 兼容格式，流式输出 |
+| Embedding | SiliconFlow BAAI/bge-m3 | 免费，1024 维向量 |
+| 向量存储 | PostgreSQL + pgvector | 余弦相似度检索 |
+| 编排 | LangChain.js | Prompt 模板 + Chain + 流式输出 |
+| 前端 | React + SSE | buffer 收集 + RAF 批量渲染 |
+
+## 核心实现
+
+### 1. 文档入库流程
+
+```
+MDX 笔记文件
+  → 读取并清洗（去 frontmatter、import）
+  → RecursiveCharacterTextSplitter 切片（800 字符，200 重叠）
+  → SiliconFlow Embedding API 批量向量化
+  → 存入 PostgreSQL document_chunks 表（content + metadata + vector）
+```
+
+切片策略选择 800 字符 + 200 重叠，是因为：
+- 太大的切片会稀释语义，检索精度下降
+- 太小的切片丢失上下文，回答质量差
+- 200 的重叠保证切片边界处的内容不会丢失
+
+### 2. 向量检索
+
+用户提问时，先将问题通过同一个 Embedding 模型转为向量，然后在 pgvector 中做余弦相似度搜索：
+
+```sql
+SELECT content, metadata,
+       1 - (embedding <=> $1::vector) AS similarity
+FROM document_chunks
+ORDER BY embedding <=> $1::vector
+LIMIT 3
+```
+
+`<=>` 是 pgvector 的余弦距离运算符，`1 - distance` 得到相似度分数。
+
+### 3. LangChain Chain 编排
+
+```typescript
+const chain = prompt.pipe(llm).pipe(new StringOutputParser());
+const stream = await chain.stream({ context, question });
+```
+
+LangChain 的 LCEL（LangChain Expression Language）将 Prompt → LLM → OutputParser 串成一条链，`.stream()` 直接返回异步迭代器，逐 token 输出。
+
+### 4. 前端流式渲染优化
+
+直接把每个 SSE chunk 写入 React state 会导致：
+- 每个 token 触发一次 setState → 一次 React 渲染
+- 高频渲染导致卡顿，甚至文字重复
+
+解决方案：**buffer 收集 + requestAnimationFrame 批量刷新**
+
+```typescript
+// chunk 到达时只往 buffer 追加，不触发渲染
+bufferRef.current += parsed.content;
+
+// RAF 循环每帧从 buffer 取 1~3 个字符刷到 state
+const tick = () => {
+  const charsPerFrame = Math.min(3, buf.length - displayed.length);
+  const next = buf.slice(0, displayed.length + charsPerFrame);
+  setMessages(prev => /* 更新最后一条消息 */);
+  rafIdRef.current = requestAnimationFrame(tick);
+};
+```
+
+这样 React 每帧最多渲染一次，同时实现了打字机效果。
+
+## 为什么选 pgvector 而不是专用向量数据库
+
+- 项目已经用了 PostgreSQL，不需要额外引入 Pinecone/Milvus 等服务
+- 171 个切片的数据量，pgvector 的性能完全够用
+- 部署简单，一个数据库搞定关系数据 + 向量检索
+- 面试能讲清楚"在什么场景下选什么方案"
+
+## 可扩展方向
+
+- 对话历史持久化（ChatSession + ChatMessage 表）
+- 多轮对话上下文（将历史消息拼入 prompt）
+- 增量入库（只处理新增/修改的 MDX 文件）
+- Reranker 二次排序提升检索精度

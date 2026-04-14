@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { StaggeredMenu } from "@/components/navigation/staggered-menu";
 import { SiteFooter } from "@/components/site/site-footer";
+import { AiChat } from "@/components/chat/ai-chat";
 
 const menuItems = [
   { label: '首页', ariaLabel: '返回首页', link: '/' },
@@ -46,6 +47,7 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
         <main className="flex-1">{children}</main>
         <SiteFooter />
       </div>
+      <AiChat />
     </>
   );
 }

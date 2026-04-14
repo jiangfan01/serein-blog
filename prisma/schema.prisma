@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 model Project {
@@ -26,4 +28,15 @@ model NoteMeta {
   category    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// RAG 向量存储：存储文档切片和对应的 embedding
+model DocumentChunk {
+  id        String                   @id @default(cuid())
+  content   String                   /// 文本内容
+  metadata  Json                     /// { source, category, title }
+  embedding Unsupported("vector(1024)") /// BAAI/bge-m3 embedding 1024 维
+  createdAt DateTime                 @default(now())
+
+  @@map("document_chunks")
 }

@@ -1,0 +1,1258 @@
+# Workflow 工作流架构完整分析文档
+
+> 100city Web 应用 Workflow 工作流系统完整架构分析
+
+## 📋 目录
+
+- [架构概览](#架构概览)
+- [核心技术栈](#核心技术栈)
+- [数据结构](#数据结构)
+- [图转树与树转图](#图转树与树转图)
+- [React Flow 集成](#react-flow-集成)
+- [状态管理](#状态管理)
+- [数据流转](#数据流转)
+- [节点与边控制](#节点与边控制)
+- [Hooks 使用](#hooks-使用)
+- [WebSocket 实时监控](#websocket-实时监控)
+- [最佳实践](#最佳实践)
+
+---
+
+## 🏗️ 架构概览
+
+Workflow 工作流系统是一个基于 **React Flow** 的可视化流程编辑器，支持：
+- 拖拽式节点编辑
+- 串行/并行执行流程
+- 图形化配置智能体工作流
+- 实时执行状态监控
+- 撤销/重做操作
+
+### 核心架构层级
+
+```
+用户界面层 (WorkFlowEdit.tsx)
+    ↓
+React Flow 可视化层 (ReactFlowCanvas.tsx)
+    ↓
+节点组件层 (WorkflowReactFlowNode.tsx + 各类 Module)
+    ↓
+状态管理层 (workflowStore.ts + flowHistoryStore.ts)
+    ↓
+数据转换层 (workflowConfigConverter.ts)
+    ↓
+API 层 (workflowApi.ts)
+    ↓
+后端服务 (agent_config JSON)
+```
+
+---
+
+## 🔧 核心技术栈
+
+| 技术 | 用途 |
+|------|------|
+| **React Flow** | 可视化流程图编辑器 |
+| **Zustand** | 状态管理 |
+| **Dagre** | 自动布局算法 |
+| **TypeScript** | 类型安全 |
+| **WebSocket** | 实时状态推送 |
+
+### 关键 Hooks
+
+- `useNodesState` - 节点状态管理
+- `useEdgesState` - 边状态管理  
+- `useReactFlow` - React Flow API
+- `useSubmitWorkflow` - 提交工作流
+- `useWorkflowStore` - 工作流状态
+- `useFlowHistoryStore` - 撤销/重做
+- `useWorkflowStatus` - 实时状态监控
+
+---
+
+## 📊 数据结构
+
+### 1. React Flow 节点结构
+
+```typescript
+// React Flow Node
+interface Node {
+  id: string;                    // 节点唯一ID
+  type: "workflowNode";          // 节点类型
+  position: { x: number; y: number };  // 画布位置
+  data: WorkflowNode;            // 业务数据
+}
+
+// 业务节点数据
+interface WorkflowNode {
+  id: string;
+  sequence: number;              // 执行顺序
+  agent_id: string;              // 智能体ID
+  agent_name: string;            // 智能体名称
+  agent_desc: string;            // 描述
+  type: string;                  // 节点类型（审核/发布/内容生成等）
+  params: any;                   // 节点参数
+  user_template: string;         // 用户模板（提交给后端）
+  status: string;                // 执行状态
+}
+```
+
+### 2. React Flow 边结构
+
+```typescript
+interface Edge {
+  id: string;                    // 边唯一ID
+  source: string;                // 源节点ID
+  sourceHandle: "bottom";        // 源连接点
+  target: string;                // 目标节点ID
+  targetHandle: "top";           // 目标连接点
+  type: "customEdge";            // 边类型
+  animated: boolean;             // 是否动画
+}
+```
+
+### 3. 后端树形结构
+
+```typescript
+// 后端配置格式
+interface AgentConfig {
+  type: "stage";
+  stages: Stage[];               // 阶段数组
+}
+
+// 阶段（串行或并行）
+interface Stage {
+  parallel: boolean;             // 是否并行
+  nodes?: AgentNode[];           // 串行节点
+  branches?: Branch[];           // 并行分支
+}
+
+// 分支
+interface Branch {
+  id: string;
+  nodes: (AgentNode | Stage)[]; // 支持嵌套
+}
+
+// 智能体节点
+interface AgentNode {
+  agent_id: string;
+  output_key: string;
+  message_template: {
+    user_template: string;
+    metadata: Record<string, any>;
+  };
+}
+```
+
+---
+
+## 🔄 图转树与树转图
+
+这是整个系统的核心转换逻辑，位于 `workflowConfigConverter.ts`。
+
+### 图 → 树：buildAgentConfig（提交时）
+
+**使用场景**：用户编辑完工作流，点击保存/提交时
+
+**核心算法**：DFS（深度优先搜索）遍历图结构
+
+```typescript
+export const buildAgentConfig = (
+  nodes: WorkflowNode[],
+  edges: Edge[],
+  convertNode: NodeConverter
+): AgentConfig => {
+  // 1. 构建邻接表和入度表
+  const outEdges: Record<string, Edge[]> = {};
+  const inDegree: Record<string, number> = {};
+  
+  edges.forEach(edge => {
+    outEdges[edge.source] = outEdges[edge.source] || [];
+    outEdges[edge.source].push(edge);
+    inDegree[edge.target] = (inDegree[edge.target] || 0) + 1;
+  });
+
+  // 2. 找根节点（入度为0）
+  const rootNodes = nodes.filter(node => !inDegree[node.id]);
+
+  // 3. DFS 构建分支
+  const buildBranch = (startNodeId: string): (AgentNode | Stage)[] => {
+    const result = [];
+    let currentId = startNodeId;
+
+    while (currentId && !processed.has(currentId)) {
+      const currentNode = nodes.find(n => n.id === currentId);
+      const nodeOutEdges = outEdges[currentId] || [];
+
+      if (nodeOutEdges.length > 1) {
+        // 并行分支：创建 parallel stage
+        result.push(convertNode(currentNode));
+        result.push({
+          parallel: true,
+          branches: nodeOutEdges.map((edge, index) => ({
+            id: `branch${index}`,
+            nodes: buildBranch(edge.target)
+          }))
+        });
+        break;
+      } else if (nodeOutEdges.length === 1) {
+        // 串行：继续遍历
+        result.push(convertNode(currentNode));
+        currentId = nodeOutEdges[0].target;
+      } else {
+        // 叶子节点
+        result.push(convertNode(currentNode));
+        break;
+      }
+    }
+    return result;
+  };
+
+  // 4. 从根节点开始构建
+  const stages = [];
+  rootNodes.forEach(root => {
+    const branchResult = buildBranch(root.id);
+    stages.push(...branchResult);
+  });
+
+  return { type: "stage", stages };
+};
+```
+
+**转换示例**：
+
+```
+图结构：
+  A → B → C
+      ↓
+      D
+
+树结构：
+{
+  type: "stage",
+  stages: [
+    { parallel: false, nodes: [A] },
+    { parallel: false, nodes: [B] },
+    { 
+      parallel: true, 
+      branches: [
+        { id: "branch1", nodes: [C] },
+        { id: "branch2", nodes: [D] }
+      ]
+    }
+  ]
+}
+```
+
+### 树 → 图：parseAgentConfig（回填时）
+
+**使用场景**：编辑已有工作流，从后端加载数据时
+
+**核心算法**：DFS 遍历树结构，生成节点和边
+
+**布局常量**：
+- `VERTICAL_SPACING = 450` - 垂直间距
+- `HORIZONTAL_SPACING = 700` - 水平间距（并行分支）
+
+```typescript
+export const parseAgentConfig = (
+  configStr: string,
+  processedStages?: ProcessedStage[]
+): ParseResult => {
+  const config: AgentConfig = JSON.parse(configStr);
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  let sequence = 1;
+
+  // 创建 React Flow 节点
+  const createReactFlowNode = (agentNode: AgentNode, position) => {
+    const nodeId = `node-${agentNode.agent_id}-${sequence}`;
+    return {
+      id: nodeId,
+      type: "workflowNode",
+      position,
+      data: {
+        id: nodeId,
+        sequence: sequence++,
+        agent_id: agentNode.agent_id,
+        agent_name: agentNode.output_key,
+        params: agentNode.message_template.metadata,
+        user_template: agentNode.message_template.user_template
+      }
+    };
+  };
+
+  // DFS 遍历分支
+  const traverseBranch = (
+    branchNodes: (AgentNode | Stage)[],
+    startY: number,
+    offsetX: number,
+    parentNodeIds: string[]
+  ) => {
+    let currentY = startY;
+    let prevNodeIds = parentNodeIds;
+
+    for (const item of branchNodes) {
+      if ("parallel" in item && item.branches) {
+        // 并行阶段：横向展开
+        const branchCount = item.branches.length;
+        const startX = offsetX - (branchCount - 1) * HORIZONTAL_SPACING / 2;
+
+        item.branches.forEach((branch, index) => {
+          const branchX = startX + index * HORIZONTAL_SPACING;
+          traverseBranch(branch.nodes, currentY, branchX, prevNodeIds);
+        });
+      } else if ("agent_id" in item) {
+        // 普通节点：纵向排列
+        const node = createReactFlowNode(item, { x: offsetX, y: currentY });
+        nodes.push(node);
+
+        // 创建边
+        prevNodeIds.forEach(prevId => {
+          edges.push({
+            id: `edge-${prevId}-${node.id}`,
+            source: prevId,
+            target: node.id,
+            type: "customEdge"
+          });
+        });
+
+        currentY += VERTICAL_SPACING;
+        prevNodeIds = [node.id];
+      }
+    }
+  };
+
+  // 处理顶层 stages
+  config.stages.forEach(stage => {
+    if (stage.parallel && stage.branches) {
+      stage.branches.forEach((branch, index) => {
+        traverseBranch(branch.nodes, currentY, branchX, lastNodeIds);
+      });
+    } else if (stage.nodes) {
+      stage.nodes.forEach(agentNode => {
+        const node = createReactFlowNode(agentNode, { x: 0, y: currentY });
+        nodes.push(node);
+        currentY += VERTICAL_SPACING;
+      });
+    }
+  });
+
+  return { nodes, edges };
+};
+```
+
+---
+
+## 🎨 React Flow 集成
+
+### ReactFlowCanvas 组件
+
+核心画布组件，封装了 React Flow 的所有功能。
+
+**关键特性**：
+1. **自动布局**：使用 Dagre 算法自动计算节点位置
+2. **API 暴露**：通过 `onReactFlowReady` 回调暴露操作方法
+3. **历史记录**：集成撤销/重做功能
+4. **响应式**：支持主题切换、移动端适配
+
+```typescript
+const ReactFlowCanvasInner: React.FC<ReactFlowCanvasProps> = ({
+  initialData,
+  nodeTypes,
+  edgeTypes,
+  onReactFlowReady,
+  onNodesChange
+}) => {
+  // 1. 使用 React Flow Hooks
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { fitView, getNodes, getEdges } = useReactFlow();
+
+  // 2. Dagre 自动布局
+  const getLayoutedElements = (nodes, edges) => {
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setGraph({ rankdir: "TB", nodesep: 100, ranksep: 200 });
+    
+    nodes.forEach(node => 
+      dagreGraph.setNode(node.id, { width: 600, height: 300 })
+    );
+    edges.forEach(edge => 
+      dagreGraph.setEdge(edge.source, edge.target)
+    );
+    
+    dagre.layout(dagreGraph);
+    
+    return nodes.map(node => {
+      const positioned = dagreGraph.node(node.id);
+      return {
+        ...node,
+        position: { x: positioned.x - 300, y: positioned.y - 150 }
+      };
+    });
+  };
+
+  // 3. 初始化布局
+  useEffect(() => {
+    if (initialData?.nodes.length > 0) {
+      const layoutedNodes = getLayoutedElements(initialData.nodes, initialData.edges);
+      setNodes(layoutedNodes);
+      setEdges(initialData.edges);
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
+    }
+  }, [initialData]);
+
+  // 4. 暴露 API 给父组件
+  useEffect(() => {
+    if (onReactFlowReady) {
+      onReactFlowReady({
+        getNodes: () => apiRef.current.getNodes(),
+        getEdges: () => apiRef.current.getEdges(),
+        addNode: (node) => apiRef.current.addNode(node),
+        removeNode: (nodeId) => apiRef.current.removeNode(nodeId),
+        undo: () => apiRef.current.undo(),
+        redo: () => apiRef.current.redo()
+      });
+    }
+  }, []);
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      proOptions={{ hideAttribution: true }}
+    >
+      <Background variant={BackgroundVariant.Dots} />
+      <Controls />
+      <MiniMap />
+    </ReactFlow>
+  );
+};
+```
+
+---
+
+## 🗄️ 状态管理
+
+### 1. workflowStore - 工作流核心状态
+
+使用 Zustand 管理工作流的所有业务状态。
+
+**核心状态**：
+```typescript
+interface WorkflowState {
+  workflowName: string;              // 工作流名称
+  workflowDescription: string;       // 工作流描述
+  workflowConfig: {
+    isParallel: boolean;             // 串行/并行执行
+  };
+  scheduledTime: string;             // 定时执行时间
+  isScheduled: boolean;              // 是否启用定时
+  workflowNodes: WorkflowNode[];     // 节点列表
+  nodeTemplates: Record<string, ParsedPrompt>;  // 占位符模板
+}
+```
+
+**关键方法**：
+
+| 方法 | 功能 |
+|------|------|
+| `addNode` | 添加节点到末尾 |
+| `insertNode` | 在指定位置插入节点 |
+| `removeNode` | 删除节点并重新计算序列号 |
+| `updateNodeParams` | 更新节点参数 |
+| `updateNodeUserTemplate` | 更新用户模板 |
+| `initializeFromDetail` | 从后端数据初始化（编辑模式） |
+| `selectBloggerForNode` | 博主选择（旧系统兼容） |
+| `selectTemplateForNode` | 模板选择（旧系统兼容） |
+| `initializeNodeTemplate` | 初始化占位符模板 |
+| `updateNodeTemplateValue` | 更新占位符值 |
+| `syncNodeData` | 同步显示/提交数据 |
+
+**占位符系统**：
+
+新系统支持模板占位符，用于动态填充内容：
+
+```typescript
+// 初始化模板
+initializeNodeTemplate(nodeId, "请基于 {{博主}} 创作内容");
+
+// 更新占位符值
+updateNodeTemplateValue(nodeId, "博主", "https://douyin.com/user/xxx");
+
+// 获取显示提示词（保留占位符格式）
+getNodeDisplayPrompt(nodeId);  // "请基于 {{博主}} 创作内容"
+
+// 获取提交提示词（移除占位符格式）
+getNodeSubmitPrompt(nodeId);   // "请基于 https://douyin.com/user/xxx 创作内容"
+```
+
+### 2. flowHistoryStore - 撤销/重做
+
+管理画布操作历史，支持撤销和重做。
+
+**核心机制**：
+```typescript
+interface FlowHistoryState {
+  undoStack: Snapshot[];         // 撤销栈
+  redoStack: Snapshot[];         // 重做栈
+  initialized: boolean;          // 是否已初始化
+  maxHistory: number;            // 最大历史记录数（50）
+}
+
+interface Snapshot {
+  nodes: Node[];
+  edges: Edge[];
+}
+```
+
+**操作流程**：
+
+1. **记录快照**：每次节点/边变化时调用 `pushSnapshot`
+2. **撤销**：从 `undoStack` 弹出上一个状态，当前状态推入 `redoStack`
+3. **重做**：从 `redoStack` 弹出下一个状态，当前状态推入 `undoStack`
+4. **新操作**：任何新操作都会清空 `redoStack`
+
+**快捷键**：
+- `Cmd/Ctrl + Z` - 撤销
+- `Cmd/Ctrl + Shift + Z` - 重做
+
+---
+
+## 🔄 数据流转
+
+### 完整工作流提交流程
+
+```
+用户点击保存
+    ↓
+WorkFlowEdit.tsx: submitWorkflow()
+    ↓
+useSubmitWorkflow Hook
+    ↓
+1. 获取 React Flow 数据
+   - getNodes() → WorkflowNode[]
+   - getEdges() → Edge[]
+    ↓
+2. 数据转换
+   - buildAgentConfig(nodes, edges) → AgentConfig
+    ↓
+3. 构建提交数据
+   {
+     name: workflowName,
+     description: workflowDescription,
+     agent_config: JSON.stringify(agentConfig),
+     cron_expression: cronExpression
+   }
+    ↓
+4. API 调用
+   - 创建模式: POST /api/workflow
+   - 编辑模式: PUT /api/workflow/:id
+    ↓
+5. 成功后跳转
+   - navigate("/taskCenter/workflow")
+```
+
+### 工作流加载流程（编辑模式）
+
+```
+进入编辑页面 (/workflow/edit/:id)
+    ↓
+useWorkflowDetail Hook
+    ↓
+1. 获取工作流详情
+   - GET /api/workflow/:id → WorkflowDetailResponse
+    ↓
+2. 初始化 workflowStore
+   - initializeFromDetail(detailData)
+   - 设置 workflowName, workflowDescription
+    ↓
+3. 解析 agent_config
+   - parseAgentConfig(agent_config, processed_nodes)
+   - 生成 nodes 和 edges
+    ↓
+4. 传递给 ReactFlowCanvas
+   - initialData={{ nodes, edges }}
+    ↓
+5. 自动布局并渲染
+   - Dagre 计算位置
+   - fitView() 自适应视图
+```
+
+---
+
+## 🎯 节点与边控制
+
+### 节点操作
+
+#### 1. 添加节点
+
+```typescript
+// AgentSelector 组件选择智能体后
+const handleAddNode = (agent: AgentTemplate) => {
+  // 1. workflowStore 添加业务数据
+  workflowStore.addNode(agent);
+  
+  // 2. ReactFlowCanvas 添加可视化节点
+  reactFlowApiRef.current?.addNode({
+    id: `node-${Date.now()}`,
+    sequence: nodes.length + 1,
+    agent_id: agent.agent_id,
+    agent_name: agent.name,
+    type: agent.type,
+    params: {},
+    user_template: agent.prompt
+  });
+  
+  // 3. 自动布局
+  const layoutedNodes = getLayoutedElements(nodes, edges);
+  setNodes(layoutedNodes);
+  
+  // 4. 记录历史
+  flowHistoryStore.pushSnapshot({ nodes, edges });
+};
+```
+
+#### 2. 删除节点
+
+```typescript
+const handleRemoveNode = (nodeId: string) => {
+  // 1. 删除业务数据
+  workflowStore.removeNode(nodeId);
+  
+  // 2. 删除可视化节点和相关边
+  setNodes(nodes.filter(n => n.id !== nodeId));
+  setEdges(edges.filter(e => e.source !== nodeId && e.target !== nodeId));
+  
+  // 3. 重新计算序列号
+  const reorderedNodes = nodes.map((node, index) => ({
+    ...node,
+    data: { ...node.data, sequence: index + 1 }
+  }));
+  
+  // 4. 记录历史
+  flowHistoryStore.pushSnapshot({ nodes: reorderedNodes, edges });
+};
+```
+
+#### 3. 更新节点数据
+
+```typescript
+const handleUpdateNode = (nodeId: string, newData: Partial<WorkflowNode>) => {
+  // 1. 更新业务数据
+  workflowStore.updateNodeParams(nodeId, newData);
+  
+  // 2. 更新可视化节点
+  setNodes(nodes.map(node => 
+    node.id === nodeId 
+      ? { ...node, data: { ...node.data, ...newData } }
+      : node
+  ));
+};
+```
+
+### 边操作
+
+#### 1. 连接规则
+
+```typescript
+// React Flow 连接验证
+const isValidConnection = (connection: Connection) => {
+  const { source, target } = connection;
+  
+  // 规则1：不能连接自己
+  if (source === target) return false;
+  
+  // 规则2：不能形成环路
+  if (hasCircle(source, target, edges)) return false;
+  
+  // 规则3：目标节点只能有一个输入（单入度）
+  const targetHasInput = edges.some(e => e.target === target);
+  if (targetHasInput) return false;
+  
+  return true;
+};
+```
+
+#### 2. 创建连接
+
+```typescript
+const onConnect = (connection: Connection) => {
+  if (!isValidConnection(connection)) return;
+  
+  const newEdge: Edge = {
+    id: `edge-${connection.source}-${connection.target}`,
+    source: connection.source,
+    sourceHandle: "bottom",
+    target: connection.target,
+    targetHandle: "top",
+    type: "customEdge",
+    animated: false
+  };
+  
+  setEdges([...edges, newEdge]);
+  flowHistoryStore.pushSnapshot({ nodes, edges: [...edges, newEdge] });
+};
+```
+
+#### 3. 删除连接
+
+```typescript
+const onEdgesDelete = (deletedEdges: Edge[]) => {
+  const remainingEdges = edges.filter(
+    edge => !deletedEdges.some(de => de.id === edge.id)
+  );
+  
+  setEdges(remainingEdges);
+  flowHistoryStore.pushSnapshot({ nodes, edges: remainingEdges });
+};
+```
+
+### 自定义节点组件
+
+**WorkflowReactFlowNode.tsx** - 节点渲染组件
+
+```typescript
+const WorkflowReactFlowNode: React.FC<NodeProps<WorkflowNode>> = ({ data }) => {
+  // 根据节点类型渲染不同的配置模块
+  const renderModule = () => {
+    switch (data.type) {
+      case "内容生成类型":
+        return <ContentGenerationModule nodeData={data} />;
+      case "审核类型":
+        return <ReviewModule nodeData={data} />;
+      case "发布类型":
+        return <PublishModule nodeData={data} />;
+      default:
+        return <DefaultAgentModule nodeData={data} />;
+    }
+  };
+
+  return (
+    <div className="workflow-node">
+      <Handle type="target" position={Position.Top} id="top" />
+      <div className="node-header">
+        <span>{data.sequence}. {data.agent_name}</span>
+      </div>
+      <div className="node-body">
+        {renderModule()}
+      </div>
+      <Handle type="source" position={Position.Bottom} id="bottom" />
+    </div>
+  );
+};
+```
+
+---
+
+## 🔌 Hooks 使用
+
+### 1. useSubmitWorkflow
+
+负责工作流的提交逻辑。
+
+```typescript
+const useSubmitWorkflow = ({ editId, cronExpression, getReactFlowData }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const workflowStore = useWorkflowStore();
+  
+  const submitWorkflow = async () => {
+    setIsSubmitting(true);
+    
+    try {
+      // 1. 获取 React Flow 数据
+      const reactFlowApi = getReactFlowData();
+      const nodes = reactFlowApi.getNodes();
+      const edges = reactFlowApi.getEdges();
+      
+      // 2. 提取业务数据
+      const workflowNodes = nodes.map(node => node.data);
+      
+      // 3. 转换为后端格式
+      const agentConfig = buildAgentConfig(
+        workflowNodes,
+        edges,
+        (node) => ({
+          agent_id: node.agent_id,
+          output_key: node.agent_name,
+          message_template: {
+            user_template: node.user_template,
+            metadata: node.params
+          }
+        })
+      );
+      
+      // 4. 构建提交数据
+      const submitData = {
+        name: workflowStore.workflowName,
+        description: workflowStore.workflowDescription,
+        agent_config: JSON.stringify(agentConfig),
+        cron_expression: workflowStore.isScheduled ? cronExpression : []
+      };
+      
+      // 5. API 调用
+      if (editId) {
+        await updateWorkflow(editId, submitData);
+      } else {
+        await createWorkflow(submitData);
+      }
+      
+      // 6. 成功后跳转
+      navigate("/taskCenter/workflow");
+      
+    } catch (error) {
+      console.error("提交失败:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  return { submitWorkflow, isSubmitting };
+};
+```
+
+### 2. useWorkflowDetail
+
+负责加载和初始化工作流详情（编辑模式）。
+
+```typescript
+const useWorkflowDetail = (id?: string, shouldLoadTemplate?: boolean) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [initialData, setInitialData] = useState({ nodes: [], edges: [] });
+  const workflowStore = useWorkflowStore();
+  
+  useEffect(() => {
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
+    
+    const loadWorkflow = async () => {
+      try {
+        // 1. 获取工作流详情
+        const detail = await getWorkflowDetail(id);
+        
+        // 2. 初始化 store
+        workflowStore.initializeFromDetail(detail);
+        
+        // 3. 解析配置生成图数据
+        const { nodes, edges } = parseAgentConfig(
+          detail.agent_config,
+          detail.processed_nodes
+        );
+        
+        setInitialData({ nodes, edges });
+        
+      } catch (error) {
+        console.error("加载失败:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadWorkflow();
+  }, [id]);
+  
+  return {
+    isLoading,
+    isEditMode: !!id,
+    initialData,
+    workflowName: workflowStore.workflowName,
+    workflowDescription: workflowStore.workflowDescription
+  };
+};
+```
+
+### 3. useWorkflowStatus
+
+负责实时监控工作流执行状态（通过 WebSocket）。
+
+```typescript
+const useWorkflowStatus = (): UseWorkflowStatusReturn => {
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    // 1. 订阅 WebSocket 消息
+    const unsubscribeMessage = taskWebSocketChannel.onMessage((rawData) => {
+      // 处理单节点状态消息
+      if (rawData.action === "workflow_status_change") {
+        const message = rawData as WorkflowStatusMessage;
+        
+        setWorkflowStatus({
+          taskId: message.task_id,
+          workId: message.work_id,
+          status: message.status,
+          agent_name: message.current_node?.node_name || "执行中",
+          timestamp: message.timestamp,
+          currentNode: message.current_node
+        });
+        
+        // 执行完成后清空状态
+        if (message.status === "success" || message.status === "failed") {
+          setTimeout(() => setWorkflowStatus(null), 3000);
+        }
+      }
+      
+      // 处理分支执行消息
+      if (rawData.action === "branches_executing") {
+        const message = rawData as BranchesExecutingMessage;
+        
+        // 计算整体状态
+        const allSuccess = message.branches.every(b => b.status === "success");
+        const hasFailed = message.branches.some(b => b.status === "failed");
+        const overallStatus = allSuccess ? "success" : hasFailed ? "failed" : "executing";
+        
+        setWorkflowStatus({
+          taskId: message.task_id,
+          workId: message.work_id,
+          status: overallStatus,
+          agent_name: message.branches
+            .filter(b => b.status === "executing")
+            .map(b => b.current_node?.node_name || b.branch_id)
+            .join(", "),
+          timestamp: message.timestamp,
+          branches: message.branches
+        });
+      }
+    });
+    
+    // 2. 订阅连接状态
+    const unsubscribeConnection = taskWebSocketChannel.onConnectionChange((connected) => {
+      setIsConnected(connected);
+    });
+    
+    // 3. 连接 WebSocket
+    if (!taskWebSocketChannel.isConnected()) {
+      taskWebSocketChannel.connect();
+    }
+    
+    return () => {
+      unsubscribeMessage();
+      unsubscribeConnection();
+    };
+  }, []);
+  
+  return { workflowStatus, isConnected, error };
+};
+```
+
+---
+
+## 📡 WebSocket 实时监控
+
+### 消息类型
+
+#### 1. 单节点状态消息
+
+```typescript
+interface WorkflowStatusMessage {
+  action: "workflow_status_change";
+  task_id: string;
+  work_id: string;
+  status: "pending" | "executing" | "success" | "failed";
+  current_node?: {
+    node_name: string;
+    node_id: string;
+  };
+  timestamp: string;
+}
+```
+
+**使用场景**：串行执行或并行分支内的单个节点状态更新
+
+#### 2. 分支执行消息
+
+```typescript
+interface BranchesExecutingMessage {
+  action: "branches_executing";
+  task_id: string;
+  work_id: string;
+  branches: Array<{
+    branch_id: string;
+    status: "executing" | "success" | "failed";
+    current_node?: {
+      node_name: string;
+      node_id: string;
+    };
+  }>;
+  timestamp: string;
+}
+```
+
+**使用场景**：并行执行时，多个分支同时运行的状态更新
+
+### 状态流转
+
+```
+pending (待执行)
+    ↓
+executing (执行中)
+    ↓
+  ┌─────┴─────┐
+  ↓           ↓
+success     failed
+(成功)      (失败)
+```
+
+### 实时更新流程
+
+```
+后端执行工作流
+    ↓
+节点状态变化
+    ↓
+WebSocket 推送消息
+    ↓
+taskWebSocketChannel 接收
+    ↓
+useWorkflowStatus Hook 处理
+    ↓
+更新 workflowStatus 状态
+    ↓
+UI 组件响应式更新
+    ↓
+显示执行进度/结果
+```
+
+### 调试运行
+
+**WorkFlowEdit.tsx** 提供调试功能：
+
+```typescript
+// 调试运行
+const handleDebugRun = async () => {
+  setIsExecuting(true);
+  await executeActionAsync("execute", id, undefined, "debug");
+  setDebugDrawerOpen(true);
+};
+
+// 停止执行
+const handleStopExecution = () => {
+  executeAction("cancel", id, undefined, "debug");
+  setIsExecuting(false);
+};
+
+// 恢复执行
+const handleResumeExecution = () => {
+  executeAction("resume", id, undefined, "debug");
+  setIsExecuting(true);
+};
+```
+
+**调试抽屉**（WorkflowDebugDrawer）：
+- 显示实时执行日志
+- 展示每个节点的输入/输出
+- 支持暂停/恢复/取消
+- 查看历史调试记录
+
+---
+
+## 💡 最佳实践
+
+### 1. 节点设计原则
+
+- **单一职责**：每个节点只做一件事
+- **明确输入输出**：使用 `output_key` 标识节点输出
+- **参数验证**：在节点配置模块中验证必填参数
+- **错误处理**：提供清晰的错误提示
+
+### 2. 工作流设计模式
+
+#### 串行模式
+```
+A → B → C → D
+```
+适用场景：步骤之间有依赖关系，需要按顺序执行
+
+#### 并行模式
+```
+    ┌→ B →┐
+A →→┤     ├→→ D
+    └→ C →┘
+```
+适用场景：多个独立任务可以同时执行，提高效率
+
+#### 混合模式
+```
+A → B →→┌→ C →┐
+        │     ├→→ E → F
+        └→ D →┘
+```
+适用场景：复杂业务流程，结合串行和并行
+
+### 3. 性能优化
+
+- **懒加载节点组件**：使用 `React.lazy` 动态导入
+- **虚拟化长列表**：节点选择器使用虚拟滚动
+- **防抖节流**：节点拖拽、连线操作使用防抖
+- **历史记录限制**：最多保存 50 条历史记录
+
+### 4. 状态同步策略
+
+```typescript
+// 三层数据同步
+1. React Flow 层（可视化）
+   - nodes, edges
+
+2. workflowStore 层（业务逻辑）
+   - workflowNodes, nodeTemplates
+
+3. 后端层（持久化）
+   - agent_config JSON
+
+// 同步时机
+- 添加/删除节点：立即同步 1 → 2
+- 更新节点参数：立即同步 2，延迟同步 1
+- 保存工作流：同步 1 + 2 → 3
+- 加载工作流：同步 3 → 2 → 1
+```
+
+### 5. 错误处理
+
+```typescript
+// 提交前验证
+const validateWorkflow = () => {
+  // 1. 检查工作流名称
+  if (!workflowName.trim()) {
+    throw new Error("请输入工作流名称");
+  }
+  
+  // 2. 检查节点数量
+  if (nodes.length === 0) {
+    throw new Error("请至少添加一个节点");
+  }
+  
+  // 3. 检查孤立节点
+  const isolatedNodes = nodes.filter(node => {
+    const hasInput = edges.some(e => e.target === node.id);
+    const hasOutput = edges.some(e => e.source === node.id);
+    return !hasInput && !hasOutput && nodes.length > 1;
+  });
+  
+  if (isolatedNodes.length > 0) {
+    throw new Error("存在未连接的节点");
+  }
+  
+  // 4. 检查环路
+  if (hasCircle(nodes, edges)) {
+    throw new Error("工作流不能包含环路");
+  }
+};
+```
+
+### 6. 类型安全
+
+```typescript
+// 使用 TypeScript 严格类型
+interface WorkflowNode {
+  id: string;
+  sequence: number;
+  agent_id: string;
+  agent_name: string;
+  type: string;
+  params: Record<string, any>;  // 可以进一步细化
+  user_template: string;
+  status: "pending" | "completed";
+}
+
+// 节点类型枚举
+enum NodeType {
+  CONTENT_GENERATION = "内容生成类型",
+  REVIEW = "审核类型",
+  PUBLISH = "发布类型",
+  DEFAULT = "默认类型"
+}
+
+// 使用类型守卫
+const isContentGenerationNode = (node: WorkflowNode): boolean => {
+  return node.type === NodeType.CONTENT_GENERATION;
+};
+```
+
+### 7. 测试建议
+
+```typescript
+// 单元测试：数据转换逻辑
+describe("buildAgentConfig", () => {
+  it("应该正确转换串行节点", () => {
+    const nodes = [nodeA, nodeB, nodeC];
+    const edges = [edgeAB, edgeBC];
+    const config = buildAgentConfig(nodes, edges, convertNode);
+    expect(config.stages).toHaveLength(3);
+  });
+  
+  it("应该正确转换并行分支", () => {
+    const nodes = [nodeA, nodeB, nodeC];
+    const edges = [edgeAB, edgeAC];  // A 连接到 B 和 C
+    const config = buildAgentConfig(nodes, edges, convertNode);
+    expect(config.stages[1].parallel).toBe(true);
+    expect(config.stages[1].branches).toHaveLength(2);
+  });
+});
+
+// 集成测试：完整流程
+describe("Workflow E2E", () => {
+  it("应该能创建并保存工作流", async () => {
+    // 1. 添加节点
+    await addNode(agentTemplate);
+    
+    // 2. 连接节点
+    await connectNodes(nodeA.id, nodeB.id);
+    
+    // 3. 配置节点
+    await updateNodeParams(nodeA.id, { template: "xxx" });
+    
+    // 4. 保存
+    await submitWorkflow();
+    
+    // 5. 验证
+    expect(mockCreateWorkflow).toHaveBeenCalled();
+  });
+});
+```
+
+---
+
+## 📚 总结
+
+### 核心特性
+
+1. **可视化编辑**：基于 React Flow 的拖拽式流程设计
+2. **灵活执行**：支持串行、并行、混合执行模式
+3. **实时监控**：WebSocket 推送执行状态
+4. **历史管理**：撤销/重做功能
+5. **类型安全**：完整的 TypeScript 类型定义
+
+### 技术亮点
+
+- **图转树算法**：DFS 遍历实现复杂流程转换
+- **自动布局**：Dagre 算法智能排列节点
+- **状态管理**：Zustand 轻量级状态管理
+- **模块化设计**：节点组件按类型动态加载
+- **占位符系统**：支持动态模板填充
+
+### 扩展方向
+
+1. **节点库扩展**：添加更多智能体类型
+2. **条件分支**：支持 if-else 逻辑判断
+3. **循环执行**：支持 for/while 循环
+4. **子工作流**：支持嵌套工作流调用
+5. **版本管理**：工作流版本控制和回滚
+
+---
+
+## 📖 相关文件
+
+### 核心文件
+
+- `WorkFlowEdit.tsx` - 主编辑页面
+- `ReactFlowCanvas.tsx` - 画布组件
+- `WorkflowReactFlowNode.tsx` - 节点组件
+- `workflowStore.ts` - 状态管理
+- `flowHistoryStore.ts` - 历史管理
+- `workflowConfigConverter.ts` - 数据转换
