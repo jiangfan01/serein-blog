@@ -1,0 +1,781 @@
+---
+title: 我对 React 的看法
+description: 从 SVGR 实践中领悟 React 的本质 —— 函数组合与闭包的艺术
+---
+
+# 我对 React 的看法
+
+> 从多维表格项目的 SVGR 配置中，我突然顿悟了 React 设计的精妙之处。
+
+## 🎯 起因：一个动态图标的问题
+
+在做多维表格的权限控制模块时，遇到了一个看似简单的需求：图标需要根据状态变色（hover、disabled、active）。
+
+### 最初的错误做法
+
+```tsx
+// ❌ 为不同颜色创建多个 SVG 文件
+import deleteBlue from "@/assets/delete-blue.svg";
+import deleteGray from "@/assets/delete-gray.svg";
+import deleteRed from "@/assets/delete-red.svg";
+
+function DeleteButton({ isActive, isDisabled }) {
+  const icon = isDisabled ? deleteGray : isActive ? deleteBlue : deleteRed;
+  return <img src={icon} alt="delete" />;
+}
+```
+
+**问题显而易见**：
+
+1. **文件爆炸** - 5 个状态 × 20 个图标 = 100 个 SVG 文件
+2. **维护噩梦** - 换主题色要重新导出所有图标
+3. **无法动态控制** - `<img>` 加载的 SVG 是黑盒，无法修改 `fill`、`stroke`
+4. **性能浪费** - 每个颜色变体都要单独加载
+
+### 核心问题
+
+**凡是「像按钮一样用的图」，都不该是 `<img>`。**
+
+`<img>` 适合的场景：
+- 用户上传的图片
+- 外部 CDN 的图片
+- 不需要交互的装饰性图片
+
+但对于 UI 图标，我们需要：
+- 动态改变颜色
+- 响应用户交互
+- 与主题系统集成
+- 支持 CSS 动画
+
+---
+
+## 💡 解决方案：SVGR
+
+### 配置 SVGR
+
+```typescript
+// vite.config.ts
+import svgr from 'vite-plugin-svgr';
+
+export default defineConfig({
+  plugins: [
+    svgr({
+      svgrOptions: {
+        icon: true,  // 自动添加 width/height
+        dimensions: false,  // 移除固定尺寸
+      },
+    }),
+  ],
+});
+```
+
+### 使用方式
+
+```tsx
+// ✅ SVG 作为 React 组件导入
+import DeleteIcon from "@/assets/icons/delete.svg?react";
+
+function DeleteButton({ isActive, isDisabled }) {
+  return (
+    <button>
+      <DeleteIcon 
+        className={cn(
+          "w-4 h-4 transition-colors",
+          isDisabled && "text-gray-400",
+          isActive && "text-blue-500",
+          !isDisabled && !isActive && "text-gray-600 hover:text-red-500"
+        )}
+      />
+    </button>
+  );
+}
+```
+
+**优势**：
+
+1. **一个 SVG 文件** - 通过 CSS 控制所有状态
+2. **完全可控** - 可以修改任何 SVG 属性
+3. **类型安全** - TypeScript 支持
+4. **性能优化** - 打包时内联，减少 HTTP 请求
+
+---
+
+## 🧠 顿悟时刻：React 的本质
+
+当我写下这行代码时：
+
+```tsx
+<IconButton 
+  icon={<DeleteIcon className="w-4 h-4" />} 
+  tooltip="删除"
+  onClick={handleDelete}
+/>
+```
+
+突然意识到：**组件套组件，随便嵌套，因为本质都是函数调用**。
+
+### React 组件 = 闭包函数
+
+让我们剖析一个 React 组件的结构：
+
+```tsx
+function MyComponent(props) {           // 1️⃣ 接收参数（props）
+  // 2️⃣ React 提供的 hooks（状态管理）
+  const [count, setCount] = useState(0);
+  const [user, setUser] = useState(null);
+  
+  // 3️⃣ 外部状态（全局 store）
+  const theme = useTheme();
+  const permissions = usePermissions();
+  
+  // 4️⃣ 派生状态（计算值）
+  const isAdmin = useMemo(() => {
+    return user?.role === 'admin';
+  }, [user]);
+  
+  // 5️⃣ 副作用（生命周期）
+  useEffect(() => {
+    fetchUser();
+  }, []);
+  
+  // 6️⃣ 内部函数（闭包捕获变量）
+  const handleClick = useCallback(() => {
+    if (isAdmin) {
+      setCount(count + 1);  // 闭包捕获 count
+    }
+  }, [count, isAdmin]);
+  
+  // 7️⃣ 返回值（ReactNode）
+  return (
+    <div className={theme.container}>
+      <p>Count: {count}</p>
+      <button onClick={handleClick}>
+        Increment
+      </button>
+    </div>
+  );
+}
+```
+
+这就是标准的**闭包函数**结构：
+
+| 函数概念 | React 对应 | 说明 |
+|---------|-----------|------|
+| 参数 | `props` | 外部传入的数据 |
+| 局部变量 | `useState`、`useMemo` | 组件内部状态 |
+| 外部变量 | `useContext`、`useStore` | 全局状态 |
+| 内部函数 | 事件处理器 | 闭包捕获变量 |
+| 返回值 | JSX (ReactNode) | 渲染结果 |
+
+### 为什么这么设计？
+
+**因为函数是编程语言最灵活的原子单位。**
+
+函数的特性：
+- ✅ 可组合 - 函数可以调用函数
+- ✅ 可复用 - 同一个函数可以多次调用
+- ✅ 可测试 - 输入输出明确
+- ✅ 可预测 - 纯函数没有副作用
+- ✅ 可优化 - 编译器可以内联、缓存
+
+React 把组件抽象成函数，自然继承了这些优势。
+
+---
+
+## 🎨 万物皆 ReactNode
+
+React 的核心抽象是 `ReactNode`，它的定义非常宽泛：
+
+```typescript
+type ReactNode = 
+  | ReactElement          // JSX 元素
+  | string                // 文本
+  | number                // 数字
+  | boolean               // 布尔值（不渲染）
+  | null                  // 空（不渲染）
+  | undefined             // 未定义（不渲染）
+  | ReactNode[]           // 数组
+  | ReactPortal;          // Portal
+```
+
+**这意味着任何东西都可以组合**：
+
+### 1. 组件作为 Props
+
+```tsx
+// SVGR 组件 → ReactNode → 传给 IconButton
+<IconButton icon={<DeleteIcon />} />
+
+// 条件渲染 → 还是 ReactNode
+<IconButton 
+  icon={isActive ? <ActiveIcon /> : <InactiveIcon />} 
+/>
+
+// 动态组件
+const icons = {
+  delete: DeleteIcon,
+  edit: EditIcon,
+  add: AddIcon,
+};
+
+<IconButton icon={<icons[action] />} />
+```
+
+### 2. 组件作为 Children
+
+```tsx
+// 简单文本
+<Button>Click me</Button>
+
+// 复杂结构
+<Button>
+  <Icon />
+  <span>Click me</span>
+  <Badge count={5} />
+</Button>
+
+// 条件渲染
+<Button>
+  {loading ? <Spinner /> : 'Submit'}
+</Button>
+
+// 数组
+<List>
+  {items.map(item => (
+    <ListItem key={item.id}>{item.name}</ListItem>
+  ))}
+</List>
+```
+
+### 3. 高阶组件
+
+```tsx
+// 组件返回组件
+function withAuth(Component) {
+  return function AuthComponent(props) {
+    const user = useUser();
+    
+    if (!user) {
+      return <LoginPrompt />;
+    }
+    
+    return <Component {...props} user={user} />;
+  };
+}
+
+const ProtectedPage = withAuth(Dashboard);
+```
+
+### 4. Render Props
+
+```tsx
+// 函数作为 children
+<DataProvider>
+  {(data, loading) => (
+    loading ? <Spinner /> : <Table data={data} />
+  )}
+</DataProvider>
+
+// 函数作为 props
+<Mouse>
+  {({ x, y }) => (
+    <div style={{ position: 'absolute', left: x, top: y }}>
+      Cursor at ({x}, {y})
+    </div>
+  )}
+</Mouse>
+```
+
+---
+
+## 🔥 JSX 就是 JavaScript
+
+很多人误以为 JSX 是模板语言，其实它就是 JavaScript 的语法糖。
+
+### JSX 编译结果
+
+```tsx
+// JSX 代码
+<div className="container">
+  <h1>Hello</h1>
+  <p>World</p>
+</div>
+
+// 编译后（React 17+）
+import { jsx } from 'react/jsx-runtime';
+
+jsx('div', {
+  className: 'container',
+  children: [
+    jsx('h1', { children: 'Hello' }),
+    jsx('p', { children: 'World' }),
+  ],
+});
+```
+
+**这意味着你可以使用所有 JavaScript 特性**：
+
+### 1. 解构赋值
+
+```tsx
+const props = { name: 'John', age: 30, city: 'NYC' };
+
+// 展开运算符
+<User {...props} />
+
+// 解构 + 剩余参数
+const { name, ...rest } = props;
+<User name={name} {...rest} />
+```
+
+### 2. 条件运算符
+
+```tsx
+// 三元运算符
+{isLoggedIn ? <Dashboard /> : <Login />}
+
+// 短路运算符
+{error && <ErrorMessage error={error} />}
+{items.length > 0 && <List items={items} />}
+
+// 空值合并
+{user?.name ?? 'Guest'}
+```
+
+### 3. 数组方法
+
+```tsx
+// map
+{items.map(item => <Item key={item.id} {...item} />)}
+
+// filter + map
+{items
+  .filter(item => item.active)
+  .map(item => <Item key={item.id} {...item} />)
+}
+
+// reduce
+{items.reduce((acc, item) => {
+  acc.push(<Item key={item.id} {...item} />);
+  if (item.hasChildren) {
+    acc.push(...item.children.map(child => <Item key={child.id} {...child} />));
+  }
+  return acc;
+}, [])}
+```
+
+### 4. 动态属性
+
+```tsx
+// 计算属性名
+const dynamicProps = {
+  [`data-${type}`]: value,
+  [`aria-${role}`]: true,
+};
+
+<div {...dynamicProps} />
+
+// 条件属性
+<button
+  {...(isDisabled && { disabled: true, 'aria-disabled': true })}
+  {...(hasTooltip && { 'aria-describedby': tooltipId })}
+>
+  Click
+</button>
+```
+
+---
+
+## 🆚 对比 Vue
+
+我用过 Vue 2 和 Vue 3，也很喜欢 Vue 的渐进式设计，但在灵活性上，React 确实更胜一筹。
+
+### Vue 的限制
+
+#### 1. 模板语法的限制
+
+```vue
+<!-- Vue: 需要特殊指令 -->
+<component :is="currentComponent" />
+
+<div v-if="isActive">Active</div>
+<div v-else>Inactive</div>
+
+<div :class="{ active: isActive, disabled: isDisabled }">
+  Content
+</div>
+```
+
+```tsx
+// React: 就是 JavaScript
+{currentComponent}
+
+{isActive ? <div>Active</div> : <div>Inactive</div>}
+
+<div className={cn({ active: isActive, disabled: isDisabled })}>
+  Content
+</div>
+```
+
+#### 2. 插槽传递
+
+```vue
+<!-- Vue: 需要显式声明插槽 -->
+<template>
+  <IconButton>
+    <template #icon>
+      <DeleteIcon />
+    </template>
+  </IconButton>
+</template>
+```
+
+```tsx
+// React: 直接传递
+<IconButton icon={<DeleteIcon />} />
+```
+
+#### 3. 动态组件
+
+```vue
+<!-- Vue: 需要注册组件 -->
+<script setup>
+import DeleteIcon from './DeleteIcon.vue';
+import EditIcon from './EditIcon.vue';
+
+const icons = { delete: DeleteIcon, edit: EditIcon };
+</script>
+
+<template>
+  <component :is="icons[action]" />
+</template>
+```
+
+```tsx
+// React: 直接使用
+import DeleteIcon from './DeleteIcon';
+import EditIcon from './EditIcon';
+
+const icons = { delete: DeleteIcon, edit: EditIcon };
+const Icon = icons[action];
+
+<Icon />
+```
+
+### Vue 的优势
+
+公平地说，Vue 也有自己的优势：
+
+1. **模板语法更直观** - 对设计师和初学者友好
+2. **响应式系统更自动** - 不需要手动优化
+3. **单文件组件** - HTML/CSS/JS 分离清晰
+4. **官方生态完整** - Vue Router、Pinia 都是官方维护
+
+但在**灵活性**和**可组合性**上，React 的函数式思维更强大。
+
+---
+
+## 🎓 理解 Hooks 的设计
+
+一旦理解了「组件 = 闭包函数」，Hooks 的设计就都说得通了。
+
+### 1. useState - 闭包捕获状态
+
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+  
+  // handleClick 是闭包，捕获了 count
+  const handleClick = () => {
+    console.log(count);  // 闭包捕获的值
+    setCount(count + 1);
+  };
+  
+  return <button onClick={handleClick}>{count}</button>;
+}
+```
+
+**问题**：闭包捕获的是旧值，如何获取最新值？
+
+```tsx
+// ❌ 错误：闭包捕获旧值
+const handleClick = () => {
+  setCount(count + 1);
+  setCount(count + 1);  // 还是旧值，只会 +1
+};
+
+// ✅ 正确：使用函数式更新
+const handleClick = () => {
+  setCount(prev => prev + 1);
+  setCount(prev => prev + 1);  // 基于最新值，会 +2
+};
+```
+
+### 2. useEffect - 副作用隔离
+
+```tsx
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+  
+  // useEffect 是独立的闭包
+  useEffect(() => {
+    fetchUser(userId).then(setUser);
+    
+    // 清理函数也是闭包
+    return () => {
+      cancelRequest(userId);
+    };
+  }, [userId]);  // 依赖数组：闭包捕获的变量
+  
+  return <div>{user?.name}</div>;
+}
+```
+
+**依赖数组的本质**：告诉 React 哪些闭包变量变化时需要重新执行。
+
+### 3. useCallback - 缓存闭包
+
+```tsx
+function Parent() {
+  const [count, setCount] = useState(0);
+  
+  // ❌ 每次渲染都创建新函数
+  const handleClick = () => {
+    console.log(count);
+  };
+  
+  // ✅ 缓存函数引用
+  const handleClick = useCallback(() => {
+    console.log(count);
+  }, [count]);  // count 变化时才创建新函数
+  
+  return <Child onClick={handleClick} />;
+}
+
+const Child = React.memo(({ onClick }) => {
+  return <button onClick={onClick}>Click</button>;
+});
+```
+
+### 4. useMemo - 缓存计算值
+
+```tsx
+function ExpensiveComponent({ items }) {
+  // ❌ 每次渲染都重新计算
+  const total = items.reduce((sum, item) => sum + item.price, 0);
+  
+  // ✅ 缓存计算结果
+  const total = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.price, 0);
+  }, [items]);  // items 变化时才重新计算
+  
+  return <div>Total: {total}</div>;
+}
+```
+
+### 5. useRef - 跨渲染保持引用
+
+```tsx
+function Timer() {
+  const [count, setCount] = useState(0);
+  const intervalRef = useRef(null);
+  
+  useEffect(() => {
+    // intervalRef.current 不会触发重新渲染
+    intervalRef.current = setInterval(() => {
+      setCount(c => c + 1);
+    }, 1000);
+    
+    return () => {
+      clearInterval(intervalRef.current);
+    };
+  }, []);
+  
+  return <div>{count}</div>;
+}
+```
+
+**useRef 的本质**：在闭包外部存储一个可变引用，不触发重新渲染。
+
+---
+
+## 🛠️ 实战案例：多维表格项目
+
+让我分享几个在多维表格项目中的实际应用。
+
+### 案例 1：动态图标系统
+
+```tsx
+// 图标配置
+const FIELD_ICONS = {
+  text: TextIcon,
+  number: NumberIcon,
+  date: DateIcon,
+  select: SelectIcon,
+  multiSelect: MultiSelectIcon,
+  checkbox: CheckboxIcon,
+  user: UserIcon,
+  attachment: AttachmentIcon,
+} as const;
+
+// 字段类型组件
+function FieldTypeIcon({ type, className }: FieldTypeIconProps) {
+  const Icon = FIELD_ICONS[type];
+  
+  if (!Icon) return null;
+  
+  return <Icon className={cn("w-4 h-4", className)} />;
+}
+
+// 使用
+<FieldTypeIcon 
+  type={field.type} 
+  className="text-gray-600 group-hover:text-blue-500"
+/>
+```
+
+### 案例 2：权限控制的按钮
+
+```tsx
+function ActionButton({ 
+  action, 
+  permission, 
+  onClick 
+}: ActionButtonProps) {
+  const hasPermission = usePermission(permission);
+  
+  const config = {
+    delete: {
+      icon: DeleteIcon,
+      label: '删除',
+      color: 'text-red-500',
+    },
+    edit: {
+      icon: EditIcon,
+      label: '编辑',
+      color: 'text-blue-500',
+    },
+    share: {
+      icon: ShareIcon,
+      label: '分享',
+      color: 'text-green-500',
+    },
+  }[action];
+  
+  const Icon = config.icon;
+  
+  return (
+    <Tooltip content={config.label}>
+      <button
+        onClick={onClick}
+        disabled={!hasPermission}
+        className={cn(
+          "p-2 rounded transition-colors",
+          hasPermission 
+            ? `hover:bg-gray-100 ${config.color}` 
+            : "text-gray-300 cursor-not-allowed"
+        )}
+      >
+        <Icon className="w-4 h-4" />
+      </button>
+    </Tooltip>
+  );
+}
+```
+
+### 案例 3：ag-Grid 固定列配置
+
+```tsx
+function useColumnDefs() {
+  const { permissions } = useAuth();
+  
+  return useMemo(() => {
+    const baseCols: ColDef[] = [
+      {
+        field: 'name',
+        headerName: '名称',
+        pinned: 'left',
+        lockPinned: true,  // 禁止用户拖动
+      },
+      // ... 其他列
+    ];
+    
+    // 根据权限动态添加操作列
+    if (permissions.canEdit) {
+      baseCols.push({
+        field: 'actions',
+        headerName: '操作',
+        pinned: 'right',
+        lockPinned: true,
+        cellRenderer: (params) => (
+          <ActionButton 
+            action="edit" 
+            permission="edit"
+            onClick={() => handleEdit(params.data)}
+          />
+        ),
+      });
+    }
+    
+    return baseCols;
+  }, [permissions]);
+}
+```
+
+---
+
+## 💭 总结：我对 React 的看法
+
+### React 的核心优势
+
+1. **函数组合** - 组件就是函数，可以无限组合
+2. **JavaScript 优先** - JSX 不是模板，是 JavaScript
+3. **ReactNode 抽象** - 统一的组件接口
+4. **Hooks 系统** - 优雅的副作用管理
+5. **生态丰富** - 社区活跃，工具链完善
+
+### React 的哲学
+
+- **声明式** - 描述 UI 应该是什么样，而不是如何变成那样
+- **组件化** - 一切皆组件，组件可以无限嵌套
+- **单向数据流** - 数据从上到下流动，清晰可预测
+- **函数式** - 纯函数、不可变数据、组合优于继承
+
+### 适合 React 的场景
+
+- ✅ 复杂的交互式应用
+- ✅ 需要高度定制的 UI
+- ✅ 大型团队协作
+- ✅ 需要细粒度性能优化
+- ✅ 跨平台开发（React Native）
+
+### 不适合 React 的场景
+
+- ❌ 简单的静态网站（用 Astro、Hugo）
+- ❌ SEO 要求极高的内容站（用 Next.js SSR）
+- ❌ 团队不熟悉 JavaScript（用 Vue）
+- ❌ 需要快速原型（用 Vue）
+
+### 最后的感悟
+
+**理解了「组件 = 闭包函数」，React 的很多设计就都说得通了**：
+
+- `useCallback` / `useMemo` → 缓存闭包里的值
+- `useRef` → 跨渲染保持引用
+- `useEffect` 依赖数组 → 闭包捕获的变量变了才重新执行
+- `useState` 函数式更新 → 避免闭包陷阱
+- `React.memo` → 缓存组件渲染结果
+
+React 不是最简单的框架，但它是最灵活、最强大的框架。
+
+当你真正理解了它的设计哲学，你会发现它的每一个 API 都有深刻的理由，每一个限制都是为了更好的可维护性。
+
+---
+
+## 📚 延伸阅读
+
+- [React 官方文档 - Thinking in React](https://react.dev/learn/thinking-in-react)
+- [Dan Abramov - A Complete Guide to useEffect](https://overreacted.io/a-complete-guide-to-useeffect/)
+- [Kent C. Dodds - Application State Management with React](https://kentcdodds.com/blog/application-state-management-with-react)
+- [SVGR 官方文档](https://react-svgr.com/)
+- [React Fiber 架构](https://github.com/acdlite/react-fiber-architecture)

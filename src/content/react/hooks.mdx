@@ -179,7 +179,7 @@ if (condition) {
 | useReducer | 复杂状态管理 |
 | useLayoutEffect | 同步副作用 |
 
-## Hooks 闭包陷阱（高频面试题）
+## Hooks 闭包陷阱
 
 ### 陷阱是怎么产生的
 
@@ -225,7 +225,3 @@ messagesRef.current = messages;
 // 或者直接用外部状态库（Zustand）完全绕过 React 闭包周期
 const addMessage = useStore(state => state.addMessage);
 ```
-
-### 面试话术
-
-> "为了解决闭包捕获旧快照的问题，我通常用函数式更新 `setMessages(prev => ...)`，让 React 内部注入最新状态。如果是更复杂的流式场景，我会用 Zustand 等外部状态库，完全绕开 React 的闭包周期。"
