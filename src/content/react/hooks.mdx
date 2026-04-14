@@ -178,3 +178,54 @@ if (condition) {
 | useContext | 上下文访问 |
 | useReducer | 复杂状态管理 |
 | useLayoutEffect | 同步副作用 |
+
+## Hooks 闭包陷阱（高频面试题）
+
+### 陷阱是怎么产生的
+
+React 函数组件每次渲染都是一次**快照（Snapshot）**。组件内的所有变量、函数都被"封存"在这次渲染的闭包里。
+
+```tsx
+function Chat() {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    // 这个监听器在组件挂载时注册
+    // 它永远封存在 messages = [] 的那个快照里
+    socket.on('message', (newMsg) => {
+      // ❌ 无论收到第几条消息，这里的 messages 永远是 []
+      setMessages([...messages, newMsg]);
+    });
+  }, []);
+}
+```
+
+当监听器接收到第 100 条消息时，它眼里的 `messages` 依然是最初的 `[]`，所以每次 set 的都是 `[newMsg]`，之前的消息全丢了。
+
+### 解法：函数式状态更新（Functional State Update）
+
+```tsx
+useEffect(() => {
+  socket.on('message', (newMsg) => {
+    // ✅ 传回调函数，React 注入最新的 prev，绕过闭包
+    setMessages(prev => [...prev, newMsg]);
+  });
+}, []);
+```
+
+**为什么有效**：传回调给 `setState` 时，React 不读取闭包里的旧变量，而是从内部队列取出最新状态作为 `prev` 注入。
+
+### 其他解法
+
+```tsx
+// 用 useRef 保存最新值，绕过闭包
+const messagesRef = useRef(messages);
+messagesRef.current = messages;
+
+// 或者直接用外部状态库（Zustand）完全绕过 React 闭包周期
+const addMessage = useStore(state => state.addMessage);
+```
+
+### 面试话术
+
+> "为了解决闭包捕获旧快照的问题，我通常用函数式更新 `setMessages(prev => ...)`，让 React 内部注入最新状态。如果是更复杂的流式场景，我会用 Zustand 等外部状态库，完全绕开 React 的闭包周期。"
