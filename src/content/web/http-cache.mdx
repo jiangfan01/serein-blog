@@ -1,0 +1,541 @@
+---
+title: HTTP 缓存机制详解
+description: 强缓存与协商缓存的区别、Content Hash 策略、Nginx 配置实战
+---
+
+# HTTP 缓存机制详解
+
+> 面试高频题：如何优化 2MB 的 Logo 图片加载？如何保证 main.js 更新时不读旧缓存？
+
+## 🎯 核心概念
+
+### 强缓存 vs 协商缓存
+
+HTTP 缓存分为两种机制：
+
+| 类型 | 是否发请求 | 响应码 | 速度 | 适用场景 |
+|------|-----------|--------|------|---------|
+| **强缓存** | ❌ 不发请求 | 200 (from cache) | 最快 | 静态资源（JS/CSS/图片） |
+| **协商缓存** | ✅ 发请求 | 304 Not Modified | 较快 | HTML、API 数据 |
+
+---
+
+## 💪 强缓存（Strong Cache）
+
+### 原理
+
+浏览器**根本不向服务器发请求**，直接从本地 Disk Cache 或 Memory Cache 拿数据。
+
+### 相关 Header
+
+#### 1. Cache-Control（HTTP/1.1，推荐）
+
+```http
+Cache-Control: max-age=31536000
+```
+
+**常用指令**：
+
+```http
+# 缓存一年（静态资源）
+Cache-Control: max-age=31536000
+
+# 不缓存（HTML）
+Cache-Control: no-cache
+
+# 完全不存储（敏感数据）
+Cache-Control: no-store
+
+# 公共缓存（CDN 可缓存）
+Cache-Control: public, max-age=31536000
+
+# 私有缓存（只有浏览器可缓存）
+Cache-Control: private, max-age=3600
+
+# 必须重新验证
+Cache-Control: must-revalidate
+```
+
+#### 2. Expires（HTTP/1.0，已过时）
+
+```http
+Expires: Wed, 21 Oct 2025 07:28:00 GMT
+```
+
+**问题**：依赖客户端时间，如果客户端时间不准，缓存会失效。
+
+**优先级**：`Cache-Control` > `Expires`
+
+### 浏览器缓存位置
+
+```
+1. Memory Cache（内存缓存）
+   - 速度最快
+   - 关闭标签页就清空
+   - 适合：小文件、当前页面使用的资源
+
+2. Disk Cache（磁盘缓存）
+   - 速度较快
+   - 持久化存储
+   - 适合：大文件、跨页面共享的资源
+
+3. Service Worker Cache
+   - 完全可控
+   - 离线可用
+   - 适合：PWA 应用
+```
+
+### 实战示例：2MB Logo 图片
+
+```nginx
+# Nginx 配置
+location ~* \.(jpg|jpeg|png|gif|ico|svg)$ {
+    # 强缓存一年
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    
+    # 开启 gzip 压缩
+    gzip on;
+    gzip_types image/svg+xml;
+}
+```
+
+**效果**：
+
+```
+第一次访问：
+  Request: GET /logo.png
+  Response: 200 OK (2MB, 耗时 500ms)
+  Header: Cache-Control: max-age=31536000
+
+第二次访问：
+  Request: 无（直接从缓存读取）
+  Response: 200 (from disk cache)
+  耗时: 0ms（秒开！）
+```
+
+---
+
+## 🤝 协商缓存（Negotiation Cache）
+
+### 原理
+
+浏览器会带着**旧文件的标识**去问服务器"文件更新了吗？"
+
+- 如果**没更新**：服务器返回 `304 Not Modified`，浏览器用本地缓存
+- 如果**更新了**：服务器返回 `200 OK` + 新文件
+
+### 相关 Header
+
+#### 1. ETag / If-None-Match（推荐）
+
+```http
+# 第一次请求
+Response:
+  ETag: "33a64df551425fcc55e4d42a148795d9f25f89d4"
+  Cache-Control: no-cache
+
+# 第二次请求
+Request:
+  If-None-Match: "33a64df551425fcc55e4d42a148795d9f25f89d4"
+
+Response:
+  304 Not Modified（文件没变）
+  或
+  200 OK + 新文件（文件变了）
+```
+
+**ETag 生成方式**：
+
+- 文件内容的 Hash 值（推荐）
+- 文件修改时间 + 文件大小
+- 自定义算法
+
+#### 2. Last-Modified / If-Modified-Since（较旧）
+
+```http
+# 第一次请求
+Response:
+  Last-Modified: Wed, 21 Oct 2024 07:28:00 GMT
+  Cache-Control: no-cache
+
+# 第二次请求
+Request:
+  If-Modified-Since: Wed, 21 Oct 2024 07:28:00 GMT
+
+Response:
+  304 Not Modified（文件没变）
+  或
+  200 OK + 新文件（文件变了）
+```
+
+**问题**：
+
+1. 精度只到秒，1 秒内多次修改无法识别
+2. 依赖服务器时间
+3. 文件内容没变但修改时间变了，也会重新下载
+
+**优先级**：`ETag` > `Last-Modified`
+
+### 实战示例：HTML 文件
+
+```nginx
+# Nginx 配置
+location ~* \.html$ {
+    # 协商缓存
+    add_header Cache-Control "no-cache";
+    
+    # 开启 ETag
+    etag on;
+}
+```
+
+**效果**：
+
+```
+第一次访问：
+  Request: GET /index.html
+  Response: 200 OK (10KB, 耗时 50ms)
+  Header: 
+    Cache-Control: no-cache
+    ETag: "abc123"
+
+第二次访问：
+  Request: GET /index.html
+           If-None-Match: "abc123"
+  Response: 304 Not Modified (0KB, 耗时 10ms)
+  浏览器使用本地缓存
+```
+
+---
+
+## 🎯 完整的缓存策略
+
+### 1. 静态资源（JS/CSS/图片）
+
+**策略**：强缓存 + Content Hash
+
+```nginx
+# Nginx 配置
+location ~* \.(js|css|jpg|png|gif|svg|woff2)$ {
+    # 强缓存一年
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    
+    # 开启 gzip
+    gzip on;
+    gzip_types text/css application/javascript image/svg+xml;
+}
+```
+
+**Webpack/Next.js 配置**：
+
+```javascript
+// next.config.js
+module.exports = {
+  // 自动添加 Content Hash
+  webpack: (config) => {
+    config.output.filename = 'static/js/[name].[contenthash].js';
+    config.output.chunkFilename = 'static/js/[name].[contenthash].js';
+    return config;
+  },
+};
+```
+
+**生成的文件名**：
+
+```
+main.a1b2c3d4.js
+styles.e5f6g7h8.css
+logo.i9j0k1l2.png
+```
+
+**关键点**：只要文件内容变化，Hash 就变化，文件名就变化，浏览器就会请求新文件。
+
+### 2. HTML 文件
+
+**策略**：协商缓存或不缓存
+
+```nginx
+location ~* \.html$ {
+    # 方案 1：协商缓存
+    add_header Cache-Control "no-cache";
+    etag on;
+    
+    # 方案 2：完全不缓存（推荐）
+    add_header Cache-Control "no-store, no-cache, must-revalidate";
+    add_header Pragma "no-cache";
+    add_header Expires "0";
+}
+```
+
+**为什么 HTML 不能强缓存？**
+
+因为 HTML 中引用了带 Hash 的 JS/CSS 文件：
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- 文件名包含 Hash -->
+    <link rel="stylesheet" href="/styles.e5f6g7h8.css">
+    <script src="/main.a1b2c3d4.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
+```
+
+如果 HTML 强缓存，用户永远拿不到新的 JS/CSS 文件名！
+
+### 3. API 数据
+
+**策略**：根据业务需求
+
+```typescript
+// 不缓存（默认）
+fetch('/api/user', {
+  headers: {
+    'Cache-Control': 'no-cache',
+  },
+});
+
+// 短时间缓存（如用户信息）
+fetch('/api/user', {
+  headers: {
+    'Cache-Control': 'max-age=60',  // 缓存 1 分钟
+  },
+});
+
+// 使用 SWR 策略（Stale-While-Revalidate）
+fetch('/api/user', {
+  headers: {
+    'Cache-Control': 'max-age=60, stale-while-revalidate=300',
+  },
+});
+```
+
+---
+
+## 🔥 必杀技：Content Hash 策略
+
+### 问题
+
+如果 `main.js` 使用强缓存，代码更新后用户还是读旧缓存怎么办？
+
+### 解决方案
+
+现代前端工程化（Webpack/Vite/Next.js）早就解决了这个问题：
+
+#### 1. 打包时生成 Content Hash
+
+```javascript
+// Webpack 配置
+module.exports = {
+  output: {
+    filename: '[name].[contenthash].js',
+    chunkFilename: '[name].[contenthash].js',
+  },
+};
+```
+
+#### 2. 文件内容变化 → Hash 变化 → 文件名变化
+
+```
+代码更新前:
+  main.a1b2c3d4.js
+
+代码更新后:
+  main.e5f6g7h8.js  // 新文件名！
+```
+
+#### 3. HTML 引用新文件
+
+```html
+<!-- 更新前 -->
+<script src="/main.a1b2c3d4.js"></script>
+
+<!-- 更新后 -->
+<script src="/main.e5f6g7h8.js"></script>
+```
+
+#### 4. 完整流程
+
+```
+1. 用户访问网站
+   → 请求 index.html（协商缓存或不缓存）
+   → 服务器返回最新的 HTML
+
+2. HTML 中引用的 JS/CSS 文件名包含 Hash
+   → <script src="/main.e5f6g7h8.js"></script>
+
+3. 浏览器请求 main.e5f6g7h8.js
+   → 本地没有这个文件（文件名变了）
+   → 发起请求，下载新文件
+   → 强缓存一年
+
+4. 旧文件 main.a1b2c3d4.js
+   → 没有任何地方引用了
+   → 浏览器会自动清理（LRU 策略）
+```
+
+### Next.js 自动处理
+
+```typescript
+// Next.js 自动添加 Content Hash
+// 无需配置，开箱即用
+
+// 生成的文件：
+// _next/static/chunks/main-a1b2c3d4.js
+// _next/static/chunks/pages/index-e5f6g7h8.js
+// _next/static/css/styles-i9j0k1l2.css
+```
+
+---
+
+## 🛠️ Nginx 完整配置
+
+```nginx
+server {
+    listen 80;
+    server_name example.com;
+    root /var/www/html;
+    
+    # 1. HTML 文件：不缓存
+    location ~* \.html$ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+    }
+    
+    # 2. 带 Hash 的静态资源：强缓存一年
+    location ~* \.(js|css)$ {
+        # 检查文件名是否包含 Hash（8 位以上的字母数字）
+        if ($uri ~* "\.[a-f0-9]{8,}\.(js|css)$") {
+            add_header Cache-Control "public, max-age=31536000, immutable";
+        }
+        
+        # 不带 Hash 的文件：协商缓存
+        add_header Cache-Control "no-cache";
+        etag on;
+        
+        gzip on;
+        gzip_types text/css application/javascript;
+    }
+    
+    # 3. 图片：强缓存一年
+    location ~* \.(jpg|jpeg|png|gif|ico|svg|webp)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        
+        gzip on;
+        gzip_types image/svg+xml;
+    }
+    
+    # 4. 字体：强缓存一年
+    location ~* \.(woff|woff2|ttf|eot)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*";
+    }
+    
+    # 5. API：不缓存
+    location /api/ {
+        proxy_pass http://backend:3000;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+    }
+}
+```
+
+---
+
+## 🎓 面试话术
+
+### 问题 1：什么是强缓存和协商缓存？
+
+> **强缓存**：浏览器根本不向服务器发请求，直接从本地 Disk Cache 或 Memory Cache 拿数据。通过 `Cache-Control: max-age` 控制。速度最快，体验最好。
+>
+> **协商缓存**：浏览器会带着旧文件的标识（如 ETag）去问服务器"文件更新了吗？"。如果没更新，服务器返回 `304 Not Modified`，浏览器再用本地缓存。通过 `ETag` 或 `Last-Modified` 控制。
+
+### 问题 2：如何优化 2MB 的 Logo 图片加载？
+
+> 我会果断使用**强缓存**。在 Nginx 或 CDN 上配置：
+>
+> ```nginx
+> Cache-Control: public, max-age=31536000, immutable
+> ```
+>
+> 这样用户除了第一次加载，之后刷新全是秒开。同时开启 gzip 压缩，进一步减小传输体积。
+
+### 问题 3：如何保证 main.js 更新时不读旧缓存？
+
+> 现代前端工程化（Webpack/Next.js）早就解决了这个问题。打包时，我会给 JS 文件名打上**内容哈希（Content Hash）**，比如 `main.a1b2c3.js`。
+>
+> 只要代码更新，哈希值就会变，生成一个新的文件名。这时候，承载引用的 `index.html`（我会设置为协商缓存或 no-cache）会去请求全新的 JS 文件，完美避开强缓存带来的代码不更新问题。
+
+### 问题 4：Cache-Control 和 Expires 的区别？
+
+> `Expires` 是 HTTP/1.0 的产物，使用绝对时间，依赖客户端时间，如果客户端时间不准，缓存会失效。
+>
+> `Cache-Control` 是 HTTP/1.1 的标准，使用相对时间（max-age），更灵活，优先级更高。现代项目应该只用 `Cache-Control`。
+
+### 问题 5：ETag 和 Last-Modified 的区别？
+
+> `Last-Modified` 基于文件修改时间，精度只到秒，1 秒内多次修改无法识别。而且文件内容没变但修改时间变了，也会重新下载。
+>
+> `ETag` 基于文件内容的 Hash 值，更精确，优先级更高。现代项目应该优先使用 `ETag`。
+
+---
+
+## 🔍 调试技巧
+
+### 1. Chrome DevTools
+
+```
+Network 面板 → 选择请求 → Headers 标签
+
+查看：
+  - Status Code: 200 / 304 / 200 (from cache)
+  - Response Headers: Cache-Control, ETag
+  - Request Headers: If-None-Match, If-Modified-Since
+```
+
+### 2. 强制刷新
+
+```
+普通刷新 (F5):
+  - 会使用协商缓存
+  - 发送 If-None-Match / If-Modified-Since
+
+强制刷新 (Ctrl+F5 / Cmd+Shift+R):
+  - 忽略所有缓存
+  - 重新下载所有资源
+  - 请求头带 Cache-Control: no-cache
+```
+
+### 3. 清除缓存
+
+```
+Chrome:
+  - 右键 → 检查 → Network → Disable cache（开发时勾选）
+  - 设置 → 隐私和安全 → 清除浏览数据
+```
+
+---
+
+## 📊 缓存策略对比
+
+| 资源类型 | 缓存策略 | Cache-Control | 原因 |
+|---------|---------|---------------|------|
+| HTML | 不缓存 | `no-store` | 需要获取最新的资源引用 |
+| JS/CSS (带 Hash) | 强缓存 | `max-age=31536000` | 文件名变化即更新 |
+| JS/CSS (不带 Hash) | 协商缓存 | `no-cache` + ETag | 需要检查是否更新 |
+| 图片/字体 | 强缓存 | `max-age=31536000` | 很少变化 |
+| API 数据 | 不缓存 | `no-store` | 需要实时数据 |
+| 用户信息 | 短时缓存 | `max-age=60` | 可以短时间复用 |
+
+---
+
+## 🔗 相关资源
+
+- [MDN - HTTP 缓存](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Caching)
+- [Google - HTTP 缓存最佳实践](https://web.dev/http-cache/)
+- [Webpack - 缓存](https://webpack.js.org/guides/caching/)
+- [Next.js - 静态资源优化](https://nextjs.org/docs/basic-features/static-file-serving)

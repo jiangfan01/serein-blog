@@ -1,0 +1,763 @@
+---
+title: HTTP 状态码与线上排障
+description: 401 vs 403 的本质区别、502 vs 504 的排查方向、前端响应拦截器实战
+---
+
+# HTTP 状态码与线上排障
+
+> 遇到线上大面积报错，第一时间看 Network 的状态码，这直接决定了排查的方向。
+
+## 🎯 核心概念
+
+### HTTP 状态码分类
+
+| 类别 | 范围 | 含义 | 责任方 |
+|------|------|------|--------|
+| 1xx | 100-199 | 信息响应 | - |
+| 2xx | 200-299 | 成功 | - |
+| 3xx | 300-399 | 重定向 | - |
+| 4xx | 400-499 | 客户端错误 | 前端 |
+| 5xx | 500-599 | 服务器错误 | 后端 |
+
+---
+
+## 🔐 401 vs 403：认证与授权
+
+### 核心区别
+
+**401 Unauthorized** - **认证失败**（你是谁？）
+**403 Forbidden** - **授权失败**（你能干嘛？）
+
+### 401 Unauthorized
+
+**含义**：系统不认识你。
+
+**常见原因**：
+
+1. Token 过期
+2. 没带 Token
+3. Token 签名错误
+4. Token 格式错误
+
+**前端处理**：
+
+```typescript
+// Axios 全局响应拦截器
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
+
+const api = axios.create({
+  baseURL: '/api',
+});
+
+// 请求拦截器：自动带上 Token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器：处理 401
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      // 1. 清除本地存储
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // 2. 提示用户
+      message.error('登录已过期，请重新登录');
+      
+      // 3. 跳转到登录页
+      const router = useRouter();
+      router.push('/login');
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+**实战案例**：
+
+```typescript
+// 场景：用户在页面停留 2 小时，Token 过期
+
+// 用户点击按钮
+async function handleSubmit() {
+  try {
+    await api.post('/api/submit', data);
+  } catch (error) {
+    // 拦截器已经处理了 401，这里不需要额外处理
+    console.error('提交失败:', error);
+  }
+}
+
+// 拦截器自动：
+// 1. 检测到 401
+// 2. 清除 Token
+// 3. 跳转登录页
+// 4. 用户重新登录后继续操作
+```
+
+### 403 Forbidden
+
+**含义**：系统认识你，但你越权了。
+
+**常见原因**：
+
+1. 普通用户访问管理员接口
+2. 没有某个资源的权限
+3. OSS 防盗链（外部图片）
+4. CORS 跨域（预检请求失败）
+
+**前端处理**：
+
+```typescript
+// 响应拦截器：处理 403
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response?.status === 403) {
+      const url = error.config.url;
+      
+      // 1. 业务接口 403：权限不足
+      if (url.startsWith('/api/')) {
+        message.error('您没有权限执行此操作');
+        
+        // 可选：跳转到无权限页面
+        // router.push('/403');
+      }
+      
+      // 2. 外部资源 403：防盗链
+      if (url.startsWith('http')) {
+        console.error('外部资源访问被拒绝，可能是防盗链');
+        // 建议：让后端做代理
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+```
+
+**实战案例 1：角色权限**
+
+```typescript
+// 场景：普通用户点击"删除用户"按钮
+
+// 前端先判断（UI 层面）
+function UserList() {
+  const { user } = useAuth();
+  const isAdmin = user.role === 'admin';
+  
+  return (
+    <div>
+      {users.map(u => (
+        <div key={u.id}>
+          {u.name}
+          {/* 普通用户看不到删除按钮 */}
+          {isAdmin && (
+            <button onClick={() => handleDelete(u.id)}>
+              删除
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 后端再判断（安全层面）
+async function handleDelete(userId: string) {
+  try {
+    await api.delete(`/api/users/${userId}`);
+    message.success('删除成功');
+  } catch (error) {
+    // 如果用户绕过前端限制（如修改 localStorage），后端会返回 403
+    // 拦截器会提示"您没有权限执行此操作"
+  }
+}
+```
+
+**实战案例 2：OSS 防盗链**
+
+```typescript
+// 场景：直接访问阿里云 OSS 图片，返回 403
+
+// ❌ 错误做法：直接访问
+<img src="https://my-bucket.oss-cn-hangzhou.aliyuncs.com/avatar.jpg" />
+// 返回 403 Forbidden（防盗链）
+
+// ✅ 正确做法 1：后端代理
+<img src="/api/proxy/image?url=https://my-bucket.oss-cn-hangzhou.aliyuncs.com/avatar.jpg" />
+
+// 后端代理实现（Next.js API Route）
+// app/api/proxy/image/route.ts
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const imageUrl = searchParams.get('url');
+  
+  if (!imageUrl) {
+    return new Response('Missing url parameter', { status: 400 });
+  }
+  
+  // 后端请求 OSS（带上正确的 Referer）
+  const response = await fetch(imageUrl, {
+    headers: {
+      'Referer': 'https://my-domain.com',
+    },
+  });
+  
+  const blob = await response.blob();
+  
+  return new Response(blob, {
+    headers: {
+      'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000',
+    },
+  });
+}
+
+// ✅ 正确做法 2：配置 OSS 白名单
+// 在阿里云 OSS 控制台配置允许的 Referer
+```
+
+### 对比总结
+
+| 状态码 | 含义 | 本质 | 前端处理 | 后端原因 |
+|--------|------|------|---------|---------|
+| **401** | 未认证 | 你是谁？ | 清除 Token，跳转登录 | Token 过期/无效 |
+| **403** | 未授权 | 你能干嘛？ | 提示权限不足 | 角色权限不足 |
+
+**记忆口诀**：
+
+- **401** = **Who are you?** (认证)
+- **403** = **What can you do?** (授权)
+
+---
+
+## 🔥 502 vs 504：网关错误
+
+### 502 Bad Gateway
+
+**含义**：网关（Nginx）还活着，但后端服务挂了。
+
+**常见原因**：
+
+1. 后端服务宕机
+2. 后端服务重启中
+3. 后端服务端口错误
+4. 防火墙拦截
+
+**排查方向**：
+
+```
+前端看到 502
+  ↓
+Nginx 正常运行
+  ↓
+Nginx 尝试连接后端服务（如 Golang、Node.js）
+  ↓
+连接失败（后端服务挂了）
+  ↓
+Nginx 返回 502 给前端
+```
+
+**前端处理**：
+
+```typescript
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response?.status === 502) {
+      message.error('服务暂时不可用，请稍后重试');
+      
+      // 可选：自动重试
+      return retryRequest(error.config, 3);
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+// 自动重试函数
+async function retryRequest(config: any, retries: number) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // 等待 1 秒后重试
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return await api.request(config);
+    } catch (error) {
+      if (i === retries - 1) {
+        throw error;
+      }
+    }
+  }
+}
+```
+
+**运维处理**：
+
+```bash
+# 1. 检查后端服务是否运行
+ps aux | grep golang-app
+
+# 2. 检查端口是否监听
+netstat -tuln | grep 3000
+
+# 3. 重启后端服务
+systemctl restart golang-app
+
+# 4. 查看日志
+tail -f /var/log/golang-app/error.log
+```
+
+### 504 Gateway Timeout
+
+**含义**：后端服务还活着，但响应太慢，网关等不及超时了。
+
+**常见原因**：
+
+1. 数据库慢查询
+2. 外部 API 调用超时
+3. 死锁
+4. 计算密集型任务
+
+**排查方向**：
+
+```
+前端看到 504
+  ↓
+Nginx 正常运行
+  ↓
+Nginx 连接后端服务成功
+  ↓
+后端服务处理请求（查询数据库）
+  ↓
+数据库查询太慢（10 秒+）
+  ↓
+Nginx 等待超时（默认 60 秒）
+  ↓
+Nginx 返回 504 给前端
+```
+
+**前端处理**：
+
+```typescript
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response?.status === 504) {
+      message.error('请求超时，请稍后重试');
+      
+      // 建议：不要自动重试（可能会加重后端压力）
+    }
+    
+    return Promise.reject(error);
+  }
+);
+```
+
+**后端优化**：
+
+```typescript
+// 1. 优化 SQL 查询
+// ❌ 慢查询
+SELECT * FROM users WHERE name LIKE '%john%';  // 全表扫描
+
+// ✅ 优化后
+SELECT * FROM users WHERE name = 'john';  // 使用索引
+CREATE INDEX idx_name ON users(name);
+
+// 2. 添加超时控制
+async function fetchData() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 秒超时
+  
+  try {
+    const response = await fetch('/api/data', {
+      signal: controller.signal,
+    });
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// 3. 使用缓存
+import { Redis } from 'ioredis';
+const redis = new Redis();
+
+async function getUserData(userId: string) {
+  // 先查缓存
+  const cached = await redis.get(`user:${userId}`);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  
+  // 缓存未命中，查数据库
+  const user = await db.user.findUnique({ where: { id: userId } });
+  
+  // 写入缓存（1 小时）
+  await redis.setex(`user:${userId}`, 3600, JSON.stringify(user));
+  
+  return user;
+}
+```
+
+### 对比总结
+
+| 状态码 | 含义 | 后端状态 | 排查方向 | 解决方案 |
+|--------|------|---------|---------|---------|
+| **502** | 网关错误 | 服务挂了 | 检查服务是否运行 | 重启服务 |
+| **504** | 网关超时 | 服务慢 | 检查慢查询、死锁 | 优化 SQL、加缓存 |
+
+**记忆口诀**：
+
+- **502** = **服务死了**（Bad Gateway）
+- **504** = **服务慢了**（Gateway Timeout）
+
+---
+
+## 🎯 其他常见状态码
+
+### 2xx 成功
+
+```typescript
+// 200 OK - 请求成功
+GET /api/users
+Response: 200 OK + 用户列表
+
+// 201 Created - 创建成功
+POST /api/users
+Response: 201 Created + 新用户数据
+
+// 204 No Content - 成功但无返回内容
+DELETE /api/users/123
+Response: 204 No Content
+```
+
+### 3xx 重定向
+
+```typescript
+// 301 Moved Permanently - 永久重定向
+GET http://example.com
+Response: 301 → https://example.com
+
+// 302 Found - 临时重定向
+GET /old-page
+Response: 302 → /new-page
+
+// 304 Not Modified - 协商缓存命中
+GET /style.css
+Request: If-None-Match: "abc123"
+Response: 304 Not Modified
+```
+
+### 4xx 客户端错误
+
+```typescript
+// 400 Bad Request - 请求参数错误
+POST /api/users
+Body: { name: '' }  // name 不能为空
+Response: 400 Bad Request
+
+// 404 Not Found - 资源不存在
+GET /api/users/999
+Response: 404 Not Found
+
+// 405 Method Not Allowed - 方法不允许
+POST /api/users/123  // 应该用 PUT
+Response: 405 Method Not Allowed
+
+// 429 Too Many Requests - 请求过多（限流）
+GET /api/data
+Response: 429 Too Many Requests
+Header: Retry-After: 60
+```
+
+### 5xx 服务器错误
+
+```typescript
+// 500 Internal Server Error - 服务器内部错误
+GET /api/users
+Response: 500 Internal Server Error
+// 后端代码抛出未捕获的异常
+
+// 503 Service Unavailable - 服务不可用
+GET /api/users
+Response: 503 Service Unavailable
+// 服务器过载或维护中
+```
+
+---
+
+## 🛠️ 完整的错误处理方案
+
+### 1. Axios 拦截器
+
+```typescript
+import axios from 'axios';
+import { message } from 'antd';
+import { useRouter } from 'next/navigation';
+
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  timeout: 10000,
+});
+
+// 请求拦截器
+api.interceptors.request.use(
+  (config) => {
+    // 自动带上 Token
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // 显示 loading
+    showLoading();
+    
+    return config;
+  },
+  (error) => {
+    hideLoading();
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+api.interceptors.response.use(
+  (response) => {
+    hideLoading();
+    return response;
+  },
+  (error) => {
+    hideLoading();
+    
+    const status = error.response?.status;
+    const router = useRouter();
+    
+    switch (status) {
+      case 401:
+        // 未认证：清除 Token，跳转登录
+        localStorage.removeItem('token');
+        message.error('登录已过期，请重新登录');
+        router.push('/login');
+        break;
+        
+      case 403:
+        // 未授权：提示权限不足
+        message.error('您没有权限执行此操作');
+        break;
+        
+      case 404:
+        // 资源不存在
+        message.error('请求的资源不存在');
+        break;
+        
+      case 429:
+        // 请求过多：限流
+        const retryAfter = error.response.headers['retry-after'];
+        message.error(`请求过于频繁，请 ${retryAfter} 秒后重试`);
+        break;
+        
+      case 500:
+        // 服务器错误
+        message.error('服务器内部错误，请稍后重试');
+        break;
+        
+      case 502:
+        // 网关错误：后端服务挂了
+        message.error('服务暂时不可用，请稍后重试');
+        // 可选：自动重试
+        return retryRequest(error.config, 3);
+        
+      case 503:
+        // 服务不可用：服务器过载
+        message.error('服务器繁忙，请稍后重试');
+        break;
+        
+      case 504:
+        // 网关超时：后端响应慢
+        message.error('请求超时，请稍后重试');
+        break;
+        
+      default:
+        // 其他错误
+        message.error(error.response?.data?.message || '请求失败');
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+### 2. React 错误边界
+
+```typescript
+import React from 'react';
+
+interface Props {
+  children: React.ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // 上报错误到监控平台
+    console.error('Error caught by boundary:', error, errorInfo);
+    
+    // 可选：发送到 Sentry
+    // Sentry.captureException(error);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-page">
+          <h1>出错了</h1>
+          <p>{this.state.error?.message}</p>
+          <button onClick={() => window.location.reload()}>
+            刷新页面
+          </button>
+        </div>
+      );
+    }
+    
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
+```
+
+### 3. 全局错误监听
+
+```typescript
+// app/layout.tsx
+'use client';
+
+import { useEffect } from 'react';
+
+export default function RootLayout({ children }) {
+  useEffect(() => {
+    // 监听未捕获的 Promise 错误
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      
+      // 上报到监控平台
+      // Sentry.captureException(event.reason);
+    });
+    
+    // 监听全局错误
+    window.addEventListener('error', (event) => {
+      console.error('Global error:', event.error);
+      
+      // 上报到监控平台
+      // Sentry.captureException(event.error);
+    });
+  }, []);
+  
+  return (
+    <html>
+      <body>
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </body>
+    </html>
+  );
+}
+```
+
+---
+
+## 🎓 面试话术
+
+### 问题 1：401 和 403 的区别是什么？
+
+> **401 Unauthorized** 和 **403 Forbidden** 的本质区别是**"认证（你是谁）"与"授权（你能干嘛）"**。
+>
+> **401** 代表系统不认识你（Token 过期、没带 Token 或签名错误）。作为前端，我会在 Axios 的全局响应拦截器里抓取 401，立刻清除本地 Storage，并重定向到 Login 页面。
+>
+> **403** 代表系统认识你，但你越权了（比如普通用户去调用管理员的接口）。如果在业务接口出现，这是角色权限配置错误；如果是请求外部图片（OSS 防盗链），前端确实无能为力，我会推动后端做一个转发代理。
+
+### 问题 2：502 和 504 的区别是什么？
+
+> **502 Bad Gateway** 和 **504 Gateway Timeout** 都是网关错误，但原因不同。
+>
+> **502** 的意思是：Nginx（网关）还活着，但 Nginx 去找后端的 Golang 服务时，发现 Golang 服务挂了或者宕机了。我会直接把报错截图甩给后端和运维去重启服务。
+>
+> **504** 说明 Golang 没死，只是它去查数据库查得太慢了，导致 Nginx 等不及超时了。我会让后端去优化 SQL 慢查询，或者加缓存。
+
+### 问题 3：如何处理线上大面积 401 错误？
+
+> 1. **立即排查**：检查是否是 Token 服务挂了，或者 Token 签名密钥变了
+> 2. **临时方案**：如果是密钥变了，让后端回滚；如果是服务挂了，重启服务
+> 3. **长期方案**：
+>    - 前端：实现 Token 自动刷新机制
+>    - 后端：Token 过期时间设置合理（如 7 天）
+>    - 监控：接入 Sentry，实时监控 401 错误率
+
+### 问题 4：如何实现请求重试？
+
+> 在 Axios 拦截器中实现：
+>
+> ```typescript
+> async function retryRequest(config: any, retries: number) {
+>   for (let i = 0; i < retries; i++) {
+>     try {
+>       await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+>       return await api.request(config);
+>     } catch (error) {
+>       if (i === retries - 1) throw error;
+>     }
+>   }
+> }
+> ```
+>
+> 注意：只对 502、503 等临时性错误重试，不要对 401、403、404 重试。
+
+---
+
+## 🔗 相关资源
+
+- [MDN - HTTP 状态码](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Status)
+- [RFC 7231 - HTTP/1.1 语义和内容](https://tools.ietf.org/html/rfc7231)
+- [Axios 拦截器文档](https://axios-http.com/docs/interceptors)
+- [HTTP 状态码速查表](https://httpstatuses.com/)
