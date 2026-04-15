@@ -1,0 +1,846 @@
+---
+title: Next.js 渲染模式与数据获取
+description: SSR、SSG、ISR、CSR 渲染模式，Server/Client Components，API Routes vs Server Actions
+---
+
+# Next.js 渲染模式与数据获取
+
+> Next.js 面试必考：渲染模式选择、组件类型区分、数据获取方式
+
+## 📋 目录
+
+1. [四种渲染模式](#四种渲染模式)
+2. [Server Components vs Client Components](#server-components-vs-client-components)
+3. [API Routes vs Server Actions](#api-routes-vs-server-actions)
+4. [实战选型指南](#实战选型指南)
+
+---
+
+## 🎨 四种渲染模式
+
+### 概览对比
+
+| 模式 | 全称 | 渲染时机 | 适用场景 | SEO |
+|------|------|---------|---------|-----|
+| **SSR** | Server-Side Rendering | 每次请求时 | 个性化内容、实时数据 | ✅ |
+| **SSG** | Static Site Generation | 构建时 | 博客、文档、营销页 | ✅ |
+| **ISR** | Incremental Static Regeneration | 构建时 + 定时更新 | 电商商品页、新闻 | ✅ |
+| **CSR** | Client-Side Rendering | 浏览器端 | 后台管理、交互密集型 | ❌ |
+
+---
+
+### 1. SSR - 服务端渲染
+
+**每次请求时，服务器动态生成 HTML**
+
+```typescript
+// app/dashboard/page.tsx
+// 默认就是 SSR（动态渲染）
+
+async function DashboardPage() {
+  // 每次请求都会执行
+  const user = await getCurrentUser();
+  const stats = await getUserStats(user.id);
+  
+  return (
+    <div>
+      <h1>欢迎, {user.name}</h1>
+      <Stats data={stats} />
+    </div>
+  );
+}
+
+export default DashboardPage;
+```
+
+**触发 SSR 的条件**：
+- 使用 `cookies()`、`headers()` 等动态函数
+- 使用 `searchParams`
+- 设置 `export const dynamic = 'force-dynamic'`
+
+**优点**：
+- 每次都是最新数据
+- 可以访问请求信息（cookies、headers）
+- SEO 友好
+
+**缺点**：
+- 每次请求都要等服务器渲染
+- 服务器压力大
+- TTFB（首字节时间）较长
+
+---
+
+### 2. SSG - 静态站点生成
+
+**构建时生成 HTML，部署后直接返回静态文件**
+
+```typescript
+// app/blog/[slug]/page.tsx
+
+// 告诉 Next.js 有哪些页面需要预生成
+export async function generateStaticParams() {
+  const posts = await getAllPosts();
+  
+  return posts.map((post) => ({
+    slug: post.slug,
+  }));
+}
+
+// 构建时执行，生成静态 HTML
+async function BlogPost({ params }: { params: { slug: string } }) {
+  const post = await getPostBySlug(params.slug);
+  
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div dangerouslySetInnerHTML={{ __html: post.content }} />
+    </article>
+  );
+}
+
+export default BlogPost;
+```
+
+**优点**：
+- 速度最快（CDN 直接返回）
+- 服务器零压力
+- SEO 最佳
+
+**缺点**：
+- 数据更新需要重新构建
+- 不适合频繁变化的内容
+- 页面多时构建时间长
+
+---
+
+### 3. ISR - 增量静态再生
+
+**SSG + 定时更新 = ISR**
+
+```typescript
+// app/products/[id]/page.tsx
+
+async function ProductPage({ params }: { params: { id: string } }) {
+  const product = await getProduct(params.id);
+  
+  return (
+    <div>
+      <h1>{product.name}</h1>
+      <p>价格: ¥{product.price}</p>
+      <p>库存: {product.stock}</p>
+    </div>
+  );
+}
+
+// ⭐ 关键：设置重新验证时间
+export const revalidate = 60; // 60 秒后重新生成
+
+export default ProductPage;
+```
+
+**工作原理**：
+
+```
+1. 首次访问：返回构建时生成的静态页面
+2. 60 秒内再次访问：直接返回缓存的静态页面
+3. 60 秒后访问：
+   - 先返回旧的静态页面（用户无感知）
+   - 后台重新生成新页面
+   - 下次访问返回新页面
+```
+
+**按需重新验证**：
+
+```typescript
+// app/api/revalidate/route.ts
+import { revalidatePath, revalidateTag } from 'next/cache';
+
+export async function POST(request: Request) {
+  const { path, tag, secret } = await request.json();
+  
+  // 验证密钥
+  if (secret !== process.env.REVALIDATE_SECRET) {
+    return Response.json({ error: 'Invalid secret' }, { status: 401 });
+  }
+  
+  // 按路径重新验证
+  if (path) {
+    revalidatePath(path);
+  }
+  
+  // 按标签重新验证
+  if (tag) {
+    revalidateTag(tag);
+  }
+  
+  return Response.json({ revalidated: true });
+}
+```
+
+**使用标签**：
+
+```typescript
+// 获取数据时打标签
+async function getProduct(id: string) {
+  const res = await fetch(`https://api.example.com/products/${id}`, {
+    next: { tags: [`product-${id}`] }
+  });
+  return res.json();
+}
+
+// CMS 更新时调用
+await fetch('/api/revalidate', {
+  method: 'POST',
+  body: JSON.stringify({ tag: 'product-123', secret: 'xxx' })
+});
+```
+
+**优点**：
+- 兼顾静态性能和数据新鲜度
+- 无需全量重新构建
+- 用户体验好（先返回旧数据）
+
+**缺点**：
+- 有一定的数据延迟
+- 配置相对复杂
+
+---
+
+### 4. CSR - 客户端渲染
+
+**浏览器端用 JavaScript 渲染**
+
+```typescript
+// app/admin/page.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+
+function AdminPage() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    fetch('/api/admin/stats')
+      .then(res => res.json())
+      .then(data => {
+        setData(data);
+        setLoading(false);
+      });
+  }, []);
+  
+  if (loading) return <div>加载中...</div>;
+  
+  return (
+    <div>
+      <h1>管理后台</h1>
+      <Stats data={data} />
+    </div>
+  );
+}
+
+export default AdminPage;
+```
+
+**优点**：
+- 交互性强
+- 服务器压力小
+- 适合后台系统
+
+**缺点**：
+- SEO 差（爬虫看到空白页）
+- 首屏加载慢（需要下载 JS）
+- 需要处理加载状态
+
+---
+
+### 渲染模式选择流程图
+
+```
+需要 SEO 吗？
+├── 否 → CSR（后台管理系统）
+└── 是 → 数据多久变一次？
+         ├── 几乎不变 → SSG（博客、文档）
+         ├── 几分钟/几小时 → ISR（电商、新闻）
+         └── 每次都不同 → SSR（个性化内容）
+```
+
+---
+
+## 🧩 Server Components vs Client Components
+
+### 核心区别
+
+| 特性 | Server Components | Client Components |
+|------|------------------|-------------------|
+| **渲染位置** | 服务器 | 浏览器 |
+| **JavaScript 发送** | 不发送 | 发送到客户端 |
+| **可以使用** | async/await、数据库、文件系统 | useState、useEffect、事件处理 |
+| **不能使用** | useState、useEffect、浏览器 API | 直接访问数据库 |
+| **默认** | ✅ App Router 默认 | 需要 `'use client'` |
+
+---
+
+### Server Components（默认）
+
+```typescript
+// app/posts/page.tsx
+// 没有 'use client'，默认是 Server Component
+
+import { prisma } from '@/lib/prisma';
+
+async function PostsPage() {
+  // ✅ 可以直接访问数据库
+  const posts = await prisma.post.findMany({
+    include: { author: true }
+  });
+  
+  // ✅ 可以使用 async/await
+  // ✅ 这段代码不会发送到客户端
+  
+  return (
+    <ul>
+      {posts.map(post => (
+        <li key={post.id}>
+          <h2>{post.title}</h2>
+          <p>作者: {post.author.name}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default PostsPage;
+```
+
+**优点**：
+- 减少客户端 JavaScript 体积
+- 直接访问后端资源（数据库、文件系统）
+- 敏感信息不会暴露给客户端
+- 更好的首屏性能
+
+---
+
+### Client Components
+
+```typescript
+// components/like-button.tsx
+'use client';  // ⭐ 必须声明
+
+import { useState } from 'react';
+
+function LikeButton({ postId, initialLikes }: { postId: string; initialLikes: number }) {
+  const [likes, setLikes] = useState(initialLikes);
+  const [isLiking, setIsLiking] = useState(false);
+  
+  const handleLike = async () => {
+    setIsLiking(true);
+    
+    const res = await fetch(`/api/posts/${postId}/like`, {
+      method: 'POST'
+    });
+    
+    if (res.ok) {
+      setLikes(likes + 1);
+    }
+    
+    setIsLiking(false);
+  };
+  
+  return (
+    <button onClick={handleLike} disabled={isLiking}>
+      ❤️ {likes}
+    </button>
+  );
+}
+
+export default LikeButton;
+```
+
+**什么时候用 `'use client'`**：
+- 使用 `useState`、`useEffect`、`useRef` 等 Hooks
+- 使用事件处理（`onClick`、`onChange`）
+- 使用浏览器 API（`window`、`localStorage`）
+- 使用依赖浏览器的第三方库
+
+---
+
+### 组合使用（最佳实践）
+
+```typescript
+// app/posts/[id]/page.tsx (Server Component)
+import { prisma } from '@/lib/prisma';
+import LikeButton from '@/components/like-button';
+import CommentSection from '@/components/comment-section';
+
+async function PostPage({ params }: { params: { id: string } }) {
+  // 服务端获取数据
+  const post = await prisma.post.findUnique({
+    where: { id: params.id },
+    include: { author: true, _count: { select: { likes: true } } }
+  });
+  
+  if (!post) return <div>文章不存在</div>;
+  
+  return (
+    <article>
+      {/* 静态内容：Server Component 渲染 */}
+      <h1>{post.title}</h1>
+      <p>作者: {post.author.name}</p>
+      <div dangerouslySetInnerHTML={{ __html: post.content }} />
+      
+      {/* 交互内容：Client Component */}
+      <LikeButton postId={post.id} initialLikes={post._count.likes} />
+      <CommentSection postId={post.id} />
+    </article>
+  );
+}
+
+export default PostPage;
+```
+
+**原则**：
+- 尽量让组件保持 Server Component
+- 只在需要交互的地方使用 Client Component
+- Client Component 尽量放在组件树的叶子节点
+
+---
+
+### 常见错误
+
+```typescript
+// ❌ 错误：在 Server Component 中使用 useState
+async function PostsPage() {
+  const [filter, setFilter] = useState('all');  // 报错！
+  // ...
+}
+
+// ❌ 错误：在 Client Component 中直接访问数据库
+'use client';
+async function PostsPage() {
+  const posts = await prisma.post.findMany();  // 报错！
+  // ...
+}
+
+// ❌ 错误：把整个页面变成 Client Component
+'use client';
+async function PostsPage() {
+  // 这样会把所有代码都发送到客户端
+  // 失去了 Server Component 的优势
+}
+```
+
+---
+
+## 🔌 API Routes vs Server Actions
+
+### API Routes
+
+**传统的 RESTful API 方式**
+
+```typescript
+// app/api/posts/route.ts
+import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server';
+
+// GET /api/posts
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '10');
+  
+  const posts = await prisma.post.findMany({
+    skip: (page - 1) * limit,
+    take: limit,
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  return NextResponse.json(posts);
+}
+
+// POST /api/posts
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { title, content } = body;
+    
+    if (!title || !content) {
+      return NextResponse.json(
+        { error: '标题和内容不能为空' },
+        { status: 400 }
+      );
+    }
+    
+    const post = await prisma.post.create({
+      data: { title, content, authorId: 'user-id' }
+    });
+    
+    return NextResponse.json(post, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: '创建失败' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+```typescript
+// app/api/posts/[id]/route.ts
+
+// GET /api/posts/:id
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const post = await prisma.post.findUnique({
+    where: { id: params.id }
+  });
+  
+  if (!post) {
+    return NextResponse.json(
+      { error: '文章不存在' },
+      { status: 404 }
+    );
+  }
+  
+  return NextResponse.json(post);
+}
+
+// PUT /api/posts/:id
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const body = await request.json();
+  
+  const post = await prisma.post.update({
+    where: { id: params.id },
+    data: body
+  });
+  
+  return NextResponse.json(post);
+}
+
+// DELETE /api/posts/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  await prisma.post.delete({
+    where: { id: params.id }
+  });
+  
+  return NextResponse.json({ success: true });
+}
+```
+
+**客户端调用**：
+
+```typescript
+// 获取列表
+const res = await fetch('/api/posts?page=1&limit=10');
+const posts = await res.json();
+
+// 创建
+const res = await fetch('/api/posts', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ title: '标题', content: '内容' })
+});
+
+// 更新
+const res = await fetch(`/api/posts/${id}`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ title: '新标题' })
+});
+
+// 删除
+const res = await fetch(`/api/posts/${id}`, {
+  method: 'DELETE'
+});
+```
+
+---
+
+### Server Actions
+
+**Next.js 13.4+ 的新方式，直接在服务端执行函数**
+
+```typescript
+// app/actions/posts.ts
+'use server';
+
+import { prisma } from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
+
+// 创建文章
+export async function createPost(formData: FormData) {
+  const title = formData.get('title') as string;
+  const content = formData.get('content') as string;
+  
+  if (!title || !content) {
+    return { error: '标题和内容不能为空' };
+  }
+  
+  try {
+    const post = await prisma.post.create({
+      data: { title, content, authorId: 'user-id' }
+    });
+    
+    // 重新验证页面缓存
+    revalidatePath('/posts');
+    
+    return { success: true, post };
+  } catch (error) {
+    return { error: '创建失败' };
+  }
+}
+
+// 更新文章
+export async function updatePost(id: string, formData: FormData) {
+  const title = formData.get('title') as string;
+  const content = formData.get('content') as string;
+  
+  try {
+    const post = await prisma.post.update({
+      where: { id },
+      data: { title, content }
+    });
+    
+    revalidatePath(`/posts/${id}`);
+    revalidatePath('/posts');
+    
+    return { success: true, post };
+  } catch (error) {
+    return { error: '更新失败' };
+  }
+}
+
+// 删除文章
+export async function deletePost(id: string) {
+  try {
+    await prisma.post.delete({
+      where: { id }
+    });
+    
+    revalidatePath('/posts');
+    
+    return { success: true };
+  } catch (error) {
+    return { error: '删除失败' };
+  }
+}
+
+// 点赞
+export async function likePost(postId: string) {
+  try {
+    await prisma.like.create({
+      data: { postId, userId: 'user-id' }
+    });
+    
+    revalidatePath(`/posts/${postId}`);
+    
+    return { success: true };
+  } catch (error) {
+    return { error: '点赞失败' };
+  }
+}
+```
+
+**在组件中使用**：
+
+```typescript
+// 方式 1：表单提交（推荐）
+// components/create-post-form.tsx
+import { createPost } from '@/app/actions/posts';
+
+function CreatePostForm() {
+  return (
+    <form action={createPost}>
+      <input name="title" placeholder="标题" required />
+      <textarea name="content" placeholder="内容" required />
+      <button type="submit">发布</button>
+    </form>
+  );
+}
+```
+
+```typescript
+// 方式 2：手动调用
+// components/like-button.tsx
+'use client';
+
+import { likePost } from '@/app/actions/posts';
+import { useTransition } from 'react';
+
+function LikeButton({ postId }: { postId: string }) {
+  const [isPending, startTransition] = useTransition();
+  
+  const handleLike = () => {
+    startTransition(async () => {
+      const result = await likePost(postId);
+      if (result.error) {
+        alert(result.error);
+      }
+    });
+  };
+  
+  return (
+    <button onClick={handleLike} disabled={isPending}>
+      {isPending ? '点赞中...' : '❤️ 点赞'}
+    </button>
+  );
+}
+```
+
+```typescript
+// 方式 3：配合 useFormState（带状态反馈）
+'use client';
+
+import { useFormState, useFormStatus } from 'react-dom';
+import { createPost } from '@/app/actions/posts';
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? '发布中...' : '发布'}
+    </button>
+  );
+}
+
+function CreatePostForm() {
+  const [state, formAction] = useFormState(createPost, null);
+  
+  return (
+    <form action={formAction}>
+      <input name="title" placeholder="标题" required />
+      <textarea name="content" placeholder="内容" required />
+      {state?.error && <p className="error">{state.error}</p>}
+      <SubmitButton />
+    </form>
+  );
+}
+```
+
+---
+
+### 对比总结
+
+| 特性 | API Routes | Server Actions |
+|------|-----------|----------------|
+| **调用方式** | fetch + HTTP 请求 | 直接调用函数 |
+| **代码位置** | `app/api/` 目录 | 任意位置 + `'use server'` |
+| **类型安全** | 需要手动定义 | 自动推断 |
+| **表单处理** | 需要 `e.preventDefault()` | 原生 `<form action>` |
+| **缓存更新** | 手动处理 | `revalidatePath/Tag` |
+| **适用场景** | 外部调用、Webhook、复杂 API | 内部表单、简单操作 |
+
+---
+
+### 选择指南
+
+**用 API Routes**：
+- 需要被外部系统调用（Webhook、第三方集成）
+- 需要返回非 JSON 数据（文件下载、流式响应）
+- 需要复杂的 HTTP 处理（自定义 headers、状态码）
+- 需要被移动端 App 调用
+
+**用 Server Actions**：
+- 表单提交
+- 简单的 CRUD 操作
+- 只在 Next.js 应用内部使用
+- 需要自动重新验证缓存
+
+---
+
+## 🎯 实战选型指南
+
+### 你的 AI 平台项目
+
+```typescript
+// 1. 聊天页面 - SSR（需要用户信息）
+// app/chat/[sessionId]/page.tsx
+async function ChatPage({ params }) {
+  const session = await getSession(params.sessionId);
+  const messages = await getMessages(params.sessionId);
+  return <ChatUI session={session} messages={messages} />;
+}
+
+// 2. 博客文章 - ISR（内容不常变）
+// app/blog/[slug]/page.tsx
+export const revalidate = 3600; // 1 小时
+async function BlogPage({ params }) {
+  const post = await getPost(params.slug);
+  return <Article post={post} />;
+}
+
+// 3. SSE 流式响应 - API Routes
+// app/api/chat/route.ts
+export async function POST(request: Request) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // 流式返回
+      for await (const chunk of generateResponse()) {
+        controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      }
+      controller.close();
+    }
+  });
+  
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/event-stream' }
+  });
+}
+
+// 4. 点赞、收藏 - Server Actions
+// app/actions/interactions.ts
+'use server';
+export async function toggleLike(postId: string) {
+  // ...
+  revalidatePath(`/posts/${postId}`);
+}
+```
+
+---
+
+## 🎓 面试话术
+
+### 问题：Next.js 有哪些渲染模式？
+
+> "Next.js 有四种渲染模式：
+>
+> **SSG（静态生成）**：构建时生成 HTML，适合博客、文档等内容不常变的页面，性能最好。
+>
+> **ISR（增量静态再生）**：SSG + 定时更新，通过 `revalidate` 设置更新间隔，适合电商商品页这种需要一定新鲜度但不需要实时的场景。
+>
+> **SSR（服务端渲染）**：每次请求时生成 HTML，适合个性化内容、需要访问 cookies 的页面。
+>
+> **CSR（客户端渲染）**：浏览器端渲染，适合后台管理系统等不需要 SEO 的场景。
+>
+> 在我的项目中，博客用 ISR，聊天页面用 SSR，管理后台用 CSR。"
+
+### 问题：Server Components 和 Client Components 的区别？
+
+> "Server Components 在服务器渲染，不会发送 JavaScript 到客户端，可以直接访问数据库和文件系统。Client Components 在浏览器渲染，可以使用 useState、useEffect 和事件处理。
+>
+> 我的原则是：**尽量保持 Server Component，只在需要交互的地方用 Client Component**。比如文章详情页是 Server Component，但点赞按钮是 Client Component。这样可以减少客户端 JavaScript 体积，提升首屏性能。"
+
+### 问题：API Routes 和 Server Actions 怎么选？
+
+> "API Routes 是传统的 RESTful API 方式，适合需要被外部调用的场景，比如 Webhook、移动端 App。
+>
+> Server Actions 是 Next.js 13.4+ 的新特性，可以直接在组件中调用服务端函数，配合 `revalidatePath` 自动更新缓存，适合表单提交和简单的 CRUD 操作。
+>
+> 在我的项目中，SSE 流式响应用 API Routes（因为需要返回 Stream），表单提交用 Server Actions（更简洁，类型安全）。"
+
+---
+
+## 🔗 相关资源
+
+- [Next.js 官方文档 - Rendering](https://nextjs.org/docs/app/building-your-application/rendering)
+- [Next.js 官方文档 - Server Actions](https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations)
+- [Next.js 官方文档 - Route Handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)

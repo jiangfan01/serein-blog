@@ -1,0 +1,713 @@
+---
+title: Node.js 事件循环与中间件机制
+description: Node.js 事件循环、Express/Koa 中间件、洋葱模型、常见面试题
+---
+
+# Node.js 事件循环与中间件机制
+
+> Node.js 面试必考：事件循环执行顺序、中间件洋葱模型、Stream 流处理
+
+## 📋 目录
+
+1. [Node.js 事件循环](#nodejs-事件循环)
+2. [中间件机制](#中间件机制)
+3. [Stream 流处理](#stream-流处理)
+4. [常见面试题](#常见面试题)
+
+---
+
+## 🔄 Node.js 事件循环
+
+### 与浏览器事件循环的区别
+
+| 特性 | 浏览器 | Node.js |
+|------|--------|---------|
+| **宏任务来源** | setTimeout、setInterval、I/O、UI 渲染 | setTimeout、setInterval、I/O、setImmediate |
+| **微任务来源** | Promise、MutationObserver | Promise、process.nextTick |
+| **执行模型** | 一个宏任务 → 所有微任务 → 渲染 | 六个阶段循环 |
+| **特有 API** | requestAnimationFrame | process.nextTick、setImmediate |
+
+---
+
+### Node.js 事件循环的六个阶段
+
+```
+   ┌───────────────────────────┐
+┌─>│           timers          │  ← setTimeout、setInterval
+│  └─────────────┬─────────────┘
+│  ┌─────────────┴─────────────┐
+│  │     pending callbacks     │  ← 系统操作回调（如 TCP 错误）
+│  └─────────────┬─────────────┘
+│  ┌─────────────┴─────────────┐
+│  │       idle, prepare       │  ← 内部使用
+│  └─────────────┬─────────────┘
+│  ┌─────────────┴─────────────┐
+│  │           poll            │  ← I/O 回调（文件、网络）
+│  └─────────────┬─────────────┘
+│  ┌─────────────┴─────────────┐
+│  │           check           │  ← setImmediate
+│  └─────────────┬─────────────┘
+│  ┌─────────────┴─────────────┐
+└──┤      close callbacks      │  ← socket.on('close')
+   └───────────────────────────┘
+```
+
+**每个阶段之间**：执行所有微任务（nextTick 优先于 Promise）
+
+---
+
+### 执行顺序详解
+
+#### 1. process.nextTick vs Promise
+
+```javascript
+console.log('1. 同步代码');
+
+process.nextTick(() => {
+  console.log('2. nextTick');
+});
+
+Promise.resolve().then(() => {
+  console.log('3. Promise');
+});
+
+console.log('4. 同步代码');
+
+// 输出顺序：
+// 1. 同步代码
+// 4. 同步代码
+// 2. nextTick  ← nextTick 优先于 Promise
+// 3. Promise
+```
+
+**原因**：`process.nextTick` 有自己的队列，在每个阶段结束后、微任务队列之前执行。
+
+#### 2. setTimeout vs setImmediate
+
+```javascript
+// 情况 1：在主模块中（不确定顺序）
+setTimeout(() => console.log('setTimeout'), 0);
+setImmediate(() => console.log('setImmediate'));
+
+// 可能输出：
+// setTimeout → setImmediate
+// 或
+// setImmediate → setTimeout
+
+// 原因：setTimeout(fn, 0) 实际上是 setTimeout(fn, 1)
+// 如果事件循环进入 timers 阶段时已经过了 1ms，setTimeout 先执行
+// 如果还没过 1ms，进入 poll 阶段，然后 check 阶段，setImmediate 先执行
+```
+
+```javascript
+// 情况 2：在 I/O 回调中（确定顺序）
+const fs = require('fs');
+
+fs.readFile('file.txt', () => {
+  setTimeout(() => console.log('setTimeout'), 0);
+  setImmediate(() => console.log('setImmediate'));
+});
+
+// 输出顺序（确定）：
+// setImmediate  ← I/O 回调在 poll 阶段，下一个是 check 阶段
+// setTimeout
+```
+
+#### 3. 完整示例
+
+```javascript
+console.log('1. start');
+
+setTimeout(() => {
+  console.log('2. setTimeout');
+  
+  process.nextTick(() => {
+    console.log('3. setTimeout nextTick');
+  });
+  
+  Promise.resolve().then(() => {
+    console.log('4. setTimeout Promise');
+  });
+}, 0);
+
+setImmediate(() => {
+  console.log('5. setImmediate');
+  
+  process.nextTick(() => {
+    console.log('6. setImmediate nextTick');
+  });
+  
+  Promise.resolve().then(() => {
+    console.log('7. setImmediate Promise');
+  });
+});
+
+process.nextTick(() => {
+  console.log('8. nextTick');
+});
+
+Promise.resolve().then(() => {
+  console.log('9. Promise');
+});
+
+console.log('10. end');
+
+// 输出顺序：
+// 1. start
+// 10. end
+// 8. nextTick
+// 9. Promise
+// 2. setTimeout（或 5. setImmediate，取决于时机）
+// 3. setTimeout nextTick
+// 4. setTimeout Promise
+// 5. setImmediate（或 2. setTimeout）
+// 6. setImmediate nextTick
+// 7. setImmediate Promise
+```
+
+---
+
+### 微任务执行时机
+
+**Node.js 11+ 的变化**：
+
+```javascript
+// Node.js 10 及之前：执行完一个阶段的所有回调，再执行微任务
+// Node.js 11+：每执行完一个回调，就执行所有微任务（与浏览器一致）
+
+setTimeout(() => {
+  console.log('timer1');
+  Promise.resolve().then(() => console.log('promise1'));
+}, 0);
+
+setTimeout(() => {
+  console.log('timer2');
+  Promise.resolve().then(() => console.log('promise2'));
+}, 0);
+
+// Node.js 10：timer1 → timer2 → promise1 → promise2
+// Node.js 11+：timer1 → promise1 → timer2 → promise2
+```
+
+---
+
+## 🧅 中间件机制
+
+### Express 中间件
+
+**线性执行模型**：
+
+```javascript
+const express = require('express');
+const app = express();
+
+// 中间件 1
+app.use((req, res, next) => {
+  console.log('中间件 1 - 开始');
+  next();  // 调用下一个中间件
+  console.log('中间件 1 - 结束');  // next() 之后的代码
+});
+
+// 中间件 2
+app.use((req, res, next) => {
+  console.log('中间件 2 - 开始');
+  next();
+  console.log('中间件 2 - 结束');
+});
+
+// 路由处理
+app.get('/', (req, res) => {
+  console.log('路由处理');
+  res.send('Hello');
+});
+
+// 请求 GET / 时输出：
+// 中间件 1 - 开始
+// 中间件 2 - 开始
+// 路由处理
+// 中间件 2 - 结束
+// 中间件 1 - 结束
+```
+
+**Express 中间件的问题**：
+
+```javascript
+// 异步中间件的问题
+app.use(async (req, res, next) => {
+  console.log('开始');
+  await someAsyncOperation();
+  next();  // ⚠️ next() 不会等待后续中间件完成
+  console.log('结束');  // 可能在后续中间件完成之前就执行了
+});
+```
+
+---
+
+### Koa 中间件（洋葱模型）
+
+**真正的洋葱模型**：
+
+```javascript
+const Koa = require('koa');
+const app = new Koa();
+
+// 中间件 1
+app.use(async (ctx, next) => {
+  console.log('1. 进入中间件 1');
+  await next();  // ⭐ await 等待后续中间件完成
+  console.log('6. 离开中间件 1');
+});
+
+// 中间件 2
+app.use(async (ctx, next) => {
+  console.log('2. 进入中间件 2');
+  await next();
+  console.log('5. 离开中间件 2');
+});
+
+// 中间件 3
+app.use(async (ctx, next) => {
+  console.log('3. 进入中间件 3');
+  ctx.body = 'Hello';
+  console.log('4. 离开中间件 3');
+});
+
+// 请求时输出：
+// 1. 进入中间件 1
+// 2. 进入中间件 2
+// 3. 进入中间件 3
+// 4. 离开中间件 3
+// 5. 离开中间件 2
+// 6. 离开中间件 1
+```
+
+**洋葱模型图示**：
+
+```
+请求 ──────────────────────────────────────────────> 响应
+        │                                      │
+        │  ┌─────────────────────────────────┐ │
+        │  │         中间件 1                 │ │
+        │  │  ┌───────────────────────────┐  │ │
+        │  │  │       中间件 2             │  │ │
+        │  │  │  ┌─────────────────────┐  │  │ │
+        │  │  │  │     中间件 3        │  │  │ │
+        │  │  │  │                     │  │  │ │
+        └──┼──┼──┼──> 核心处理 ────────┼──┼──┼─┘
+           │  │  │                     │  │  │
+           │  │  └─────────────────────┘  │  │
+           │  └───────────────────────────┘  │
+           └─────────────────────────────────┘
+```
+
+---
+
+### Koa 中间件原理（compose）
+
+```javascript
+// koa-compose 简化实现
+function compose(middlewares) {
+  return function (ctx) {
+    // 从第一个中间件开始执行
+    return dispatch(0);
+    
+    function dispatch(i) {
+      // 获取当前中间件
+      const fn = middlewares[i];
+      
+      // 没有更多中间件了
+      if (!fn) return Promise.resolve();
+      
+      try {
+        // 执行中间件，传入 next 函数
+        // next 函数就是 dispatch(i + 1)
+        return Promise.resolve(
+          fn(ctx, function next() {
+            return dispatch(i + 1);
+          })
+        );
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+  };
+}
+
+// 使用示例
+const middlewares = [
+  async (ctx, next) => {
+    console.log('1');
+    await next();
+    console.log('4');
+  },
+  async (ctx, next) => {
+    console.log('2');
+    await next();
+    console.log('3');
+  }
+];
+
+compose(middlewares)({});
+// 输出：1 → 2 → 3 → 4
+```
+
+---
+
+### Next.js Middleware
+
+**Edge Runtime 中间件**：
+
+```typescript
+// middleware.ts（根目录）
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  // 1. 获取请求信息
+  const { pathname } = request.nextUrl;
+  const token = request.cookies.get('token');
+  
+  // 2. 鉴权逻辑
+  if (pathname.startsWith('/admin') && !token) {
+    // 重定向到登录页
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+  
+  // 3. 添加请求头
+  const response = NextResponse.next();
+  response.headers.set('x-custom-header', 'hello');
+  
+  // 4. 重写路径（内部重定向）
+  if (pathname === '/old-path') {
+    return NextResponse.rewrite(new URL('/new-path', request.url));
+  }
+  
+  return response;
+}
+
+// 配置匹配路径
+export const config = {
+  matcher: [
+    // 匹配所有路径，排除静态资源
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
+};
+```
+
+**Next.js Middleware 的特点**：
+
+| 特性 | Express/Koa | Next.js Middleware |
+|------|-------------|-------------------|
+| **运行环境** | Node.js | Edge Runtime |
+| **执行时机** | 请求到达服务器后 | 请求到达边缘节点时 |
+| **可用 API** | 完整 Node.js API | 受限（无 fs、无原生模块） |
+| **适用场景** | 复杂业务逻辑 | 鉴权、重定向、A/B 测试 |
+
+---
+
+### 中间件对比总结
+
+| 框架 | 模型 | 异步处理 | 特点 |
+|------|------|---------|------|
+| **Express** | 线性 | 不等待 | 简单，但异步控制弱 |
+| **Koa** | 洋葱 | await next() | 优雅的异步控制 |
+| **Next.js** | 单一 | - | Edge Runtime，用于边缘处理 |
+
+---
+
+## 🌊 Stream 流处理
+
+### 四种 Stream 类型
+
+```javascript
+const { Readable, Writable, Duplex, Transform } = require('stream');
+
+// 1. Readable - 可读流
+const readable = new Readable({
+  read(size) {
+    this.push('hello');
+    this.push(null);  // 结束
+  }
+});
+
+// 2. Writable - 可写流
+const writable = new Writable({
+  write(chunk, encoding, callback) {
+    console.log(chunk.toString());
+    callback();
+  }
+});
+
+// 3. Duplex - 双工流（可读可写，读写独立）
+const duplex = new Duplex({
+  read(size) { /* ... */ },
+  write(chunk, encoding, callback) { /* ... */ }
+});
+
+// 4. Transform - 转换流（可读可写，读写关联）
+const transform = new Transform({
+  transform(chunk, encoding, callback) {
+    // 转换数据
+    this.push(chunk.toString().toUpperCase());
+    callback();
+  }
+});
+```
+
+### 实际应用：文件复制
+
+```javascript
+const fs = require('fs');
+
+// ❌ 错误方式：一次性读入内存
+const data = fs.readFileSync('large-file.zip');  // 可能内存溢出
+fs.writeFileSync('copy.zip', data);
+
+// ✅ 正确方式：流式处理
+const readStream = fs.createReadStream('large-file.zip');
+const writeStream = fs.createWriteStream('copy.zip');
+
+readStream.pipe(writeStream);
+
+// 或者使用 pipeline（推荐，自动处理错误）
+const { pipeline } = require('stream/promises');
+
+await pipeline(
+  fs.createReadStream('large-file.zip'),
+  fs.createWriteStream('copy.zip')
+);
+```
+
+### 实际应用：HTTP 响应流
+
+```javascript
+const http = require('http');
+const fs = require('fs');
+
+http.createServer((req, res) => {
+  // ❌ 错误：一次性读入内存
+  // const data = fs.readFileSync('video.mp4');
+  // res.end(data);
+  
+  // ✅ 正确：流式传输
+  const stream = fs.createReadStream('video.mp4');
+  stream.pipe(res);
+}).listen(3000);
+```
+
+### 实际应用：数据转换
+
+```javascript
+const { Transform } = require('stream');
+const fs = require('fs');
+
+// 创建转换流：将文本转为大写
+const upperCaseTransform = new Transform({
+  transform(chunk, encoding, callback) {
+    this.push(chunk.toString().toUpperCase());
+    callback();
+  }
+});
+
+// 使用
+fs.createReadStream('input.txt')
+  .pipe(upperCaseTransform)
+  .pipe(fs.createWriteStream('output.txt'));
+```
+
+---
+
+## ❓ 常见面试题
+
+### 1. Node.js 是单线程吗？
+
+> "Node.js 的**主线程是单线程**的，但它不是完全单线程。
+>
+> JavaScript 代码在主线程（Event Loop）中执行，但 I/O 操作（文件读写、网络请求、DNS 解析等）是在 **libuv 的线程池**中执行的，默认 4 个线程。
+>
+> 另外，Node.js 10+ 提供了 **Worker Threads**，可以创建真正的多线程来处理 CPU 密集型任务。"
+
+```javascript
+// Worker Threads 示例
+const { Worker, isMainThread, parentPort } = require('worker_threads');
+
+if (isMainThread) {
+  // 主线程
+  const worker = new Worker(__filename);
+  worker.on('message', (result) => {
+    console.log('计算结果:', result);
+  });
+  worker.postMessage({ num: 40 });
+} else {
+  // 工作线程
+  parentPort.on('message', ({ num }) => {
+    const result = fibonacci(num);  // CPU 密集型计算
+    parentPort.postMessage(result);
+  });
+}
+```
+
+### 2. 如何处理未捕获的异常？
+
+```javascript
+// 1. 同步异常
+process.on('uncaughtException', (err) => {
+  console.error('未捕获的异常:', err);
+  // 记录日志、发送告警
+  // 然后退出进程（推荐）
+  process.exit(1);
+});
+
+// 2. Promise 异常
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+  // Node.js 15+ 默认会退出进程
+});
+
+// 3. 最佳实践：使用 try-catch 和 .catch()
+async function main() {
+  try {
+    await riskyOperation();
+  } catch (err) {
+    console.error('捕获到错误:', err);
+  }
+}
+```
+
+### 3. Buffer 是什么？
+
+> "Buffer 是 Node.js 用来处理**二进制数据**的类，类似于整数数组，但大小固定，直接操作内存。
+>
+> 常用于处理文件、网络数据、加密等场景。"
+
+```javascript
+// 创建 Buffer
+const buf1 = Buffer.from('Hello', 'utf8');
+const buf2 = Buffer.alloc(10);  // 10 字节，初始化为 0
+const buf3 = Buffer.allocUnsafe(10);  // 10 字节，不初始化（更快但不安全）
+
+// 常用操作
+buf1.toString('utf8');  // 转字符串
+buf1.length;  // 字节长度
+Buffer.concat([buf1, buf2]);  // 合并
+buf1.slice(0, 3);  // 切片
+```
+
+### 4. 如何实现进程间通信？
+
+```javascript
+// 1. 父子进程通信（fork）
+// parent.js
+const { fork } = require('child_process');
+const child = fork('child.js');
+
+child.send({ type: 'start', data: 'hello' });
+child.on('message', (msg) => {
+  console.log('收到子进程消息:', msg);
+});
+
+// child.js
+process.on('message', (msg) => {
+  console.log('收到父进程消息:', msg);
+  process.send({ type: 'result', data: 'world' });
+});
+```
+
+```javascript
+// 2. Cluster 模式
+const cluster = require('cluster');
+const http = require('http');
+const numCPUs = require('os').cpus().length;
+
+if (cluster.isMaster) {
+  // 主进程：创建工作进程
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+  
+  cluster.on('exit', (worker) => {
+    console.log(`工作进程 ${worker.process.pid} 退出`);
+    cluster.fork();  // 重启
+  });
+} else {
+  // 工作进程：处理请求
+  http.createServer((req, res) => {
+    res.end(`Worker ${process.pid}`);
+  }).listen(3000);
+}
+```
+
+### 5. CommonJS 和 ES Modules 的区别？
+
+| 特性 | CommonJS | ES Modules |
+|------|----------|------------|
+| **语法** | `require()` / `module.exports` | `import` / `export` |
+| **加载时机** | 运行时 | 编译时 |
+| **加载方式** | 同步 | 异步 |
+| **值类型** | 值的拷贝 | 值的引用 |
+| **循环依赖** | 返回已执行部分 | 报错（TDZ） |
+| **this** | 指向 module.exports | undefined |
+
+```javascript
+// CommonJS
+const fs = require('fs');
+module.exports = { foo: 'bar' };
+
+// ES Modules
+import fs from 'fs';
+export const foo = 'bar';
+export default { foo: 'bar' };
+```
+
+### 6. 如何优化 Node.js 性能？
+
+> "我会从几个方面优化：
+>
+> 1. **使用 Stream** 处理大文件，避免一次性加载到内存
+> 2. **使用缓存**（Redis、内存缓存）减少数据库查询
+> 3. **使用 Cluster** 或 PM2 利用多核 CPU
+> 4. **异步操作**避免阻塞事件循环
+> 5. **使用 Worker Threads** 处理 CPU 密集型任务
+> 6. **数据库优化**：索引、连接池、N+1 问题"
+
+---
+
+## 🎓 面试话术
+
+### 问题：Node.js 事件循环和浏览器有什么区别？
+
+> "主要有三个区别：
+>
+> 1. **阶段不同**：Node.js 有六个阶段（timers、poll、check 等），浏览器只有宏任务和微任务两个队列。
+>
+> 2. **特有 API**：Node.js 有 `process.nextTick` 和 `setImmediate`，浏览器有 `requestAnimationFrame`。
+>
+> 3. **微任务执行时机**：Node.js 11+ 和浏览器一致，每执行完一个宏任务就执行所有微任务。之前是执行完一个阶段的所有回调才执行微任务。
+>
+> 另外，`process.nextTick` 优先级最高，会在当前操作完成后立即执行，甚至在微任务之前。"
+
+### 问题：Express 和 Koa 的中间件有什么区别？
+
+> "最大的区别是**异步处理方式**。
+>
+> Express 的 `next()` 不会等待后续中间件完成，所以在异步场景下控制流程比较困难。
+>
+> Koa 使用 `await next()`，会等待后续中间件执行完成再继续，形成真正的**洋葱模型**。这样可以很方便地在中间件中做前置处理和后置处理，比如计算请求耗时、统一错误处理等。
+>
+> 在我的项目中，如果需要精确控制中间件执行顺序，我会选择 Koa。"
+
+### 问题：什么时候用 Stream？
+
+> "处理**大文件**或**实时数据**时用 Stream。
+>
+> 比如文件上传下载、视频流、日志处理等场景。Stream 的优势是不需要一次性把数据加载到内存，而是分块处理，内存占用恒定。
+>
+> 在我的项目中，SSE 流式响应就是用 Stream 实现的，大模型生成的内容通过 ReadableStream 实时推送给前端。"
+
+---
+
+## 🔗 相关资源
+
+- [Node.js 官方文档 - Event Loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick)
+- [Koa 中间件原理](https://github.com/koajs/compose)
+- [Node.js Stream 文档](https://nodejs.org/api/stream.html)
