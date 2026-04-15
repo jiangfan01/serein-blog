@@ -519,23 +519,56 @@ handleSSEEvent: (sessionId: string, event: StreamEvent) => {
 }
 ```
 
-**批量处理优化**:
+**批量处理优化（按帧控制，而非按数量）**:
+
 ```typescript
-// 使用 requestAnimationFrame 合并多个事件更新
+// ⭐ 核心策略：不按数量控制，按帧控制
+// 每收到一个 chunk 就无脑 push 进 Buffer
+// RAF 在每一帧重绘前，检查 Buffer 里有没有数据
+// 如果有，就把 Buffer 全部消费掉（flush）并执行一次 setState
+
 function scheduleEventBatch(sessionId: string, event: StreamEvent, processCallback: () => void) {
+  // 1. 将事件添加到缓冲区（无脑 push）
   const buffer = eventBuffers.get(sessionId) || [];
   buffer.push(event);
   eventBuffers.set(sessionId, buffer);
 
+  // 2. 如果已有待处理的 RAF，跳过（避免重复调度）
   if (pendingUpdates.has(sessionId)) return;
 
+  // 3. 使用 RAF 在下一帧重绘前处理
   const frameId = requestAnimationFrame(() => {
     pendingUpdates.delete(sessionId);
-    processCallback();
+    
+    // 4. 消费 Buffer 中的所有事件（flush）
+    processCallback();  // 内部会调用 flushEventBuffer
   });
 
   pendingUpdates.set(sessionId, frameId);
 }
+```
+
+**为什么这样设计？**
+
+1. **避免卡顿**：如果按数量控制（如 50 个一组），网络慢时用户要等 5 秒才能看到更新
+2. **保证流畅**：RAF 跟着显示器刷新率走（16.6ms @ 60fps），最多延迟 16ms 就会上屏
+3. **自动批量**：高频事件会自动合并到同一帧，低频事件也能及时显示
+
+**实际效果**：
+
+```
+网络快（100 chunk/s）:
+  - 每帧处理约 1-2 个 chunk
+  - 60fps 流畅渲染
+
+网络慢（10 chunk/s）:
+  - 每帧处理约 0.16 个 chunk
+  - 收到 1 个 chunk 后，最多延迟 16ms 就显示
+  - 不会等待凑齐 50 个
+
+网络极慢（1 chunk/s）:
+  - 收到 1 个 chunk 后，立即在下一帧显示
+  - 延迟 < 16ms
 ```
 
 #### 3. 断线重连逻辑
@@ -1013,33 +1046,88 @@ interface ConversationMessage {
 
 ## ⚡ 性能优化
 
-### 1. 批量事件处理
+### 1. 批量事件处理（按帧控制）⭐
 
 **问题**: SSE 事件频繁触发，导致频繁的 React 渲染
 
-**解决方案**: 使用 `requestAnimationFrame` 批量处理事件
+**错误方案**: 按数量控制（如 50 个一组）
 
 ```typescript
+// ❌ 错误：按数量控制
+let buffer = [];
+readSSE((chunk) => {
+  buffer.push(chunk);
+  if (buffer.length >= 50) {  // 等待凑齐 50 个
+    setState(buffer);
+    buffer = [];
+  }
+});
+
+// 问题：网络慢时，用户要等 5 秒才能看到更新（卡顿的块状输出）
+```
+
+**正确方案**: 按帧控制（RAF）
+
+```typescript
+// ✅ 正确：按帧控制
 function scheduleEventBatch(sessionId: string, event: StreamEvent, processCallback: () => void) {
-  // 将事件添加到缓冲区
+  // 1. 每收到一个 chunk 就无脑 push 进 Buffer
   const buffer = eventBuffers.get(sessionId) || [];
   buffer.push(event);
   eventBuffers.set(sessionId, buffer);
 
-  // 如果已有待处理的更新，跳过
+  // 2. 如果已有待处理的 RAF，跳过（避免重复调度）
   if (pendingUpdates.has(sessionId)) return;
 
-  // 使用 requestAnimationFrame 批量处理
+  // 3. 使用 RAF 在下一帧重绘前处理
   const frameId = requestAnimationFrame(() => {
     pendingUpdates.delete(sessionId);
-    processCallback();
+    
+    // 4. 消费 Buffer 中的所有事件（flush）
+    processCallback();  // 内部会调用 flushEventBuffer
   });
 
   pendingUpdates.set(sessionId, frameId);
 }
 ```
 
-**效果**: 将多个事件合并为一次渲染，减少渲染次数
+**核心策略**：
+
+1. **不按数量控制，按帧控制**
+2. **每收到一个 chunk 就无脑 push 进 Buffer**
+3. **RAF 在每一帧重绘前，检查 Buffer 里有没有数据**
+4. **如果有，就把 Buffer 全部消费掉（flush）并执行一次 setState**
+
+**为什么这样设计？**
+
+| 方案 | 网络快（100 chunk/s） | 网络慢（10 chunk/s） | 网络极慢（1 chunk/s） |
+|------|---------------------|--------------------|--------------------|
+| **按数量（50 个）** | 0.5s 更新一次 | 5s 更新一次 ❌ | 50s 更新一次 ❌❌ |
+| **按帧（RAF）** | 每帧 1-2 个，60fps ✅ | 每帧 0.16 个，< 16ms ✅ | 收到立即显示，< 16ms ✅ |
+
+**实际效果**：
+
+```
+网络快（100 chunk/s）:
+  - 每帧处理约 1-2 个 chunk
+  - 自动批量合并，60fps 流畅渲染
+
+网络慢（10 chunk/s）:
+  - 每帧处理约 0.16 个 chunk
+  - 收到 1 个 chunk 后，最多延迟 16ms 就显示
+  - 不会等待凑齐 50 个
+
+网络极慢（1 chunk/s）:
+  - 收到 1 个 chunk 后，立即在下一帧显示
+  - 延迟 < 16ms
+  - 实现真正的丝滑流式输出
+```
+
+**面试话术**：
+
+> "我的策略是只维护一个 Buffer 数组。readSSE 每收到一个 chunk 就无脑 push 进去。同时，我挂载一个 RAF 循环，在每一帧重绘前，去检查 Buffer 里有没有数据。如果有，就把 Buffer 全部消费掉（flush）并执行一次 setState，然后清空 Buffer。
+>
+> 这样既保证了绝对不会因为高频更新掉帧（RAF 限制在 60fps），又保证了只要有数据，最多延迟 16ms 就会上屏，实现真正的丝滑流式输出。"
 
 ### 2. RAF 优化渲染
 
