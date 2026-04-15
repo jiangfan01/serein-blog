@@ -1,0 +1,544 @@
+---
+title: Vue 3 更新机制深度解析
+description: Vue 3 响应式系统、Diff 算法、与 React Fiber 的对比
+---
+
+# Vue 3 更新机制深度解析
+
+> Vue 和 React 都有虚拟 DOM 和 Diff 算法，但更新机制完全不同。React 靠 Fiber 时间切片，Vue 靠什么？
+
+## 🎯 核心区别：一句话总结
+
+| 框架 | 更新策略 | 核心机制 |
+|------|---------|---------|
+| **React** | 拉取（Pull） | 调用 setState → 从根节点开始 Diff 整棵树 |
+| **Vue** | 推送（Push） | 数据变化 → 精确知道哪些组件需要更新 |
+
+**React**：不知道哪里变了，只能从头 Diff 一遍（所以需要 Fiber 时间切片）
+**Vue**：精确知道哪里变了，直接更新那个组件（所以不需要时间切片）
+
+---
+
+## 🔥 Vue 3 的响应式系统
+
+### 1. Proxy 代理
+
+Vue 3 用 `Proxy` 拦截数据的读写：
+
+```javascript
+const state = reactive({ count: 0 });
+
+// 内部实现（简化版）
+function reactive(target) {
+  return new Proxy(target, {
+    get(target, key) {
+      track(target, key);  // ⭐ 收集依赖：谁在读这个数据？
+      return target[key];
+    },
+    set(target, key, value) {
+      target[key] = value;
+      trigger(target, key);  // ⭐ 触发更新：通知所有依赖这个数据的组件
+      return true;
+    }
+  });
+}
+```
+
+### 2. 依赖收集（Track）
+
+当组件渲染时，会读取响应式数据，Vue 会记录"谁依赖了这个数据"：
+
+```javascript
+// 全局变量：当前正在渲染的组件
+let activeEffect = null;
+
+// 依赖收集
+function track(target, key) {
+  if (activeEffect) {
+    // 记录：这个 key 被 activeEffect（当前组件）依赖了
+    const depsMap = targetMap.get(target) || new Map();
+    const deps = depsMap.get(key) || new Set();
+    deps.add(activeEffect);  // ⭐ 把当前组件加入依赖列表
+    depsMap.set(key, deps);
+    targetMap.set(target, depsMap);
+  }
+}
+```
+
+**举例**：
+
+```vue
+<template>
+  <div>{{ count }}</div>  <!-- 读取 count -->
+</template>
+
+<script setup>
+const state = reactive({ count: 0 });
+</script>
+```
+
+渲染时，Vue 知道：**这个组件依赖了 `state.count`**
+
+### 3. 触发更新（Trigger）
+
+当数据变化时，Vue 精确通知依赖这个数据的组件：
+
+```javascript
+function trigger(target, key) {
+  const depsMap = targetMap.get(target);
+  if (!depsMap) return;
+  
+  const deps = depsMap.get(key);
+  if (deps) {
+    deps.forEach(effect => {
+      // ⭐ 只更新依赖这个 key 的组件，不是整棵树！
+      effect.run();
+    });
+  }
+}
+```
+
+**举例**：
+
+```javascript
+state.count = 1;  // 修改 count
+
+// Vue 内部：
+// 1. 查找：谁依赖了 state.count？
+// 2. 找到：ComponentA、ComponentB
+// 3. 只更新 ComponentA、ComponentB，其他组件不动
+```
+
+---
+
+## 🆚 React vs Vue 更新流程对比
+
+### React 的更新流程
+
+```
+setState({ count: 1 })
+    ↓
+调度更新（Scheduler）
+    ↓
+从 Root 开始 Diff 整棵 Fiber 树  ← 不知道哪里变了，只能全部检查
+    ↓
+时间切片（5ms 检查一次）
+    ↓
+找到变化的节点
+    ↓
+Commit 阶段更新 DOM
+```
+
+**问题**：即使只改了一个叶子节点，也要从根节点开始 Diff。
+**解决**：Fiber 时间切片，把长任务拆成小任务。
+
+### Vue 的更新流程
+
+```
+state.count = 1
+    ↓
+Proxy 的 set 拦截
+    ↓
+trigger(state, 'count')
+    ↓
+查找依赖 count 的组件（精确知道！）
+    ↓
+只更新这些组件的虚拟 DOM
+    ↓
+Diff 这些组件（不是整棵树）
+    ↓
+更新 DOM
+```
+
+**优势**：精确知道哪些组件需要更新，不需要从根节点开始。
+**结果**：更新范围小，不需要时间切片。
+
+---
+
+## 🌳 Vue 3 的 Diff 算法
+
+### 1. 同层比较
+
+和 React 一样，Vue 也只比较同层节点：
+
+```
+旧树：        新树：
+  A             A
+ / \           / \
+B   C         B   D   ← 只比较这一层
+```
+
+### 2. 双端对比（Vue 2）
+
+Vue 2 使用双端对比算法：
+
+```javascript
+// 四个指针
+let oldStartIdx = 0;
+let oldEndIdx = oldChildren.length - 1;
+let newStartIdx = 0;
+let newEndIdx = newChildren.length - 1;
+
+while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+  // 1. 旧头 vs 新头
+  if (sameVnode(oldStart, newStart)) {
+    patch(oldStart, newStart);
+    oldStartIdx++;
+    newStartIdx++;
+  }
+  // 2. 旧尾 vs 新尾
+  else if (sameVnode(oldEnd, newEnd)) {
+    patch(oldEnd, newEnd);
+    oldEndIdx--;
+    newEndIdx--;
+  }
+  // 3. 旧头 vs 新尾
+  else if (sameVnode(oldStart, newEnd)) {
+    patch(oldStart, newEnd);
+    // 移动节点
+    oldStartIdx++;
+    newEndIdx--;
+  }
+  // 4. 旧尾 vs 新头
+  else if (sameVnode(oldEnd, newStart)) {
+    patch(oldEnd, newStart);
+    // 移动节点
+    oldEndIdx--;
+    newStartIdx++;
+  }
+  // 5. 都不匹配，用 key 查找
+  else {
+    // ...
+  }
+}
+```
+
+### 3. 最长递增子序列（Vue 3）
+
+Vue 3 优化了 Diff 算法，使用**最长递增子序列**减少 DOM 移动：
+
+```javascript
+// 新节点：[A, B, C, D, E]
+// 旧节点：[A, C, B, E, D]
+
+// 1. 找到新节点在旧节点中的位置
+// A:0, B:2, C:1, D:4, E:3
+// 位置数组：[0, 2, 1, 4, 3]
+
+// 2. 计算最长递增子序列
+// [0, 1, 3] → 对应 [A, C, E]
+
+// 3. 这些节点不需要移动，只移动其他节点
+// 只需要移动 B 和 D
+```
+
+**优势**：最小化 DOM 操作次数。
+
+---
+
+## ⚡ Vue 3 的编译时优化
+
+Vue 3 在编译时做了很多优化，这是 React 做不到的（因为 JSX 是纯 JavaScript）。
+
+### 1. 静态提升（Static Hoisting）
+
+```vue
+<template>
+  <div>
+    <p>静态文本</p>           <!-- 永远不变 -->
+    <p>{{ dynamicText }}</p>  <!-- 动态 -->
+  </div>
+</template>
+```
+
+编译后：
+
+```javascript
+// ⭐ 静态节点提升到渲染函数外部，只创建一次
+const _hoisted_1 = createVNode("p", null, "静态文本");
+
+function render() {
+  return createVNode("div", null, [
+    _hoisted_1,  // 复用，不重新创建
+    createVNode("p", null, dynamicText.value)
+  ]);
+}
+```
+
+### 2. 补丁标记（Patch Flags）
+
+```vue
+<template>
+  <div :class="cls" :id="id">{{ text }}</div>
+</template>
+```
+
+编译后：
+
+```javascript
+createVNode("div", {
+  class: cls,
+  id: id
+}, text, 
+  PatchFlags.CLASS | PatchFlags.PROPS | PatchFlags.TEXT
+  // ⭐ 告诉 Diff：只有 class、props、text 可能变化
+)
+```
+
+Diff 时，Vue 只检查标记的部分，跳过其他属性。
+
+### 3. 树结构打平（Block Tree）
+
+```vue
+<template>
+  <div>
+    <p>静态</p>
+    <p>静态</p>
+    <p>{{ dynamic }}</p>  <!-- 动态 -->
+    <p>静态</p>
+  </div>
+</template>
+```
+
+编译后，Vue 会把动态节点"打平"到一个数组：
+
+```javascript
+const block = {
+  dynamicChildren: [
+    // ⭐ 只有动态节点，跳过静态节点
+    createVNode("p", null, dynamic, PatchFlags.TEXT)
+  ]
+};
+```
+
+Diff 时，只遍历 `dynamicChildren`，不遍历整棵树。
+
+---
+
+## 🤔 为什么 Vue 不需要 Fiber？
+
+### 1. 更新范围小
+
+React：不知道哪里变了 → 从根节点 Diff 整棵树 → 可能很慢 → 需要时间切片
+
+Vue：精确知道哪里变了 → 只 Diff 相关组件 → 很快 → 不需要时间切片
+
+### 2. 编译时优化
+
+Vue 的模板在编译时就知道哪些是静态的、哪些是动态的，运行时可以跳过静态部分。
+
+React 的 JSX 是纯 JavaScript，编译时无法分析，运行时必须全部检查。
+
+### 3. 组件粒度更新
+
+```vue
+<!-- Vue：只有 ChildA 会更新 -->
+<template>
+  <div>
+    <ChildA :count="count" />  <!-- count 变了，更新 -->
+    <ChildB />                  <!-- 不依赖 count，不更新 -->
+    <ChildC />                  <!-- 不依赖 count，不更新 -->
+  </div>
+</template>
+```
+
+```jsx
+// React：默认所有子组件都会重新渲染
+function Parent() {
+  const [count, setCount] = useState(0);
+  return (
+    <div>
+      <ChildA count={count} />  {/* 更新 */}
+      <ChildB />                 {/* 也会重新渲染！ */}
+      <ChildC />                 {/* 也会重新渲染！ */}
+    </div>
+  );
+}
+
+// 需要手动优化
+const ChildB = React.memo(() => { ... });
+```
+
+---
+
+## 📊 性能对比
+
+| 场景 | React | Vue 3 |
+|------|-------|-------|
+| **小型应用** | 差不多 | 差不多 |
+| **大型列表** | 需要虚拟滚动 | 需要虚拟滚动 |
+| **频繁更新** | Fiber 时间切片保证不卡 | 响应式精确更新，本身就快 |
+| **静态内容多** | 每次都要 Diff | 编译时跳过静态内容 |
+| **深层组件树** | 从根节点 Diff | 只更新相关组件 |
+
+**结论**：
+- React 靠 **Fiber 时间切片** 解决"不知道哪里变了"的问题
+- Vue 靠 **响应式系统** 精确知道哪里变了，从源头解决问题
+
+---
+
+## 🎓 面试话术
+
+### 问题：Vue 和 React 的更新机制有什么区别？
+
+> "React 和 Vue 的核心区别在于**更新策略**。
+>
+> React 是**拉取（Pull）模式**。调用 setState 后，React 不知道具体哪里变了，只能从根节点开始 Diff 整棵 Fiber 树。为了避免长时间阻塞主线程，React 引入了 Fiber 架构和时间切片，把渲染任务拆成小块，每 5ms 检查一次是否需要让出控制权。
+>
+> Vue 是**推送（Push）模式**。通过 Proxy 实现响应式，在数据被读取时收集依赖，在数据变化时精确通知依赖这个数据的组件。Vue 精确知道哪些组件需要更新，不需要从根节点开始 Diff，所以不需要时间切片。
+>
+> 另外，Vue 的模板在编译时会做静态提升、补丁标记、Block Tree 等优化，运行时可以跳过静态内容。React 的 JSX 是纯 JavaScript，无法在编译时做这些优化。"
+
+### 问题：Vue 为什么不需要 Fiber？
+
+> "因为 Vue 的响应式系统已经解决了'不知道哪里变了'的问题。
+>
+> React 需要 Fiber 是因为它不知道哪个组件的状态变了，只能从根节点开始检查整棵树，这可能很耗时，所以需要时间切片。
+>
+> Vue 通过 Proxy 在数据变化时精确知道哪些组件依赖这个数据，只更新这些组件，更新范围很小，通常在 16ms 内就能完成，不需要时间切片。"
+
+---
+
+## 🔍 Vue 3 响应式源码简析
+
+### 核心文件结构
+
+```
+packages/reactivity/src/
+├── reactive.ts      # reactive() 函数
+├── ref.ts           # ref() 函数
+├── effect.ts        # 依赖收集和触发
+├── computed.ts      # computed() 函数
+└── baseHandlers.ts  # Proxy handlers
+```
+
+### 简化版实现
+
+```typescript
+// 存储依赖关系
+const targetMap = new WeakMap<object, Map<string, Set<ReactiveEffect>>>();
+
+// 当前正在执行的 effect
+let activeEffect: ReactiveEffect | null = null;
+
+// 依赖收集
+function track(target: object, key: string) {
+  if (!activeEffect) return;
+  
+  let depsMap = targetMap.get(target);
+  if (!depsMap) {
+    targetMap.set(target, (depsMap = new Map()));
+  }
+  
+  let deps = depsMap.get(key);
+  if (!deps) {
+    depsMap.set(key, (deps = new Set()));
+  }
+  
+  deps.add(activeEffect);
+}
+
+// 触发更新
+function trigger(target: object, key: string) {
+  const depsMap = targetMap.get(target);
+  if (!depsMap) return;
+  
+  const deps = depsMap.get(key);
+  if (deps) {
+    deps.forEach(effect => effect.run());
+  }
+}
+
+// 创建响应式对象
+function reactive<T extends object>(target: T): T {
+  return new Proxy(target, {
+    get(target, key: string) {
+      track(target, key);
+      return Reflect.get(target, key);
+    },
+    set(target, key: string, value) {
+      const result = Reflect.set(target, key, value);
+      trigger(target, key);
+      return result;
+    }
+  });
+}
+
+// effect 函数
+function effect(fn: () => void) {
+  const _effect = new ReactiveEffect(fn);
+  _effect.run();
+}
+
+class ReactiveEffect {
+  constructor(public fn: () => void) {}
+  
+  run() {
+    activeEffect = this;
+    this.fn();
+    activeEffect = null;
+  }
+}
+```
+
+### 使用示例
+
+```typescript
+const state = reactive({ count: 0 });
+
+// 创建一个 effect，它会自动收集依赖
+effect(() => {
+  console.log('count is:', state.count);
+  // 读取 state.count 时，track() 被调用
+  // 当前 effect 被添加到 state.count 的依赖列表
+});
+
+// 修改数据
+state.count = 1;
+// trigger() 被调用
+// 找到依赖 state.count 的 effect
+// 执行 effect，打印 "count is: 1"
+```
+
+---
+
+## 📚 总结
+
+### Vue 3 更新机制的核心
+
+1. **响应式系统**：Proxy 拦截读写，track 收集依赖，trigger 触发更新
+2. **精确更新**：知道哪些组件依赖哪些数据，只更新相关组件
+3. **编译优化**：静态提升、补丁标记、Block Tree
+4. **高效 Diff**：最长递增子序列，最小化 DOM 操作
+
+### 与 React 的对比
+
+| 维度 | React | Vue 3 |
+|------|-------|-------|
+| **更新策略** | Pull（拉取） | Push（推送） |
+| **知道哪里变了吗** | 不知道 | 精确知道 |
+| **Diff 范围** | 整棵树 | 相关组件 |
+| **时间切片** | 需要（Fiber） | 不需要 |
+| **编译优化** | 有限 | 大量 |
+| **手动优化** | React.memo | 自动 |
+
+### 各自的优势
+
+**React**：
+- 更灵活（JSX 是纯 JavaScript）
+- 生态更丰富
+- 适合复杂交互的大型应用
+
+**Vue**：
+- 更简单（模板语法）
+- 性能开箱即用
+- 适合快速开发
+
+---
+
+## 🔗 相关资源
+
+- [Vue 3 响应式原理](https://vuejs.org/guide/extras/reactivity-in-depth.html)
+- [Vue 3 源码](https://github.com/vuejs/core)
+- [Vue 3 编译优化](https://vuejs.org/guide/extras/rendering-mechanism.html)
+- [React Fiber 架构](https://github.com/acdlite/react-fiber-architecture)
