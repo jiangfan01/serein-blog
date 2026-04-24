@@ -11,7 +11,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { Bot } from "lucide-react";
 import { MarkdownRenderer } from "./markdown-renderer";
-import { ToolStatus, ThinkingStatus } from "./tool-status";
+import { ToolCallList, ThinkingStatus } from "./tool-status";
 import type { ChatMessage } from "@/hooks/use-chat";
 
 interface ChatMessagesProps {
@@ -110,22 +110,30 @@ function AssistantContent({
   isLast: boolean;
   loading: boolean;
 }) {
-  if (message.content) {
-    return (
-      <div className="text-sm text-[var(--text-primary)] leading-relaxed">
-        <MarkdownRenderer content={message.content} />
-      </div>
-    );
-  }
+  const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
+  const hasContent = !!message.content;
+  const isThinking = isLast && loading && !hasToolCalls && !hasContent;
+  const hasRunningTool = message.toolCalls?.some((c) => c.status === "running");
 
-  if (isLast && loading) {
-    if (message.toolStatus) {
-      return <ToolStatus status={message.toolStatus} tool={message.toolName} />;
-    }
-    return <ThinkingStatus />;
-  }
+  return (
+    <>
+      {/* 工具调用记录（始终展示，不会消失） */}
+      {hasToolCalls && <ToolCallList records={message.toolCalls!} />}
 
-  return null;
+      {/* 文本内容 */}
+      {hasContent && (
+        <div className="text-sm text-[var(--text-primary)] leading-relaxed">
+          <MarkdownRenderer content={message.content} />
+        </div>
+      )}
+
+      {/* 思考中（没有工具调用也没有内容时） */}
+      {isThinking && <ThinkingStatus />}
+
+      {/* 有工具在跑但还没出文本（等待模型第二次调用） */}
+      {isLast && loading && hasRunningTool && !hasContent && null}
+    </>
+  );
 }
 
 function EmptyState() {

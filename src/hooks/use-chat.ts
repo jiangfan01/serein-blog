@@ -18,8 +18,17 @@ import { useSSEParser } from "./use-sse-parser";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  toolStatus?: string; // "正在搜索博客笔记..." 等
-  toolName?: string; // "rag_search" | "web_search" — 用于渲染不同图标
+  toolStatus?: string; // 当前正在执行的工具状态（进行中才有）
+  toolName?: string;
+  toolCalls?: ToolCallRecord[]; // 已完成的工具调用记录（永久保留）
+}
+
+// 工具调用记录
+export interface ToolCallRecord {
+  tool: string; // "rag_search" | "web_search"
+  args: Record<string, unknown>;
+  result: string;
+  status: "running" | "done" | "error";
 }
 
 // 工具名到中文标签的映射
@@ -92,27 +101,6 @@ export function useChat() {
   }, []);
 
   /**
-   * 更新最后一条 assistant 消息的工具状态
-   */
-  const setToolStatus = useCallback(
-    (status: string | undefined, toolName?: string) => {
-      setMessages((prev) => {
-        const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last?.role === "assistant") {
-          updated[updated.length - 1] = {
-            ...last,
-            toolStatus: status,
-            toolName: status ? toolName : undefined,
-          };
-        }
-        return updated;
-      });
-    },
-    []
-  );
-
-  /**
    * 发送消息
    */
   const sendMessage = useCallback(
@@ -140,13 +128,45 @@ export function useChat() {
           bufferRef.current += content;
         },
 
-        onToolStart: (tool, _args) => {
+        onToolStart: (tool, args) => {
           const label = TOOL_LABELS[tool] || tool;
-          setToolStatus(`正在${label}...`, tool);
+          // 添加一条 running 状态的工具记录
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.role === "assistant") {
+              const calls = last.toolCalls || [];
+              updated[updated.length - 1] = {
+                ...last,
+                toolStatus: `正在${label}...`,
+                toolName: tool,
+                toolCalls: [...calls, { tool, args, result: "", status: "running" }],
+              };
+            }
+            return updated;
+          });
         },
 
-        onToolEnd: (_tool, _result) => {
-          setToolStatus(undefined);
+        onToolEnd: (tool, result) => {
+          // 把最后一条 running 的工具记录标记为 done
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.role === "assistant" && last.toolCalls) {
+              const calls = [...last.toolCalls];
+              const idx = calls.findLastIndex((c) => c.tool === tool && c.status === "running");
+              if (idx >= 0) {
+                calls[idx] = { ...calls[idx], result, status: "done" };
+              }
+              updated[updated.length - 1] = {
+                ...last,
+                toolStatus: undefined,
+                toolName: undefined,
+                toolCalls: calls,
+              };
+            }
+            return updated;
+          });
         },
 
         onError: (message) => {
@@ -163,7 +183,7 @@ export function useChat() {
         },
       });
     },
-    [loading, streamChat, startTypewriter, stopTypewriter, setToolStatus]
+    [loading, streamChat, startTypewriter, stopTypewriter]
   );
 
   return {
