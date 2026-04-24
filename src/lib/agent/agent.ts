@@ -60,6 +60,45 @@ function createAgentLLM() {
 }
 
 /**
+ * 创建不绑定工具的 LLM，用于工具结果回填后的最终总结。
+ * 这里不再开放工具，避免模型在第二轮继续产生 tool_calls 而不输出正文。
+ */
+function createAnswerLLM() {
+  return new ChatOpenAI({
+    model: "kimi-k2-0711-preview",
+    apiKey: process.env.MOONSHOT_API_KEY,
+    configuration: {
+      baseURL: "https://api.moonshot.cn/v1",
+    },
+    temperature: 0,
+    streaming: true,
+  });
+}
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (
+          item &&
+          typeof item === "object" &&
+          "text" in item &&
+          typeof item.text === "string"
+        ) {
+          return item.text;
+        }
+        return "";
+      })
+      .join("");
+  }
+
+  return "";
+}
+
+/**
  * 执行工具调用
  */
 async function executeTool(
@@ -82,6 +121,20 @@ async function executeTool(
   }
 }
 
+async function* streamFinalAnswer(
+  llm: ChatOpenAI,
+  messages: BaseMessage[]
+): AsyncGenerator<SSEEvent, void, unknown> {
+  const stream = await llm.stream(messages);
+
+  for await (const chunk of stream) {
+    const content = extractTextContent(chunk.content);
+    if (content) {
+      yield { type: "text_delta", content };
+    }
+  }
+}
+
 /**
  * Agent 主函数
  *
@@ -92,6 +145,8 @@ export async function* runAgent(
   question: string
 ): AsyncGenerator<SSEEvent, void, unknown> {
   const llm = createAgentLLM();
+  const answerLLM = createAnswerLLM();
+  const maxToolRounds = 3;
 
   const messages: BaseMessage[] = [
     new SystemMessage(SYSTEM_PROMPT),
@@ -102,58 +157,45 @@ export async function* runAgent(
   // 通知前端：模型开始思考
   yield { type: "thinking" };
 
-  const response = await llm.invoke(messages);
-  const aiMessage = response as AIMessage;
+  for (let round = 0; round < maxToolRounds; round += 1) {
+    const response = await llm.invoke(messages);
+    const aiMessage = response as AIMessage;
 
-  // 模型决定直接回答，不需要工具
-  if (!aiMessage.tool_calls || aiMessage.tool_calls.length === 0) {
-    // 重新做一次流式调用
-    const stream = await llm.stream(messages);
-    for await (const chunk of stream) {
-      if (typeof chunk.content === "string" && chunk.content) {
-        yield { type: "text_delta", content: chunk.content };
-      }
+    // 模型判断不再需要工具，进入最终回答阶段。
+    if (!aiMessage.tool_calls || aiMessage.tool_calls.length === 0) {
+      yield* streamFinalAnswer(answerLLM, messages);
+      return;
     }
-    return;
-  }
 
-  // ===== 模型要调用工具 =====
-  messages.push(aiMessage);
+    messages.push(aiMessage);
 
-  for (const toolCall of aiMessage.tool_calls) {
-    // 通知前端：开始调用工具
-    yield {
-      type: "tool_start",
-      tool: toolCall.name,
-      args: toolCall.args,
-    };
+    for (const toolCall of aiMessage.tool_calls) {
+      // 通知前端：开始调用工具
+      yield {
+        type: "tool_start",
+        tool: toolCall.name,
+        args: toolCall.args,
+      };
 
-    // 执行工具
-    const result = await executeTool(toolCall.name, toolCall.args);
+      // 执行工具
+      const result = await executeTool(toolCall.name, toolCall.args);
 
-    // 通知前端：工具调用完成
-    yield {
-      type: "tool_end",
-      tool: toolCall.name,
-      result:
-        result.length > 200 ? result.slice(0, 200) + "..." : result,
-    };
+      // 通知前端：工具调用完成
+      yield {
+        type: "tool_end",
+        tool: toolCall.name,
+        result: result.length > 200 ? result.slice(0, 200) + "..." : result,
+      };
 
-    // 把工具结果加入消息历史
-    messages.push(
-      new ToolMessage({
-        content: result,
-        tool_call_id: toolCall.id!,
-      })
-    );
-  }
-
-  // ===== 第二次调用模型（流式，生成最终回答）=====
-  const finalStream = await llm.stream(messages);
-
-  for await (const chunk of finalStream) {
-    if (typeof chunk.content === "string" && chunk.content) {
-      yield { type: "text_delta", content: chunk.content };
+      // 把工具结果加入消息历史
+      messages.push(
+        new ToolMessage({
+          content: result,
+          tool_call_id: toolCall.id!,
+        })
+      );
     }
   }
+
+  yield* streamFinalAnswer(answerLLM, messages);
 }
