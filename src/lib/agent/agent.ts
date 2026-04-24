@@ -98,6 +98,10 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+function createToolPreview(result: string): string {
+  return result.length > 2000 ? `${result.slice(0, 2000)}...` : result;
+}
+
 /**
  * 执行工具调用
  */
@@ -184,7 +188,7 @@ export async function* runAgent(
       yield {
         type: "tool_end",
         tool: toolCall.name,
-        result: result.length > 200 ? result.slice(0, 200) + "..." : result,
+        result: createToolPreview(result),
       };
 
       // 把工具结果加入消息历史

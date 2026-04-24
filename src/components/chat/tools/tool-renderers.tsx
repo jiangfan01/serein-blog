@@ -1,7 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { BookOpen, Globe, Terminal, type LucideIcon } from "lucide-react";
+import {
+  BookOpen,
+  ExternalLink,
+  Globe,
+  Terminal,
+  type LucideIcon,
+} from "lucide-react";
 import type { ToolCallRecord } from "@/hooks/use-chat";
 
 type ToolMeta = {
@@ -61,9 +67,15 @@ function RagSearchResult({ record }: ToolRendererProps) {
 }
 
 function WebSearchResult({ record }: ToolRendererProps) {
+  const parsed = parseTavilyResult(record.result);
+
   return (
     <ToolOutputBlock title="搜索结果">
-      <ResultText value={record.result} />
+      {parsed.items.length > 0 ? (
+        <WebSourceList answer={parsed.answer} items={parsed.items} />
+      ) : (
+        <ResultText value={record.result} />
+      )}
     </ToolOutputBlock>
   );
 }
@@ -102,6 +114,58 @@ function ResultText({ value }: { value: string }) {
   );
 }
 
+function WebSourceList({
+  answer,
+  items,
+}: {
+  answer?: string;
+  items: WebSourceItem[];
+}) {
+  return (
+    <div className="space-y-3">
+      {answer && (
+        <p className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[var(--text-tertiary)]">
+          {answer}
+        </p>
+      )}
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <a
+            key={`${item.index}-${item.url}`}
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group/source block rounded-md border border-[var(--border-subtle)] bg-[var(--surface)]/70 px-3 py-2 transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--surface)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-[var(--text-quaternary)]">
+                    {String(item.index).padStart(2, "0")}
+                  </span>
+                  <span className="line-clamp-1 text-xs font-medium text-[var(--text-secondary)] group-hover/source:text-[var(--accent)]">
+                    {item.title}
+                  </span>
+                </div>
+                {item.content && (
+                  <p className="line-clamp-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
+                    {item.content}
+                  </p>
+                )}
+                <p className="truncate font-mono text-[10px] text-[var(--text-quaternary)]">
+                  {item.url}
+                </p>
+              </div>
+              <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-quaternary)] transition-colors group-hover/source:text-[var(--accent)]" />
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function getToolQueryDescription(args: Record<string, unknown>) {
   const query = args.query;
 
@@ -110,4 +174,33 @@ export function getToolQueryDescription(args: Record<string, unknown>) {
   }
 
   return undefined;
+}
+
+type WebSourceItem = {
+  index: number;
+  title: string;
+  content: string;
+  url: string;
+};
+
+function parseTavilyResult(value: string): {
+  answer?: string;
+  items: WebSourceItem[];
+} {
+  const answerMatch = value.match(/直接答案：([\s\S]*?)(?:\n\n搜索结果：|$)/);
+  const answer = answerMatch?.[1]?.trim();
+  const itemRegex =
+    /\[(\d+)\]\s+(.+?)\n([\s\S]*?)\n来源:\s*(https?:\/\/\S+)/g;
+  const items: WebSourceItem[] = [];
+
+  for (const match of value.matchAll(itemRegex)) {
+    items.push({
+      index: Number(match[1]),
+      title: match[2].trim(),
+      content: match[3].trim(),
+      url: match[4].trim(),
+    });
+  }
+
+  return { answer, items };
 }
