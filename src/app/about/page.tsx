@@ -1,304 +1,305 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, Check, Copy, Phone } from "lucide-react";
 import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import avatarImage from "@/assets/images/avatar.jpg";
-import githubIcon from "@/assets/images/svg/github-fill.svg";
-import wechatIcon from "@/assets/images/svg/wechat-fill.svg";
-import qqIcon from "@/assets/images/svg/QQ.svg";
-import qrcodeImage from "@/assets/images/qrcode.jpg";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
-const contactInfo = [
+gsap.registerPlugin(ScrollTrigger);
+
+const experiences = [
   {
-    icon: Phone,
-    iconType: "lucide" as const,
-    label: "电话",
-    value: "13647228144",
-    href: "tel:13647228144",
-    display: "13647228144"
+    period: "2025.08 — 至今",
+    role: "前端开发工程师",
+    company: "AI 应用平台",
+    description: "负责 AI 对话平台研发，主导 SSE 流式响应、工作流画布、多维表格等核心模块开发。推动前端工程化建设，落地 monorepo 管理与 AI 协作开发规范。",
   },
   {
-    icon: Mail,
-    iconType: "lucide" as const,
-    label: "邮箱",
-    value: "jf1431037397@gmail.com",
-    href: "mailto:jf1431037397@gmail.com",
-    display: "jf1431037397@gmail.com"
+    period: "2024.07 — 2025.03",
+    role: "前端开发工程师",
+    company: "互联网公司（实习）",
+    description: "负责官网前端开发与优化，使用 React + TypeScript + Ant Design 搭建业务系统。完成组件模块化封装、多端兼容性适配及页面性能优化。",
   },
-  {
-    iconSvg: githubIcon,
-    iconType: "svg" as const,
-    label: "GitHub",
-    value: "jiangfan01",
-    href: "https://github.com/jiangfan01",
-    display: "github.com/jiangfan01"
-  },
-  {
-    iconSvg: wechatIcon,
-    iconType: "svg" as const,
-    label: "微信",
-    value: "Devoted-serein",
-    href: null,
-    display: "Devoted-serein"
-  },
-  {
-    iconSvg: qqIcon,
-    iconType: "svg" as const,
-    label: "QQ",
-    value: "1431037397",
-    href: null,
-    display: "1431037397"
-  }
 ];
 
-function CopyableContact({ contact }: { contact: typeof contactInfo[number] }) {
-  const [copied, setCopied] = useState(false);
+const skills = {
+  "核心": ["React", "Vue", "Next.js", "TypeScript"],
+  "后端": ["Node.js", "Golang", "Gin", "Prisma"],
+  "AI": ["LLM 集成", "Agent", "RAG"],
+  "数据": ["MySQL", "PostgreSQL", "Redis"],
+};
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(contact.value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const iconElement = contact.iconType === "lucide" && contact.icon ? (
-    <contact.icon className="w-5 h-5 text-[var(--accent)]" />
-  ) : contact.iconType === "svg" && contact.iconSvg ? (
-    <Image
-      src={contact.iconSvg}
-      alt={contact.label}
-      width={20}
-      height={20}
-      className="text-[var(--accent)]"
-      style={{ filter: 'brightness(0) saturate(100%) invert(64%) sepia(35%) saturate(456%) hue-rotate(122deg) brightness(91%) contrast(87%)' }}
-    />
-  ) : null;
-
-  const inner = (
-    <div className="group flex items-start gap-4 p-6 hover:bg-[var(--surface-secondary)]/50 transition-colors rounded-lg cursor-pointer">
-      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center group-hover:bg-[var(--accent)]/20 transition-colors">
-        {iconElement}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-mono text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
-          {contact.label}
-        </div>
-        <div className="text-[var(--text-strong)] font-medium break-all group-hover:text-[var(--accent)] transition-colors flex items-center gap-2">
-          {contact.display}
-          {contact.label !== "微信" && (
-            <span className="opacity-0 group-hover:opacity-60 transition-opacity">
-              {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  // 微信：hover 显示二维码
-  if (contact.label === "微信") {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div onClick={handleCopy}>{inner}</div>
-        </TooltipTrigger>
-        <TooltipContent
-          side="top"
-          className="bg-white p-2 rounded-xl shadow-2xl border border-gray-100"
-        >
-          <Image
-            src={qrcodeImage}
-            alt="微信二维码"
-            width={180}
-            height={320}
-            className="rounded-lg object-cover"
-            style={{ aspectRatio: "9/16" }}
-          />
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  // 有链接的：点击跳转 + 复制 tooltip
-  if (contact.href) {
-    return (
-      <Tooltip open={copied || undefined}>
-        <TooltipTrigger asChild>
-          <a
-            href={contact.href}
-            target={contact.href.startsWith('http') ? '_blank' : undefined}
-            rel={contact.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              handleCopy();
-              window.open(contact.href!, contact.href!.startsWith('http') ? '_blank' : '_self');
-            }}
-          >
-            {inner}
-          </a>
-        </TooltipTrigger>
-        {copied && (
-          <TooltipContent side="top">
-            <Check className="w-3 h-3" /> 已复制
-          </TooltipContent>
-        )}
-      </Tooltip>
-    );
-  }
-
-  // 无链接的（QQ 等）：点击复制
-  return (
-    <Tooltip open={copied || undefined}>
-      <TooltipTrigger asChild>
-        <div onClick={handleCopy}>{inner}</div>
-      </TooltipTrigger>
-      {copied && (
-        <TooltipContent side="top">
-          <Check className="w-3 h-3" /> 已复制
-        </TooltipContent>
-      )}
-    </Tooltip>
-  );
-}
+const contacts = [
+  { label: "邮箱", value: "jf1431037397@gmail.com", href: "mailto:jf1431037397@gmail.com" },
+  { label: "GitHub", value: "jiangfan01", href: "https://github.com/jiangfan01" },
+  { label: "微信", value: "Devoted-serein" },
+  { label: "电话", value: "136****8144" },
+];
 
 export default function AboutPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const subtitleRef = useRef<HTMLParagraphElement>(null);
-  const metaRef = useRef<HTMLDivElement>(null);
-  const bioRef = useRef<HTMLDivElement>(null);
-  const contactRef = useRef<HTMLDivElement>(null);
-  const skillsRef = useRef<HTMLDivElement>(null);
-  const backRef = useRef<HTMLDivElement>(null);
+  const avatarWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+      // 入场动画
+      const elements = containerRef.current?.querySelectorAll("[data-animate]");
+      if (!elements) return;
 
-      // 初始状态
-      gsap.set([avatarRef.current, titleRef.current, subtitleRef.current, metaRef.current], {
-        opacity: 0,
-        y: 30,
-      });
-      gsap.set([bioRef.current, contactRef.current, skillsRef.current, backRef.current], {
-        opacity: 0,
-        y: 40,
+      gsap.set(elements, { opacity: 0, y: 40 });
+
+      gsap.to(elements, {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        stagger: 0.1,
+        ease: "power3.out",
+        delay: 0.2,
       });
 
-      // 动画序列
-      tl.to(avatarRef.current, { opacity: 1, y: 0, duration: 0.8 }, 0.2)
-        .to(titleRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.4)
-        .to(subtitleRef.current, { opacity: 1, y: 0, duration: 0.5 }, 0.5)
-        .to(metaRef.current, { opacity: 1, y: 0, duration: 0.5 }, 0.6)
-        .to(bioRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.7)
-        .to(contactRef.current, { opacity: 1, y: 0, duration: 0.6 }, 0.9)
-        .to(skillsRef.current, { opacity: 1, y: 0, duration: 0.6 }, 1.1)
-        .to(backRef.current, { opacity: 1, y: 0, duration: 0.5 }, 1.3);
+      // 头像滚动视差 + 缩放动画
+      if (avatarRef.current && avatarWrapperRef.current) {
+        gsap.to(avatarRef.current, {
+          yPercent: 20,
+          scale: 1.1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: avatarWrapperRef.current,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1,
+          },
+        });
+
+        // 装饰角的旋转动画
+        const accentCorner = avatarWrapperRef.current.querySelector("[data-accent-corner]");
+        if (accentCorner) {
+          gsap.to(accentCorner, {
+            rotation: 10,
+            scale: 1.2,
+            ease: "none",
+            scrollTrigger: {
+              trigger: avatarWrapperRef.current,
+              start: "top bottom",
+              end: "bottom top",
+              scrub: 1,
+            },
+          });
+        }
+      }
     }, containerRef);
 
     return () => ctx.revert();
   }, []);
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-[var(--app-bg)] pt-32 pb-24 px-6 md:px-16">
-      <div className="max-w-4xl mx-auto">
-        {/* 头像区域 */}
-        <div className="flex flex-col items-center mb-16">
-          <div ref={avatarRef} className="relative w-40 h-40 mb-8">
-            <Image
-              src={avatarImage}
-              alt="Serein"
-              fill
-              className="rounded-full object-cover"
-              priority
-            />
-            <div className="absolute inset-0 rounded-full ring-2 ring-[var(--accent)]/20" />
-          </div>
+    <div ref={containerRef} className="min-h-screen bg-[var(--app-bg)]">
+      {/* Hero Section — Asymmetric Layout */}
+      <section className="pt-32 pb-24 px-6 md:px-16">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-8 items-start">
+            {/* Left: Typography Heavy */}
+            <div className="lg:col-span-7 lg:pr-16">
+              <div data-animate className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-8 uppercase">
+                / 关于我
+              </div>
 
-          <h1 ref={titleRef} className="text-5xl md:text-6xl font-black text-[var(--text-strong)] mb-4 tracking-tight">
-            Serein
-          </h1>
-          
-          <p ref={subtitleRef} className="text-xl text-[var(--text-secondary)] mb-2">
-            前端开发工程师
-          </p>
-          
-          <div ref={metaRef} className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm font-mono">
-            <span>男</span>
-            <span>·</span>
-            <span>24岁</span>
-            <span>·</span>
-            <span>杭州</span>
-          </div>
-        </div>
+              <h1 data-animate className="text-[clamp(3rem,8vw,6rem)] font-black text-[var(--text-strong)] tracking-tighter leading-[0.9] mb-8">
+                Serein
+                <br />
+                <span className="text-[var(--text-tertiary)] text-[0.5em] font-normal tracking-normal">
+                  /səˈreɪn/
+                </span>
+              </h1>
 
-        {/* 简介 */}
-        <div ref={bioRef} className="mb-20">
-          <p className="text-[var(--text-secondary)] text-lg leading-relaxed text-center max-w-2xl mx-auto">
-            热衷于探索前沿技术与视觉美学的全栈开发者。
-            <br />
-            追逐新鲜热门的技术栈，痴迷于打造极致的用户体验。
-            <br />
-            从前端的精雕细琢到后端的架构探索，永远保持好奇心与上进心。
-          </p>
-        </div>
+              <p data-animate className="text-2xl md:text-3xl text-[var(--text-secondary)] leading-relaxed mb-12 max-w-xl">
+                构建可扩展的数字产品。
+                <br />
+                <span className="text-[var(--accent)]">专注 AI 应用与前端架构。</span>
+              </p>
 
-        {/* 联系方式 */}
-        <div ref={contactRef} className="mb-16">
-          <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
-            联系方式
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {contactInfo.map((contact) => (
-              <CopyableContact key={contact.label} contact={contact} />
-            ))}
-          </div>
-        </div>
+              <div data-animate className="flex items-center gap-6 text-[var(--text-tertiary)] font-mono text-sm">
+                <span>24岁</span>
+                <span className="w-1 h-1 bg-[var(--accent)] rounded-full" />
+                <span>杭州</span>
+                <span className="w-1 h-1 bg-[var(--accent)] rounded-full" />
+                <span>2年经验</span>
+              </div>
+            </div>
 
-        {/* 技能标签 */}
-        <div ref={skillsRef} className="border-t border-[var(--border-subtle)] pt-16">
-          <h2 className="text-2xl font-bold text-[var(--text-strong)] mb-8 text-center">
-            技能方向
-          </h2>
-          
-          <div className="flex flex-wrap gap-3 justify-center">
-            {[
-              'React', 'Vue', 'Next.js', 'TypeScript',
-              'Node.js', 'Golang', 'Gin',
-              'AI 应用', 'Agent', 'LLM 集成',
-              'Prisma', 'MySQL', 'PostgreSQL',
-              'GSAP', 'Framer Motion', 'Tailwind CSS'
-            ].map(skill => (
-              <span
-                key={skill}
-                className="px-4 py-2 text-sm font-mono text-[var(--text-secondary)] border border-[var(--border-default)] rounded-full hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+            {/* Right: Portrait with Parallax */}
+            <div className="lg:col-span-5" data-animate>
+              <div 
+                ref={avatarWrapperRef}
+                className="relative aspect-[4/5] max-w-sm lg:max-w-none lg:ml-auto rounded-2xl overflow-hidden"
               >
-                {skill}
-              </span>
+                <div
+                  ref={avatarRef}
+                  className="absolute inset-[-10%] will-change-transform"
+                >
+                  <Image
+                    src={avatarImage}
+                    alt="Serein"
+                    fill
+                    className="object-cover"
+                    priority
+                  />
+                </div>
+                {/* Accent corner overlay */}
+                <div 
+                  data-accent-corner
+                  className="absolute bottom-0 right-0 w-20 h-20 bg-[var(--accent)] will-change-transform origin-bottom-right"
+                  style={{ 
+                    clipPath: "polygon(100% 0, 100% 100%, 0 100%)" 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Philosophy — Full Width Statement */}
+      <section className="py-24 px-6 md:px-16 border-t border-[var(--border-subtle)]">
+        <div className="max-w-7xl mx-auto">
+          <blockquote data-animate className="text-[clamp(1.5rem,4vw,2.5rem)] text-[var(--text-primary)] leading-relaxed max-w-4xl">
+            “热衷于探索前沿技术与视觉美学。追逐新鲜热门的技术栈，痴迷于打造极致的用户体验。从前端的精雕细琢到后端的架构探索，永远保持好奇心。”
+          </blockquote>
+        </div>
+      </section>
+
+      {/* Experience — Architectural List (matching homepage style) */}
+      <section className="py-24 px-6 md:px-16 border-t border-[var(--border-subtle)]">
+        <div className="max-w-7xl mx-auto">
+          <div data-animate className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-16 uppercase">
+            / 工作经历
+          </div>
+
+          <div className="space-y-0">
+            {experiences.map((exp, index) => (
+              <div
+                key={index}
+                data-animate
+                className="group grid grid-cols-1 md:grid-cols-12 py-12 border-b border-[var(--border-subtle)] items-start hover:bg-[var(--surface-secondary)]/30 transition-colors -mx-6 px-6"
+              >
+                <div className="md:col-span-3 mb-4 md:mb-0">
+                  <span className="font-mono text-sm text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors">
+                    {exp.period}
+                  </span>
+                </div>
+                <div className="md:col-span-4 mb-4 md:mb-0">
+                  <h3 className="text-xl font-bold text-[var(--text-strong)] mb-1">
+                    {exp.role}
+                  </h3>
+                  <span className="text-[var(--text-tertiary)] text-sm">
+                    {exp.company}
+                  </span>
+                </div>
+                <div className="md:col-span-5">
+                  <p className="text-[var(--text-secondary)] leading-relaxed">
+                    {exp.description}
+                  </p>
+                </div>
+              </div>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* 返回首页 */}
-        <div ref={backRef} className="mt-20 text-center">
+      {/* Skills — Grouped, Not Tag Cloud */}
+      <section className="py-24 px-6 md:px-16 border-t border-[var(--border-subtle)]">
+        <div className="max-w-7xl mx-auto">
+          <div data-animate className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-16 uppercase">
+            / 技术能力
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+            {Object.entries(skills).map(([category, items]) => (
+              <div key={category} data-animate>
+                <h3 className="text-sm font-mono text-[var(--text-tertiary)] uppercase tracking-wider mb-6">
+                  {category}
+                </h3>
+                <ul className="space-y-3">
+                  {items.map((skill) => (
+                    <li
+                      key={skill}
+                      className="text-[var(--text-strong)] text-lg font-medium flex items-center gap-3 group"
+                    >
+                      <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full opacity-60 group-hover:opacity-100 group-hover:shadow-[0_0_10px_rgba(47,155,146,0.6)] transition-all" />
+                      {skill}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Contact — Minimal List */}
+      <section className="py-24 px-6 md:px-16 border-t border-[var(--border-subtle)]">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+            <div className="lg:col-span-5">
+              <div data-animate className="font-mono text-[var(--accent)] tracking-[0.4em] text-xs mb-8 uppercase">
+                / 联系方式
+              </div>
+              <h2 data-animate className="text-4xl md:text-5xl font-black text-[var(--text-strong)] tracking-tight leading-[1.1]">
+                有想法？
+                <br />
+                <span className="text-[var(--accent)]">聊聊。</span>
+              </h2>
+            </div>
+
+            <div className="lg:col-span-7 lg:pt-8">
+              <div className="space-y-0">
+                {contacts.map((contact) => (
+                  <div
+                    key={contact.label}
+                    data-animate
+                    className="group flex items-center justify-between py-6 border-b border-[var(--border-subtle)] hover:border-[var(--accent)]/50 transition-colors"
+                  >
+                    <span className="font-mono text-sm text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {contact.label}
+                    </span>
+                    {contact.href ? (
+                      <a
+                        href={contact.href}
+                        target={contact.href.startsWith("http") ? "_blank" : undefined}
+                        rel={contact.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                        className="text-[var(--text-strong)] font-medium hover:text-[var(--accent)] transition-colors"
+                      >
+                        {contact.value}
+                      </a>
+                    ) : (
+                      <span className="text-[var(--text-strong)] font-medium">
+                        {contact.value}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Back Link */}
+      <section className="py-16 px-6 md:px-16 border-t border-[var(--border-subtle)]">
+        <div className="max-w-7xl mx-auto">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--accent)] transition-colors text-sm font-mono"
+            data-animate
+            className="inline-flex items-center gap-3 text-[var(--text-tertiary)] hover:text-[var(--accent)] transition-colors font-mono text-sm group"
           >
-            <span>←</span>
+            <span className="transform group-hover:-translate-x-1 transition-transform">←</span>
             <span>返回首页</span>
           </Link>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
