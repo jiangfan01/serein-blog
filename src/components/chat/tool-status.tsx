@@ -1,8 +1,8 @@
 /**
- * 工具调用状态组件
+ * 工具调用状态 + 思考中状态
  *
- * 根据不同工具类型显示不同的图标和样式
- * 带呼吸动画，让用户知道 Agent 正在工作
+ * 黑白极简风格，无彩色装饰
+ * 工具图标用描边风格，状态文字用 uppercase 小字
  */
 "use client";
 
@@ -13,17 +13,9 @@ interface ToolStatusProps {
   tool?: string;
 }
 
-const TOOL_CONFIG: Record<string, { icon: typeof Search; label: string; color: string }> = {
-  rag_search: {
-    icon: Search,
-    label: "博客笔记",
-    color: "var(--accent)",
-  },
-  web_search: {
-    icon: Globe,
-    label: "互联网",
-    color: "oklch(0.65 0.15 250)",
-  },
+const TOOL_CONFIG: Record<string, { icon: typeof Search; label: string }> = {
+  rag_search: { icon: Search, label: "RAG" },
+  web_search: { icon: Globe, label: "WEB" },
 };
 
 export function ToolStatus({ status, tool }: ToolStatusProps) {
@@ -31,35 +23,25 @@ export function ToolStatus({ status, tool }: ToolStatusProps) {
   const Icon = config?.icon || Loader2;
 
   return (
-    <div className="flex items-center gap-2.5 py-1.5">
-      <div
-        className="w-6 h-6 rounded-lg flex items-center justify-center animate-pulse"
-        style={{ backgroundColor: config ? `color-mix(in oklch, ${config.color} 15%, transparent)` : "var(--surface-tertiary)" }}
-      >
-        <Icon
-          className="w-3.5 h-3.5"
-          style={{ color: config?.color || "var(--text-tertiary)" }}
-        />
+    <div className="flex items-center gap-2.5 py-1">
+      <div className="w-5 h-5 rounded border border-[var(--border-strong)] flex items-center justify-center animate-pulse">
+        <Icon className="w-3 h-3 text-[var(--text-secondary)]" strokeWidth={1.5} />
       </div>
-      <span className="text-xs text-[var(--text-secondary)]">
+      <span className="text-xs text-[var(--text-tertiary)] font-medium tracking-wide">
         {status}
       </span>
     </div>
   );
 }
 
-/**
- * 思考中状态组件
- * 三个点的脉冲动画
- */
 export function ThinkingStatus() {
   return (
-    <div className="flex items-center gap-2.5 py-1.5">
-      <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2.5 py-1">
+      <div className="flex items-center gap-[3px]">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]"
+            className="w-1 h-1 rounded-full bg-[var(--text-tertiary)]"
             style={{
               animation: "thinking-pulse 1.4s ease-in-out infinite",
               animationDelay: `${i * 0.2}s`,
@@ -67,7 +49,9 @@ export function ThinkingStatus() {
           />
         ))}
       </div>
-      <span className="text-xs text-[var(--text-tertiary)]">思考中</span>
+      <span className="text-xs text-[var(--text-tertiary)] font-medium tracking-wide">
+        Thinking
+      </span>
     </div>
   );
 }

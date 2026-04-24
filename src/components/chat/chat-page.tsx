@@ -1,14 +1,14 @@
 /**
  * AI Chat 全屏页面
  *
- * 布局：顶部导航条 + 居中对话区 + 底部输入框
- * 设计参考 ChatGPT / Claude 的沉浸式对话体验
- * 左侧 sidebar 预留给以后的 session 列表
+ * 设计方向：黑白极简主义，终端/工作站风格
+ * 无气泡、无彩色装饰，纯文本排版 + 极细边框 + 大量留白
+ * 面向高级开发者的知识库工作台
  */
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Bot, ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Terminal, Cpu, Network, Library } from "lucide-react";
 import Link from "next/link";
 import { ChatMessages } from "./chat-messages";
 import { ChatInput } from "./chat-input";
@@ -18,7 +18,6 @@ export function ChatPage() {
   const { messages, loading, sendMessage } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // 新消息时滚动到底部
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
@@ -26,33 +25,25 @@ export function ChatPage() {
   }, [messages]);
 
   return (
-    <div className="h-dvh flex flex-col bg-[var(--app-bg)]">
-      {/* 顶部导航 */}
-      <header className="flex-shrink-0 border-b border-[var(--border-subtle)] bg-[var(--app-bg)]/80 backdrop-blur-sm">
-        <div className="max-w-4xl mx-auto w-full flex items-center justify-between px-4 h-14">
+    <div className="h-dvh flex flex-col bg-[var(--app-bg)] font-sans">
+      {/* 极简顶部导航 */}
+      <header className="flex-shrink-0 border-b border-[var(--border-subtle)]">
+        <div className="max-w-4xl mx-auto w-full flex items-center justify-between px-6 h-14">
           <Link
             href="/"
-            className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-strong)] transition-colors"
+            className="flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--text-strong)] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm">返回博客</span>
+            <span className="text-[13px] font-medium">Return</span>
           </Link>
 
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[var(--accent-soft)] flex items-center justify-center">
-              <Bot className="w-4 h-4 text-[var(--accent)]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-[var(--text-strong)] leading-tight">
-                Serein AI
-              </span>
-              <span className="text-[11px] text-[var(--text-tertiary)] leading-tight">
-                Agent 驱动
-              </span>
-            </div>
+            <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            <span className="text-[13px] font-semibold text-[var(--text-strong)] tracking-wide uppercase">
+              Serein Engine
+            </span>
           </div>
 
-          {/* 占位，保持标题居中 */}
           <div className="w-[72px]" />
         </div>
       </header>
@@ -62,19 +53,28 @@ export function ChatPage() {
         {messages.length === 0 ? (
           <WelcomeScreen onSend={sendMessage} />
         ) : (
-          <div className="max-w-3xl mx-auto w-full px-4 py-6">
-            <ChatMessages messages={messages} loading={loading} isFullscreen hideEmptyState />
+          <div className="max-w-3xl mx-auto w-full px-6 py-8">
+            <ChatMessages
+              messages={messages}
+              loading={loading}
+              isFullscreen
+              hideEmptyState
+            />
           </div>
         )}
       </div>
 
       {/* 底部输入区 */}
-      <div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--app-bg)]">
-        <div className="max-w-3xl mx-auto w-full px-4 py-4">
+      <div className="flex-shrink-0 border-t border-[var(--border-subtle)]">
+        <div className="max-w-3xl mx-auto w-full px-6 py-4">
           <ChatInput onSend={sendMessage} disabled={loading} autoFocus />
-          <p className="text-center text-[11px] text-[var(--text-tertiary)] mt-2.5">
-            基于博客笔记 RAG 检索 · 支持联网搜索 · Kimi 驱动
-          </p>
+          <div className="flex items-center justify-center gap-2 mt-3 text-[11px] font-medium text-[var(--text-tertiary)] tracking-wide uppercase">
+            <span>RAG Retrieval</span>
+            <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+            <span>Web Search</span>
+            <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
+            <span>Powered by Kimi</span>
+          </div>
         </div>
       </div>
     </div>
@@ -83,49 +83,50 @@ export function ChatPage() {
 
 /**
  * 欢迎屏幕
- * 空状态时显示，带快捷提问按钮
+ * 黑白极简，极细边框卡片，无彩色装饰
  */
 function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
   const suggestions = [
-    { text: "React Fiber 架构是什么", icon: "⚛️" },
-    { text: "Vue 和 React 更新机制有什么区别", icon: "🔄" },
-    { text: "什么是 RAG 检索增强生成", icon: "🔍" },
-    { text: "Agent 开发需要掌握哪些知识", icon: "🤖" },
+    { text: "解析 React Fiber 渲染架构", icon: Cpu },
+    { text: "对比 Vue 与 React 更新机制", icon: Library },
+    { text: "探索 RAG 检索增强生成架构", icon: Network },
+    { text: "构建本地 Agent 工作流", icon: Terminal },
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-4 py-16">
-      <div className="flex flex-col items-center gap-6 max-w-lg">
-        {/* Logo */}
-        <div className="w-16 h-16 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center">
-          <Sparkles className="w-8 h-8 text-[var(--accent)]" />
-        </div>
+    <div className="flex flex-col justify-center min-h-full px-6 py-12 max-w-3xl mx-auto w-full">
+      {/* Header */}
+      <div className="mb-10 text-left">
+        <h1 className="text-2xl font-semibold text-[var(--text-strong)] tracking-tight flex items-center gap-2">
+          Serein{" "}
+          <span className="text-[var(--text-tertiary)] font-normal">
+            / Workspace
+          </span>
+        </h1>
+        <p className="text-[14px] text-[var(--text-secondary)] mt-2 font-medium">
+          Accessing technical notes &amp; global knowledge base.
+        </p>
+      </div>
 
-        {/* 标题 */}
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-[var(--text-strong)]">
-            Serein AI
-          </h1>
-          <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
-            基于博客笔记的 AI 助手，支持知识库检索和联网搜索
-          </p>
-        </div>
-
-        {/* 快捷提问 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-2">
-          {suggestions.map((s) => (
+      {/* 快捷提问 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+        {suggestions.map((s, idx) => {
+          const Icon = s.icon;
+          return (
             <button
-              key={s.text}
+              key={idx}
               onClick={() => onSend(s.text)}
-              className="group flex items-start gap-3 px-4 py-3.5 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--surface-secondary)] hover:border-[var(--border-strong)] transition-all text-left"
+              className="group flex flex-col items-start p-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] hover:border-[var(--text-strong)] transition-colors text-left"
             >
-              <span className="text-base leading-none mt-0.5">{s.icon}</span>
-              <span className="text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] transition-colors leading-snug">
+              <div className="mb-3 text-[var(--text-tertiary)] group-hover:text-[var(--text-strong)] transition-colors">
+                <Icon strokeWidth={1.5} className="w-5 h-5" />
+              </div>
+              <span className="text-[14px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] transition-colors">
                 {s.text}
               </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

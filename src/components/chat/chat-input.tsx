@@ -1,12 +1,13 @@
 /**
- * 聊天输入框组件
+ * 聊天输入框
  *
- * 职责单一：输入框 + 发送按钮
+ * 极简设计：微圆角、纯白背景、极浅边框
+ * 发送按钮：黑底白箭头，小圆角
  */
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -32,25 +33,34 @@ export function ChatInput({ onSend, disabled, autoFocus = false }: ChatInputProp
     onSend(trimmed);
   };
 
+  const canSend = input.trim().length > 0 && !disabled;
+
   return (
-    <div className="px-4 py-3 border-t border-[var(--border-default)]">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="输入你的问题..."
-          disabled={disabled}
-          className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface-secondary)] text-sm text-[var(--text-strong)] placeholder:text-[var(--text-tertiary)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--accent)] transition-colors disabled:opacity-50"
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-center gap-2 px-4 py-3 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] focus-within:border-[var(--text-strong)] transition-colors"
+    >
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Ask anything..."
+        disabled={disabled}
+        className="flex-1 bg-transparent text-sm text-[var(--text-strong)] placeholder:text-[var(--text-tertiary)] focus:outline-none disabled:opacity-50"
+      />
+      <button
+        type="submit"
+        disabled={!canSend}
+        className="w-8 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-20"
+        style={{
+          backgroundColor: canSend ? "var(--text-strong)" : "var(--border-default)",
+        }}
+      >
+        <ArrowUp
+          className="w-4 h-4"
+          style={{ color: canSend ? "var(--app-bg)" : "var(--text-tertiary)" }}
         />
-        <button
-          type="submit"
-          disabled={disabled || !input.trim()}
-          className="px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
-    </div>
+      </button>
+    </form>
   );
 }
