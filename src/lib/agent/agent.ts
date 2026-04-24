@@ -66,7 +66,9 @@ async function executeTool(
   }
 
   try {
-    const result = await targetTool.invoke(toolArgs);
+    // LangChain tool.invoke 接受 ToolCall 格式
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (targetTool as any).invoke(toolArgs);
     return typeof result === "string" ? result : JSON.stringify(result);
   } catch (error) {
     return `工具执行失败: ${error instanceof Error ? error.message : "未知错误"}`;
