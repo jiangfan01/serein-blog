@@ -80,7 +80,7 @@ export function ChatMessages({
 
           {/* 消息气泡 */}
           <div
-            className={`${isFullscreen ? "max-w-[70%]" : "max-w-[80%]"} px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+            className={`${isFullscreen ? "max-w-[80%]" : "max-w-[85%]"} px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
               msg.role === "user"
                 ? "bg-[var(--accent)] text-white rounded-br-md"
                 : "bg-[var(--surface-secondary)] text-[var(--text-strong)] rounded-bl-md"

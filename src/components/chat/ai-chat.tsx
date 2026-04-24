@@ -43,7 +43,7 @@ export function AiChat() {
     return (
       <>
         <Dialog open={fullscreen} onOpenChange={setFullscreen}>
-          <DialogContent className="max-w-3xl w-[90vw] h-[85vh] p-0 flex flex-col gap-0 rounded-2xl bg-[var(--app-bg)] border-[var(--border-default)] backdrop-blur-xl [&>button]:hidden">
+          <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 flex flex-col gap-0 rounded-2xl bg-[var(--app-bg)] border-[var(--border-default)] backdrop-blur-xl [&>button]:hidden">
             <VisuallyHidden.Root>
               <DialogTitle>AI 助手</DialogTitle>
             </VisuallyHidden.Root>
@@ -112,7 +112,7 @@ export function AiChat() {
 
   // 小窗模式
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[560px] flex flex-col rounded-2xl border border-[var(--border-default)] bg-[var(--app-bg)] shadow-2xl overflow-hidden">
+    <div className="fixed bottom-6 right-6 z-50 w-[480px] h-[680px] flex flex-col rounded-2xl border border-[var(--border-default)] bg-[var(--app-bg)] shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)] bg-[var(--surface-secondary)]/30">
         <div className="flex items-center gap-2">
