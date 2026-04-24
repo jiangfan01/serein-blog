@@ -18,13 +18,13 @@ type ToolRendererProps = {
 const TOOL_META: Record<string, ToolMeta> = {
   rag_search: {
     icon: BookOpen,
-    label: "RAG_RETRIEVAL",
+    label: "笔记检索",
     runningLabel: "正在检索博客笔记...",
     doneLabel: "博客笔记检索完成",
   },
   web_search: {
     icon: Globe,
-    label: "WEB_SEARCH",
+    label: "联网搜索",
     runningLabel: "正在联网搜索...",
     doneLabel: "联网搜索完成",
   },
@@ -39,9 +39,9 @@ export function getToolMeta(tool: string): ToolMeta {
   return (
     TOOL_META[tool] ?? {
       icon: Terminal,
-      label: tool.toUpperCase(),
-      runningLabel: `Executing ${tool}...`,
-      doneLabel: `Executed ${tool}`,
+      label: tool,
+      runningLabel: `正在执行 ${tool}...`,
+      doneLabel: `${tool} 执行完成`,
     }
   );
 }
@@ -54,7 +54,7 @@ export function ToolResult({ record }: ToolRendererProps) {
 
 function RagSearchResult({ record }: ToolRendererProps) {
   return (
-    <ToolOutputBlock title="matched_notes">
+    <ToolOutputBlock title="命中笔记">
       <ResultText value={record.result} />
     </ToolOutputBlock>
   );
@@ -62,7 +62,7 @@ function RagSearchResult({ record }: ToolRendererProps) {
 
 function WebSearchResult({ record }: ToolRendererProps) {
   return (
-    <ToolOutputBlock title="search_output">
+    <ToolOutputBlock title="搜索结果">
       <ResultText value={record.result} />
     </ToolOutputBlock>
   );
@@ -70,7 +70,7 @@ function WebSearchResult({ record }: ToolRendererProps) {
 
 function DefaultToolResult({ record }: ToolRendererProps) {
   return (
-    <ToolOutputBlock title="tool_output">
+    <ToolOutputBlock title="工具输出">
       <ResultText value={record.result} />
     </ToolOutputBlock>
   );
@@ -97,7 +97,7 @@ function ToolOutputBlock({
 function ResultText({ value }: { value: string }) {
   return (
     <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[var(--text-tertiary)]">
-      {value || "No output returned."}
+      {value || "暂无返回内容。"}
     </pre>
   );
 }
@@ -106,7 +106,7 @@ export function getToolQueryDescription(args: Record<string, unknown>) {
   const query = args.query;
 
   if (typeof query === "string" && query.trim()) {
-    return `query="${query}"`;
+    return `查询：${query}`;
   }
 
   return undefined;
