@@ -34,7 +34,7 @@ export function ChatPage() {
             className="flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--text-strong)] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-[13px] font-medium">Return</span>
+            <span className="text-[13px] font-medium">返回博客</span>
           </Link>
 
           <div className="flex items-center gap-2.5">
@@ -69,11 +69,11 @@ export function ChatPage() {
         <div className="max-w-3xl mx-auto w-full px-6 py-4">
           <ChatInput onSend={sendMessage} disabled={loading} autoFocus />
           <div className="flex items-center justify-center gap-2 mt-3 text-[11px] font-medium text-[var(--text-tertiary)] tracking-wide uppercase">
-            <span>RAG Retrieval</span>
+            <span>知识库检索</span>
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-            <span>Web Search</span>
+            <span>联网搜索</span>
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-            <span>Powered by Kimi</span>
+            <span>Kimi 驱动</span>
           </div>
         </div>
       </div>
@@ -104,7 +104,7 @@ function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
           </span>
         </h1>
         <p className="text-[14px] text-[var(--text-secondary)] mt-2 font-medium">
-          Accessing technical notes &amp; global knowledge base.
+          技术笔记知识库 · 联网搜索 · Agent 驱动
         </p>
       </div>
 

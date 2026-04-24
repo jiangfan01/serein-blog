@@ -44,7 +44,7 @@ export function ChatInput({ onSend, disabled, autoFocus = false }: ChatInputProp
         ref={inputRef}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Ask anything..."
+        placeholder="输入你的问题..."
         disabled={disabled}
         className="flex-1 bg-transparent text-sm text-[var(--text-strong)] placeholder:text-[var(--text-tertiary)] focus:outline-none disabled:opacity-50"
       />

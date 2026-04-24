@@ -50,7 +50,7 @@ export function ThinkingStatus() {
         ))}
       </div>
       <span className="text-xs text-[var(--text-tertiary)] font-medium tracking-wide">
-        Thinking
+        思考中
       </span>
     </div>
   );
