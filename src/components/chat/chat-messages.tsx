@@ -19,12 +19,14 @@ interface ChatMessagesProps {
   messages: ChatMessage[];
   loading: boolean;
   isFullscreen?: boolean;
+  hideEmptyState?: boolean;
 }
 
 export function ChatMessages({
   messages,
   loading,
   isFullscreen = false,
+  hideEmptyState = false,
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -36,8 +38,12 @@ export function ChatMessages({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !hideEmptyState) {
     return <EmptyState />;
+  }
+
+  if (messages.length === 0) {
+    return null;
   }
 
   return (
