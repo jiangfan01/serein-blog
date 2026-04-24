@@ -1,23 +1,29 @@
+/**
+ * Chat API Route
+ *
+ * 职责：接收 HTTP 请求 → 调用 Agent → 把 SSEEvent 序列化推给前端
+ *
+ * SSE 协议：
+ * - data: {"type":"tool_start","tool":"rag_search","args":{"query":"React hooks"}}
+ * - data: {"type":"tool_end","tool":"rag_search","result":"找到 3 条相关内容..."}
+ * - data: {"type":"text_delta","content":"React"}
+ * - data: {"type":"text_delta","content":" hooks"}
+ * - data: {"type":"text_delta","content":" 是..."}
+ * - data: {"type":"done"}
+ *
+ * 前端按 type 字段分发处理，互不干扰。
+ */
 import { NextRequest } from "next/server";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-import {
-  ChatPromptTemplate,
-  SystemMessagePromptTemplate,
-  HumanMessagePromptTemplate,
-} from "@langchain/core/prompts";
-import { createLLM } from "@/lib/rag/embeddings";
-import { retrieveContext } from "@/lib/rag/retriever";
+import { runAgent } from "@/lib/agent/agent";
+import type { SSEEvent } from "@/lib/agent/types";
 
-const SYSTEM_WITH_CONTEXT = `你是 Serein Blog 的 AI 助手，基于博客笔记内容回答用户的技术问题。
-回答要准确、简洁，使用中文。如果笔记内容不足以回答问题，可以结合自身知识补充，但要说明哪些是笔记内容、哪些是补充。
-
-以下是检索到的相关笔记内容：
----
-{context}
----`;
-
-const SYSTEM_NO_CONTEXT = `你是 Serein Blog 的 AI 助手，帮助用户回答技术问题。回答要准确、简洁，使用中文。
-当前没有检索到相关笔记内容，请基于自身知识回答。`;
+/**
+ * 把 SSEEvent 编码成 SSE 格式的字节
+ */
+function encodeSSE(event: SSEEvent): Uint8Array {
+  const encoder = new TextEncoder();
+  return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,48 +33,26 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "请输入问题" }, { status: 400 });
     }
 
-    // RAG: 向量检索相关笔记
-    const context = await retrieveContext(question);
-
-    // LangChain: 构建 prompt + chain
-    const llm = createLLM();
-    const prompt = context
-      ? ChatPromptTemplate.fromMessages([
-          SystemMessagePromptTemplate.fromTemplate(SYSTEM_WITH_CONTEXT),
-          HumanMessagePromptTemplate.fromTemplate("{question}"),
-        ])
-      : ChatPromptTemplate.fromMessages([
-          ["system", SYSTEM_NO_CONTEXT],
-          HumanMessagePromptTemplate.fromTemplate("{question}"),
-        ]);
-
-    const chain = prompt.pipe(llm).pipe(new StringOutputParser());
-
-    // 流式输出
-    const stream = await chain.stream({
-      context: context || "",
-      question,
-    });
-
-    const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of stream) {
-            if (chunk) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
-              );
-            }
+          // runAgent yield 的每个 SSEEvent 直接序列化推给前端
+          for await (const event of runAgent(question)) {
+            controller.enqueue(encodeSSE(event));
           }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+
+          // 发送结束事件
+          controller.enqueue(encodeSSE({ type: "done" }));
           controller.close();
-        } catch {
+        } catch (error) {
+          console.error("[Chat Route] Stream error:", error);
           controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: "生成回答时出错" })}\n\n`
-            )
+            encodeSSE({
+              type: "error",
+              message: "生成回答时出错",
+            })
           );
+          controller.enqueue(encodeSSE({ type: "done" }));
           controller.close();
         }
       },
@@ -82,7 +66,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
-    console.error("Chat API error:", err);
+    console.error("[Chat Route] API error:", err);
     return Response.json({ error: "服务器错误" }, { status: 500 });
   }
 }
