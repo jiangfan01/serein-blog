@@ -1,0 +1,379 @@
+# Function Calling 工具调用
+
+## 什么是 Function Calling
+
+Function Calling 是 LLM 的一种能力：**模型不直接回答问题，而是告诉你"应该调用哪个函数、传什么参数"**。
+
+这是 Agent 的核心能力。没有 Function Calling，LLM 只是一个聊天机器人；有了它，LLM 就变成了一个能操作外部世界的智能体。
+
+```
+普通对话：
+  用户: "今天北京天气怎么样？"
+  LLM:  "我无法获取实时天气信息..."  ← 只能靠训练数据
+
+Function Calling：
+  用户: "今天北京天气怎么样？"
+  LLM:  { "function": "getWeather", "arguments": { "city": "北京" } }  ← 告诉你该调什么
+  系统:  调用 getWeather("北京") → 返回 "晴，28°C"
+  LLM:  "今天北京天气晴朗，气温 28°C，适合出门。"  ← 结合真实数据回答
+```
+
+类比前端：LLM 就像一个 React 组件，Function Calling 就是它的 `props.onAction` 回调——组件自己不操作 DOM，而是通过回调告诉父组件该做什么。
+
+## 底层原理：模型到底在干什么
+
+回忆 Transformer 那篇：模型本质上是在预测下一个 token。Function Calling 并没有给模型加新能力，而是通过**训练**让模型学会了在合适的时候输出特定格式的 JSON。
+
+```
+模型的内心独白（简化版）：
+
+输入 tokens: [系统提示, 可用函数定义, 用户问题]
+  ↓ Attention 计算
+模型判断: "这个问题需要调用外部函数才能回答"
+  ↓ 自回归生成
+输出 tokens: {"function": "getWeather", "arguments": {"city": "北京"}}
+```
+
+所以 Function Calling 的本质是：
+1. 你在 system prompt 里告诉模型"你有哪些工具可以用"
+2. 模型通过 Attention 理解用户意图 + 可用工具
+3. 模型决定是直接回答还是调用工具
+4. 如果调用工具，模型生成结构化的 JSON（函数名 + 参数）
+
+**关键认知：模型不会真的执行函数。它只是生成了一段 JSON 文本，实际的函数调用由你的应用代码完成。**
+
+## 实际开发中的调用流程
+
+```
+┌─────────────┐
+│  你的应用代码  │
+└──────┬──────┘
+       │ 1. 发送请求（带 tools 定义）
+       ▼
+┌─────────────┐
+│   LLM API    │
+└──────┬──────┘
+       │ 2. 返回 tool_calls（要调哪个函数）
+       ▼
+┌─────────────┐
+│  你的应用代码  │  3. 解析 tool_calls，执行对应函数
+└──────┬──────┘
+       │ 4. 把函数执行结果发回给 LLM
+       ▼
+┌─────────────┐
+│   LLM API    │  5. LLM 结合函数结果生成最终回答
+└──────┬──────┘
+       │ 6. 返回最终回答
+       ▼
+┌─────────────┐
+│    用户看到    │
+└─────────────┘
+```
+
+注意这里有**两次** LLM 调用：第一次让模型决定调什么工具，第二次让模型根据工具结果生成回答。
+
+## 代码实战：用 OpenAI SDK 实现
+
+### 1. 定义工具
+
+```typescript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// 定义可用的工具
+const tools: OpenAI.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'getWeather',
+      description: '获取指定城市的当前天气信息',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: {
+            type: 'string',
+            description: '城市名称，如"北京"、"上海"',
+          },
+        },
+        required: ['city'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'searchBlog',
+      description: '搜索博客文章',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '搜索关键词',
+          },
+          category: {
+            type: 'string',
+            enum: ['react', 'vue', 'javascript', 'css', 'web'],
+            description: '文章分类（可选）',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+];
+```
+
+工具定义本质上就是 JSON Schema。模型通过这个 schema 理解：
+- 工具叫什么名字
+- 工具能干什么（description 很重要，模型靠它判断什么时候该用）
+- 需要什么参数、参数是什么类型
+
+### 2. 实现工具函数
+
+```typescript
+// 实际的工具实现（这些是你的业务代码，模型不会看到）
+async function getWeather(city: string) {
+  // 实际项目中调用天气 API
+  const response = await fetch(
+    `https://api.weather.com/v1/current?city=${city}`
+  );
+  return response.json();
+}
+
+async function searchBlog(query: string, category?: string) {
+  // 实际项目中查数据库
+  const results = await prisma.post.findMany({
+    where: {
+      content: { contains: query },
+      ...(category && { category }),
+    },
+    take: 5,
+  });
+  return results;
+}
+
+// 工具名到函数的映射
+const toolHandlers: Record<string, Function> = {
+  getWeather: ({ city }: { city: string }) => getWeather(city),
+  searchBlog: ({ query, category }: { query: string; category?: string }) =>
+    searchBlog(query, category),
+};
+```
+
+### 3. 完整的调用循环
+
+```typescript
+async function chat(userMessage: string) {
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: '你是一个有用的助手，可以查询天气和搜索博客文章。',
+    },
+    { role: 'user', content: userMessage },
+  ];
+
+  // 第一次调用：让模型决定是否需要调用工具
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o',
+    messages,
+    tools,
+  });
+
+  const choice = response.choices[0];
+
+  // 如果模型决定直接回答（不需要工具）
+  if (choice.finish_reason === 'stop') {
+    return choice.message.content;
+  }
+
+  // 如果模型决定调用工具
+  if (choice.finish_reason === 'tool_calls') {
+    const toolCalls = choice.message.tool_calls!;
+
+    // 把模型的回复（包含 tool_calls）加入消息历史
+    messages.push(choice.message);
+
+    // 执行每个工具调用
+    for (const toolCall of toolCalls) {
+      const { name, arguments: args } = toolCall.function;
+      const parsedArgs = JSON.parse(args);
+
+      console.log(`调用工具: ${name}`, parsedArgs);
+
+      // 执行实际函数
+      const result = await toolHandlers[name](parsedArgs);
+
+      // 把工具结果加入消息历史
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(result),
+      });
+    }
+
+    // 第二次调用：让模型根据工具结果生成最终回答
+    const finalResponse = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools,
+    });
+
+    return finalResponse.choices[0].message.content;
+  }
+}
+```
+
+### 4. 运行效果
+
+```typescript
+// 需要工具的问题
+await chat('北京今天天气怎么样？');
+// → 调用工具: getWeather { city: "北京" }
+// → "北京今天天气晴朗，气温 28°C，湿度 45%，适合户外活动。"
+
+// 不需要工具的问题
+await chat('什么是 React？');
+// → 直接回答，不调用任何工具
+
+// 模型自己判断该用哪个工具
+await chat('帮我找找关于 hooks 的文章');
+// → 调用工具: searchBlog { query: "hooks", category: "react" }
+// → "找到了 3 篇相关文章：..."
+```
+
+## 并行工具调用
+
+模型可以一次返回多个 tool_calls，表示需要同时调用多个工具：
+
+```typescript
+// 用户: "北京和上海今天天气分别怎么样？"
+// 模型返回:
+toolCalls = [
+  { function: { name: 'getWeather', arguments: '{"city":"北京"}' } },
+  { function: { name: 'getWeather', arguments: '{"city":"上海"}' } },
+];
+
+// 可以并行执行
+const results = await Promise.all(
+  toolCalls.map(tc => {
+    const args = JSON.parse(tc.function.arguments);
+    return toolHandlers[tc.function.name](args);
+  })
+);
+```
+
+类比前端：就像 `Promise.all` 并行请求多个 API，而不是串行等待。
+
+## 工具描述的重要性
+
+模型决定"用不用工具"和"用哪个工具"，**完全依赖你写的 description**。
+
+```typescript
+// ❌ 差的描述：模型不知道什么时候该用
+{
+  name: 'search',
+  description: '搜索',
+}
+
+// ✅ 好的描述：模型能准确判断使用场景
+{
+  name: 'searchBlog',
+  description: '在博客中搜索技术文章。当用户询问特定技术话题、想找相关文章、或需要代码示例时使用。支持按分类筛选。',
+}
+```
+
+这其实就是 Prompt Engineering 在工具定义上的体现——description 就是给模型的 prompt。
+
+## 和你已有项目的关系
+
+你博客现在的 RAG 聊天是这样的：
+
+```
+用户提问 → Embedding 检索 → 拼接 context → LLM 生成回答
+```
+
+加上 Function Calling 后可以变成：
+
+```
+用户提问 → LLM 判断意图
+  ├─ "帮我找 React 相关文章" → 调用 searchBlog 工具 → 返回文章列表
+  ├─ "React hooks 怎么用" → 调用 RAG 检索工具 → 结合上下文回答
+  ├─ "总结一下你有哪些分类" → 调用 getCategories 工具 → 返回分类列表
+  └─ "你好" → 直接回答，不调用工具
+```
+
+模型自己决定走哪条路，而不是所有问题都走 RAG 检索。这就是从"检索问答"到"智能助手"的跨越。
+
+## Function Calling vs Agent
+
+Function Calling 是**单次决策**：模型看一次就决定调什么工具。
+
+Agent 是**多次决策循环**：模型调完一个工具，看到结果后可能决定再调另一个工具，直到任务完成。
+
+```
+Function Calling（单步）：
+  用户提问 → 模型决策 → 调用工具 → 生成回答 → 结束
+
+Agent（多步循环）：
+  用户提问 → 模型决策 → 调用工具 A → 看结果 → 决定再调工具 B
+  → 看结果 → 觉得信息够了 → 生成最终回答 → 结束
+```
+
+Function Calling 是 Agent 的基础能力，就像 `fetch` 是前端网络请求的基础——你可以直接用 `fetch`，也可以用 `axios`/`react-query` 这些上层封装。LangGraph 就是 Agent 层面的上层封装。
+
+## 常见坑
+
+### 1. 模型幻觉参数
+模型可能生成不存在的参数值。比如你定义了 `category` 的 enum 是 `['react', 'vue']`，模型可能传 `'angular'`。**一定要做参数校验。**
+
+```typescript
+// 用 zod 做运行时校验
+import { z } from 'zod';
+
+const searchSchema = z.object({
+  query: z.string(),
+  category: z.enum(['react', 'vue', 'javascript', 'css', 'web']).optional(),
+});
+
+// 在执行工具前校验
+const parsed = searchSchema.safeParse(parsedArgs);
+if (!parsed.success) {
+  // 返回错误信息给模型，让它重新生成
+  return { error: parsed.error.message };
+}
+```
+
+### 2. JSON 解析失败
+模型生成的 arguments 偶尔不是合法 JSON。加 try-catch：
+
+```typescript
+let parsedArgs;
+try {
+  parsedArgs = JSON.parse(toolCall.function.arguments);
+} catch {
+  // 告诉模型参数格式有误
+  messages.push({
+    role: 'tool',
+    tool_call_id: toolCall.id,
+    content: JSON.stringify({ error: '参数解析失败，请重新生成' }),
+  });
+}
+```
+
+### 3. 工具太多导致选择困难
+给模型太多工具（>20 个），它的选择准确率会下降。解决方案：
+- 按场景分组，只传相关的工具
+- 用 RAG 检索相关工具（是的，工具本身也可以做检索）
+- 分层：先让一个模型选工具类别，再让另一个模型选具体工具
+
+## 下一步
+
+理解了 Function Calling，你就掌握了 Agent 的核心能力。接下来：
+
+1. **Prompt Engineering** → 怎么写好工具描述和系统提示
+2. **LangGraph Agent** → 把 Function Calling 放进状态机循环，实现多步推理
+3. **实战** → 把你博客的 RAG 聊天升级成带工具调用的 Agent

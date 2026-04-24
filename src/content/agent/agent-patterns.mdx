@@ -1,0 +1,363 @@
+# Agent 设计模式总结
+
+## 全局视角：Agent 的技术栈
+
+回顾整个学习路线，Agent 开发的技术栈是这样的：
+
+```
+┌─────────────────────────────────────────────┐
+│              应用层（你的产品）                 │
+│  博客 AI 助手 / 智能客服 / 代码生成器 / ...    │
+├─────────────────────────────────────────────┤
+│              编排层（Agent 架构）              │
+│  LangGraph / 手写状态机 / 多 Agent 协作       │
+├─────────────────────────────────────────────┤
+│              能力层（Agent 的手和眼）           │
+│  Function Calling / RAG / Web Search / ...  │
+├─────────────────────────────────────────────┤
+│              提示层（Agent 的脑）              │
+│  System Prompt / Tool Description / CoT     │
+├─────────────────────────────────────────────┤
+│              模型层（引擎）                    │
+│  GPT-4o / Kimi / Claude / 开源模型           │
+├─────────────────────────────────────────────┤
+│              基础层（底层原理）                 │
+│  Transformer / Attention / Embedding        │
+└─────────────────────────────────────────────┘
+```
+
+你从下往上学了一遍，现在从上往下做就行了。
+
+## 四种核心 Agent 模式
+
+### 1. ReAct（推理 + 行动）
+
+```
+思考 → 行动 → 观察 → 思考 → 行动 → 观察 → ... → 回答
+```
+
+**原理：** 模型每一步先"想"（Reasoning），再"做"（Acting），看到结果后再"想"下一步。
+
+**适用场景：**
+- 需要多步工具调用的任务
+- 信息检索 + 综合回答
+- 大多数通用 Agent 场景
+
+**代码骨架：**
+
+```typescript
+// LangGraph 实现 ReAct 就是一个循环
+const graph = new StateGraph(MessagesAnnotation)
+  .addNode('agent', callLLM)        // 思考 + 决定行动
+  .addNode('tools', executeTools)    // 执行行动
+  .addEdge('__start__', 'agent')
+  .addConditionalEdges('agent', shouldContinue) // 有 tool_calls → tools，否则 → END
+  .addEdge('tools', 'agent')        // 观察结果 → 回到思考
+  .compile();
+```
+
+**优点：** 简单、通用、容易实现
+**缺点：** 每步都要调 LLM，长链路成本高；可能在不相关的方向上浪费步骤
+
+### 2. Plan-and-Execute（先规划后执行）
+
+```
+规划: [步骤1, 步骤2, 步骤3, ...]
+  → 执行步骤1 → 执行步骤2 → 执行步骤3
+  → 检查结果 → 需要调整计划吗？
+  → 最终回答
+```
+
+**原理：** 先让模型制定完整计划，再逐步执行。执行过程中可以根据结果调整计划。
+
+**适用场景：**
+- 复杂的多步任务（写一篇文章、重构一个模块）
+- 需要全局规划的任务
+- 步骤之间有依赖关系
+
+**代码骨架：**
+
+```typescript
+import { Annotation } from '@langchain/langgraph';
+
+const PlanState = Annotation.Root({
+  messages: Annotation({ reducer: (a, b) => [...a, ...b], default: () => [] }),
+  plan: Annotation({ reducer: (_, b) => b, default: () => [] }),       // 计划步骤列表
+  currentStep: Annotation({ reducer: (_, b) => b, default: () => 0 }), // 当前执行到第几步
+  results: Annotation({ reducer: (a, b) => [...a, ...b], default: () => [] }), // 每步的结果
+});
+
+// 规划节点：生成计划
+async function planNode(state: typeof PlanState.State) {
+  const response = await llm.invoke([
+    {
+      role: 'system',
+      content: `根据用户需求，制定一个执行计划。
+返回 JSON 数组，每个元素是一个步骤描述。
+示例：["搜索 React Fiber 相关资料", "搜索 Vue 响应式相关资料", "对比两者差异", "生成总结"]`,
+    },
+    ...state.messages,
+  ]);
+  const plan = JSON.parse(response.content as string);
+  return { plan };
+}
+
+// 执行节点：执行当前步骤
+async function executeNode(state: typeof PlanState.State) {
+  const step = state.plan[state.currentStep];
+  const response = await agentWithTools.invoke([
+    { role: 'system', content: `执行以下任务：${step}` },
+    ...state.messages,
+  ]);
+  return {
+    results: [response.content],
+    currentStep: state.currentStep + 1,
+  };
+}
+
+// 路由：还有步骤就继续，没有就结束
+function shouldContinue(state: typeof PlanState.State) {
+  if (state.currentStep >= state.plan.length) return 'summarize';
+  return 'execute';
+}
+```
+
+**优点：** 有全局视野，不会在细节上迷失方向
+**缺点：** 计划可能不准确，需要动态调整机制；前期规划本身消耗一次 LLM 调用
+
+**ReAct vs Plan-and-Execute：**
+
+| | ReAct | Plan-and-Execute |
+|---|---|---|
+| 思路 | 走一步看一步 | 先想好再动手 |
+| 类比 | 探索式开发 | 瀑布式开发 |
+| 适合 | 信息检索、简单任务 | 复杂多步任务 |
+| 风险 | 可能跑偏 | 计划可能不对 |
+
+### 3. Reflection（反思模式）
+
+```
+生成初稿 → 自我审查 → 发现问题 → 修改 → 再审查 → ... → 满意为止
+```
+
+**原理：** 一个 Agent 生成内容，另一个（或同一个换角色）审查并提出改进意见，循环直到质量达标。
+
+**适用场景：**
+- 内容生成（写文章、写代码）
+- 需要质量保证的任务
+- 代码审查自动化
+
+**代码骨架：**
+
+```typescript
+// 生成节点
+async function generateNode(state: typeof AgentState.State) {
+  const generator = new ChatOpenAI({ model: 'gpt-4o' });
+  const response = await generator.invoke([
+    {
+      role: 'system',
+      content: '根据需求生成高质量的技术内容。如果有之前的审查意见，根据意见修改。',
+    },
+    ...state.messages,
+  ]);
+  return { messages: [response], iterations: state.iterations + 1 };
+}
+
+// 审查节点
+async function reflectNode(state: typeof AgentState.State) {
+  const reviewer = new ChatOpenAI({ model: 'gpt-4o' });
+  const response = await reviewer.invoke([
+    {
+      role: 'system',
+      content: `严格审查以下内容。
+如果质量达标，回复"APPROVED"。
+如果需要改进，列出具体的修改建议。
+审查标准：技术准确性、代码正确性、表述清晰度、结构完整性。`,
+    },
+    ...state.messages,
+  ]);
+  return { messages: [response] };
+}
+
+// 路由
+function shouldReflect(state: typeof AgentState.State) {
+  const lastMessage = state.messages.at(-1);
+  if (lastMessage?.content?.includes('APPROVED')) return END;
+  if (state.iterations >= 3) return END; // 最多迭代 3 次
+  return 'generate'; // 继续修改
+}
+
+const graph = new StateGraph(AgentState)
+  .addNode('generate', generateNode)
+  .addNode('reflect', reflectNode)
+  .addEdge('__start__', 'generate')
+  .addEdge('generate', 'reflect')
+  .addConditionalEdges('reflect', shouldReflect)
+  .compile();
+```
+
+**优点：** 输出质量高，有自我纠错能力
+**缺点：** 成本高（每次迭代至少 2 次 LLM 调用）；可能陷入"永远不满意"的循环
+
+### 4. Multi-Agent Supervisor（多 Agent 主管）
+
+上一篇详细讲过了，这里放在全局对比中：
+
+```
+Supervisor 分配任务 → Worker A 执行 → 结果回到 Supervisor
+→ Supervisor 分配下一个任务 → Worker B 执行 → ...
+→ Supervisor 判断完成 → 输出最终结果
+```
+
+**适用场景：**
+- 需要多种专业能力的复杂任务
+- 任务可以拆分成独立子任务
+- 需要灵活调度的场景
+
+## 模式选型决策树
+
+```
+你的任务是什么？
+│
+├─ 简单问答 / 单次检索
+│  → 不需要 Agent，直接 RAG 或 Function Calling
+│
+├─ 需要多步工具调用
+│  → ReAct 模式
+│
+├─ 复杂任务，步骤之间有依赖
+│  → Plan-and-Execute
+│
+├─ 需要生成高质量内容
+│  → Reflection 模式
+│
+├─ 需要多种专业能力协作
+│  → Multi-Agent Supervisor
+│
+└─ 以上都不确定
+   → 先用 ReAct，不够再升级
+```
+
+## 模式组合：实际项目中的架构
+
+真实项目中往往是多种模式的组合。比如你博客的 AI 助手可以这样设计：
+
+```
+用户提问
+  ↓
+路由判断（简单 LLM 调用）
+  ├─ 简单问题 → 单 Agent ReAct（RAG + 工具）
+  ├─ 对比分析 → Plan-and-Execute（先规划检索策略，再逐步执行）
+  ├─ 生成文章 → Reflection（生成 + 审查循环）
+  └─ 复杂任务 → Multi-Agent（调研 + 写作 + 审查）
+```
+
+不需要一开始就搭最复杂的架构。从 ReAct 开始，遇到瓶颈再升级。
+
+## 工程化考量
+
+### 错误处理
+
+```typescript
+// 每个节点都要有错误兜底
+async function safeNode(state: State) {
+  try {
+    return await actualLogic(state);
+  } catch (error) {
+    return {
+      messages: [new AIMessage(`执行出错: ${error.message}，尝试其他方案...`)],
+      errors: [...state.errors, error.message],
+    };
+  }
+}
+```
+
+### 超时控制
+
+```typescript
+// 给整个 Agent 执行设置超时
+const result = await Promise.race([
+  graph.invoke({ messages: [new HumanMessage(query)] }),
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Agent 执行超时')), 30000)
+  ),
+]);
+```
+
+### 可观测性
+
+```typescript
+// 记录每个节点的执行日志
+for await (const event of graph.streamEvents(input, { version: 'v2' })) {
+  if (event.event === 'on_chain_start') {
+    console.log(`[${new Date().toISOString()}] 节点开始: ${event.name}`);
+  }
+  if (event.event === 'on_chain_end') {
+    console.log(`[${new Date().toISOString()}] 节点结束: ${event.name}`);
+  }
+}
+```
+
+### 成本控制
+
+```typescript
+// 跟踪 token 使用量
+let totalTokens = 0;
+const MAX_TOKENS = 10000;
+
+async function tokenAwareNode(state: State) {
+  if (totalTokens > MAX_TOKENS) {
+    return { messages: [new AIMessage('已达到 token 上限，返回当前结果。')] };
+  }
+  const response = await llm.invoke(state.messages);
+  totalTokens += response.usage_metadata?.total_tokens ?? 0;
+  return { messages: [response] };
+}
+```
+
+## 面试怎么讲 Agent
+
+如果面试被问到 Agent 相关的问题，按这个框架回答：
+
+**1. 是什么**
+Agent = LLM + 工具调用 + 循环决策。LLM 负责理解意图和决策，工具负责执行，循环让 Agent 能多步推理。
+
+**2. 核心能力**
+- Function Calling：让 LLM 能调用外部工具
+- RAG：让 LLM 能访问外部知识
+- 状态管理：让 Agent 能记住之前做了什么
+
+**3. 设计模式**
+ReAct（通用）、Plan-and-Execute（复杂任务）、Reflection（质量保证）、Multi-Agent（专业分工）。
+
+**4. 结合自己的项目**
+"我在博客项目中实现了一个 RAG + Agent 的 AI 助手，用 LangGraph 做编排，支持多工具调用和流式输出。检索层用了 Query Rewriting + Reranker 的两阶段策略，前端用 SSE + RAF 批量渲染实现打字机效果。"
+
+这一段话覆盖了：架构设计、框架选型、检索优化、前端工程化——面试官想深挖哪个方向都能接住。
+
+## 整个系列的知识图谱
+
+```
+Transformer 基础原理
+  └→ 理解 LLM 为什么能"理解"和"生成"
+
+Function Calling 工具调用
+  └→ LLM 怎么调用外部工具（Agent 的核心能力）
+
+Prompt Engineering
+  └→ 怎么写好提示词（Agent 的决策质量）
+
+RAG 深入理解
+  └→ 怎么给 Agent 外部知识（Agent 的信息来源）
+
+LangGraph Agent 实战
+  └→ 怎么把上面的能力组合成自主决策的系统
+
+多 Agent 协作架构
+  └→ 单 Agent 搞不定时怎么拆分协作
+
+Agent 设计模式总结 ← 你在这里
+  └→ 全局视角，建立选型判断力
+```
+
+从底层原理到应用架构，从单 Agent 到多 Agent，这条线走完你就有了完整的 Agent 开发知识体系。剩下的就是动手做——把你博客的 AI 助手从纯 RAG 升级成 Agent，边做边深入。

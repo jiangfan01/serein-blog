@@ -1,0 +1,448 @@
+# LangGraph Agent 实战
+
+## 从 Function Calling 到 Agent：缺了什么
+
+Function Calling 解决了"模型能调工具"的问题，但它是**单轮**的——调一次工具就结束了。
+
+现实中的任务往往需要多步：
+
+```
+用户: "帮我对比一下博客里 React 和 Vue 的更新机制"
+
+单轮 Function Calling：
+  → 调用 searchBlog("React Vue 更新机制") → 可能只找到一篇 → 回答不完整
+
+Agent 多轮推理：
+  → 第一步：调用 searchBlog("React 更新机制") → 找到 Fiber 那篇
+  → 第二步：调用 searchBlog("Vue 更新机制") → 找到 Vue 响应式那篇
+  → 第三步：两篇都读完了，综合对比生成回答
+```
+
+Agent = Function Calling + **循环** + **状态管理**。LangGraph 就是帮你搭这个循环和状态的框架。
+
+## LangGraph 核心概念
+
+LangGraph 用**有向图**来编排 Agent 的工作流。三个核心概念：
+
+```
+┌─────────────────────────────────────┐
+│            State（状态）              │
+│  整个 Agent 运行过程中的共享数据       │
+│  类似 React 的 useReducer state      │
+└─────────────────────────────────────┘
+        ↓ 流经
+┌─────────────────────────────────────┐
+│            Node（节点）              │
+│  每个节点是一个处理函数               │
+│  类似 React 组件                     │
+└─────────────────────────────────────┘
+        ↓ 连接
+┌─────────────────────────────────────┐
+│            Edge（边）                │
+│  节点之间的连接，可以有条件分支        │
+│  类似 React Router 的路由规则        │
+└─────────────────────────────────────┘
+```
+
+类比前端：LangGraph 就像一个**状态机驱动的 React 应用**——State 是全局状态，Node 是页面组件，Edge 是路由规则。用户的每次交互（工具调用结果）驱动状态变化，状态变化触发下一个节点执行。
+
+## 最简 Agent：ReAct 模式
+
+ReAct（Reasoning + Acting）是最经典的 Agent 模式：
+
+```
+思考 → 行动 → 观察 → 思考 → 行动 → 观察 → ... → 最终回答
+```
+
+用 LangGraph 实现：
+
+```typescript
+import { StateGraph, MessagesAnnotation, END } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+
+// 1. 定义工具
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+const searchBlog = tool(
+  async ({ query, category }) => {
+    // 你的实际搜索逻辑
+    const results = await searchInDatabase(query, category);
+    return JSON.stringify(results);
+  },
+  {
+    name: 'searchBlog',
+    description: '在博客知识库中搜索技术文章。当用户询问特定技术话题时使用。',
+    schema: z.object({
+      query: z.string().describe('搜索关键词'),
+      category: z.string().optional().describe('文章分类'),
+    }),
+  }
+);
+
+const getArticleContent = tool(
+  async ({ slug }) => {
+    const content = await getArticleBySlug(slug);
+    return content;
+  },
+  {
+    name: 'getArticleContent',
+    description: '获取指定文章的完整内容。当需要深入阅读某篇文章时使用。',
+    schema: z.object({
+      slug: z.string().describe('文章的 slug 标识'),
+    }),
+  }
+);
+
+const tools = [searchBlog, getArticleContent];
+
+// 2. 创建 LLM（绑定工具）
+const llm = new ChatOpenAI({
+  model: 'gpt-4o',
+  temperature: 0,
+}).bindTools(tools);
+
+// 3. 定义节点
+// Agent 节点：LLM 思考并决定下一步
+async function agentNode(state: typeof MessagesAnnotation.State) {
+  const response = await llm.invoke(state.messages);
+  return { messages: [response] };
+}
+
+// 工具节点：执行 LLM 选择的工具
+const toolNode = new ToolNode(tools);
+
+// 4. 定义路由逻辑（条件边）
+function shouldContinue(state: typeof MessagesAnnotation.State) {
+  const lastMessage = state.messages[state.messages.length - 1];
+
+  // 如果 LLM 返回了 tool_calls，继续执行工具
+  if (lastMessage.tool_calls?.length > 0) {
+    return 'tools';
+  }
+  // 否则结束（LLM 直接给出了最终回答）
+  return END;
+}
+
+// 5. 组装图
+const graph = new StateGraph(MessagesAnnotation)
+  .addNode('agent', agentNode)
+  .addNode('tools', toolNode)
+  .addEdge('__start__', 'agent')           // 入口 → Agent
+  .addConditionalEdges('agent', shouldContinue) // Agent → 工具 or 结束
+  .addEdge('tools', 'agent')               // 工具执行完 → 回到 Agent
+  .compile();
+```
+
+### 执行流程图
+
+```
+         ┌──────────┐
+         │  开始     │
+         └────┬─────┘
+              ↓
+         ┌──────────┐
+    ┌───→│  Agent   │←──────┐
+    │    │ (LLM思考) │       │
+    │    └────┬─────┘       │
+    │         ↓              │
+    │    有 tool_calls?      │
+    │    ├─ Yes → ┌────────┐│
+    │    │        │ Tools  ││
+    │    │        │(执行工具)││
+    │    │        └───┬────┘│
+    │    │            └─────┘
+    │    └─ No → ┌──────────┐
+    │            │   结束    │
+    │            │ (输出回答) │
+    │            └──────────┘
+    └────────────────────────
+```
+
+这就是一个循环：Agent 思考 → 需要工具就调 → 拿到结果再思考 → 直到不需要工具为止。
+
+### 调用 Agent
+
+```typescript
+import { HumanMessage } from '@langchain/core/messages';
+
+const result = await graph.invoke({
+  messages: [
+    new HumanMessage('对比一下博客里 React 和 Vue 的更新机制'),
+  ],
+});
+
+// result.messages 包含完整的对话历史：
+// [HumanMessage, AIMessage(tool_call), ToolMessage, AIMessage(tool_call), ToolMessage, AIMessage(最终回答)]
+```
+
+## State：Agent 的记忆
+
+`MessagesAnnotation` 是 LangGraph 内置的状态，只包含消息列表。实际项目中你可能需要自定义状态：
+
+```typescript
+import { Annotation } from '@langchain/langgraph';
+
+// 自定义状态
+const AgentState = Annotation.Root({
+  // 消息历史（自动追加）
+  messages: Annotation({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+  // 已搜索过的关键词（避免重复搜索）
+  searchedQueries: Annotation({
+    reducer: (prev, next) => [...new Set([...prev, ...next])],
+    default: () => [],
+  }),
+  // 找到的文章内容
+  retrievedArticles: Annotation({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+  // 当前步骤计数（防止无限循环）
+  stepCount: Annotation({
+    reducer: (_, next) => next,
+    default: () => 0,
+  }),
+});
+```
+
+类比前端：这就是 `useReducer` 的 state + reducer。每个节点执行后返回的数据通过 reducer 合并到全局状态。
+
+## 条件路由：Agent 的决策树
+
+除了"调不调工具"，你还可以加更复杂的路由逻辑：
+
+```typescript
+function routeAgent(state: typeof AgentState.State) {
+  const lastMessage = state.messages[state.messages.length - 1];
+
+  // 防止无限循环：超过 5 步强制结束
+  if (state.stepCount > 5) {
+    return 'forceEnd';
+  }
+
+  // 有工具调用 → 执行工具
+  if (lastMessage.tool_calls?.length > 0) {
+    return 'tools';
+  }
+
+  // 没有工具调用 → 结束
+  return END;
+}
+
+// 强制结束节点
+async function forceEndNode(state: typeof AgentState.State) {
+  return {
+    messages: [
+      new AIMessage('抱歉，我尝试了多次但无法完成这个任务。以下是我目前找到的信息：...'),
+    ],
+  };
+}
+
+const graph = new StateGraph(AgentState)
+  .addNode('agent', agentNode)
+  .addNode('tools', toolNode)
+  .addNode('forceEnd', forceEndNode)
+  .addEdge('__start__', 'agent')
+  .addConditionalEdges('agent', routeAgent)
+  .addEdge('tools', 'agent')
+  .addEdge('forceEnd', END)
+  .compile();
+```
+
+## 流式输出：和你的 SSE 架构结合
+
+LangGraph 原生支持流式输出，可以直接接入你博客的 SSE 架构：
+
+```typescript
+// Next.js API Route
+export async function POST(req: Request) {
+  const { message } = await req.json();
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // streamEvents 会逐步输出每个节点的执行过程
+      for await (const event of graph.streamEvents(
+        { messages: [new HumanMessage(message)] },
+        { version: 'v2' }
+      )) {
+        // 只推送 LLM 生成的文本 token
+        if (
+          event.event === 'on_chat_model_stream' &&
+          event.data.chunk?.content
+        ) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'token',
+              content: event.data.chunk.content,
+            })}\n\n`)
+          );
+        }
+
+        // 推送工具调用状态（让前端显示"正在搜索..."）
+        if (event.event === 'on_tool_start') {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'tool_start',
+              tool: event.name,
+            })}\n\n`)
+          );
+        }
+      }
+
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
+}
+```
+
+前端可以根据 `type` 字段区分是文本 token 还是工具调用状态，显示不同的 UI（比如工具调用时显示一个 loading 动画）。
+
+## 实战场景：升级你的博客 AI 助手
+
+把你现在的纯 RAG 聊天升级成 Agent：
+
+```
+现在：
+  用户提问 → RAG 检索 → LLM 回答
+
+升级后：
+  用户提问 → Agent 判断意图
+    ├─ 技术问题 → RAG 检索 → 回答
+    ├─ 找文章 → searchBlog → 返回文章列表
+    ├─ 对比分析 → 多次检索 → 综合回答
+    ├─ 博客导航 → getCategories → 返回分类
+    └─ 闲聊 → 直接回答
+```
+
+需要的工具：
+
+```typescript
+const tools = [
+  // 1. RAG 检索（你已有的能力）
+  tool(async ({ query }) => {
+    const chunks = await retrieveRelevantChunks(query);
+    return chunks.map(c => c.content).join('\n\n');
+  }, {
+    name: 'ragSearch',
+    description: '基于语义相似度搜索博客笔记内容。用于回答具体的技术问题。',
+    schema: z.object({ query: z.string() }),
+  }),
+
+  // 2. 文章列表（新增）
+  tool(async ({ category }) => {
+    const articles = await getArticlesByCategory(category);
+    return JSON.stringify(articles);
+  }, {
+    name: 'listArticles',
+    description: '列出指定分类下的所有文章。用于用户想浏览文章列表时。',
+    schema: z.object({
+      category: z.enum(['react', 'vue', 'javascript', 'css', 'web', 'agent']).optional(),
+    }),
+  }),
+
+  // 3. 博客信息（新增）
+  tool(async () => {
+    return JSON.stringify({
+      categories: ['React', 'Vue', 'JavaScript', 'CSS', 'Web 基础', '算法', '开发经历', 'Agent 开发'],
+      totalArticles: 15,
+      author: 'Serein',
+    });
+  }, {
+    name: 'getBlogInfo',
+    description: '获取博客的基本信息，包括分类列表和文章总数。用于用户询问博客概况时。',
+    schema: z.object({}),
+  }),
+];
+```
+
+## Agent 设计的常见坑
+
+### 1. 无限循环
+Agent 可能反复调用同一个工具。解决方案：
+- 加步骤计数器，超过阈值强制结束
+- 在状态里记录已调用的工具和参数，避免重复
+
+### 2. 工具结果太长
+工具返回大量文本会撑爆 context window。解决方案：
+- 工具内部做截断或摘要
+- 限制返回结果数量
+
+### 3. 模型"忘记"目标
+多步推理中，模型可能偏离原始问题。解决方案：
+- 在 system prompt 里强调"始终围绕用户的原始问题"
+- 每次回到 Agent 节点时，把原始问题重新注入
+
+### 4. 错误处理
+工具执行可能失败。解决方案：
+
+```typescript
+const safeToolNode = async (state) => {
+  try {
+    return await toolNode(state);
+  } catch (error) {
+    // 把错误信息作为工具结果返回给 Agent
+    // Agent 会看到错误并决定是重试还是换个方案
+    return {
+      messages: [
+        new ToolMessage({
+          content: `工具执行失败: ${error.message}`,
+          tool_call_id: state.messages.at(-1).tool_calls[0].id,
+        }),
+      ],
+    };
+  }
+};
+```
+
+## LangGraph vs 手写循环
+
+你可能会想：这个循环我自己用 while 写不就行了？
+
+```typescript
+// 手写版
+while (true) {
+  const response = await llm.invoke(messages);
+  if (!response.tool_calls?.length) break;
+  // 执行工具...
+  messages.push(toolResult);
+}
+```
+
+简单场景确实够用。LangGraph 的价值在于：
+
+| 能力 | 手写 | LangGraph |
+|---|---|---|
+| 简单循环 | ✅ 够用 | 有点重 |
+| 条件分支 | 要写 if-else | 声明式路由 |
+| 并行节点 | 要手动 Promise.all | 内置支持 |
+| 状态持久化 | 要自己存数据库 | 内置 checkpointer |
+| 人工介入 | 要自己实现暂停/恢复 | 内置 interrupt |
+| 流式输出 | 要自己拼 SSE | 内置 streamEvents |
+| 可视化调试 | 没有 | LangSmith 集成 |
+
+如果你只是做一个简单的 RAG + 工具调用，手写 while 循环就够了。如果要做复杂的多步推理、人工审核、并行任务，LangGraph 能省很多事。
+
+## 下一步
+
+到这里你已经掌握了单 Agent 的完整能力：
+
+- Transformer → 底层原理（知道为什么）
+- Function Calling → 工具调用（Agent 的手）
+- Prompt Engineering → 提示词设计（Agent 的脑）
+- LangGraph → 状态机编排（Agent 的骨架）
+
+接下来进入多 Agent 协作——当一个 Agent 搞不定时，让多个 Agent 分工合作。

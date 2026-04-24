@@ -7,4 +7,5 @@ export default {
   web: 'Web 基础',
   algorithm: '算法',
   interview: '开发经历',
+  agent: 'Agent 开发',
 }

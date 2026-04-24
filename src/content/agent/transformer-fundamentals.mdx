@@ -1,0 +1,251 @@
+# Transformer 基础原理
+
+## 为什么要学 Transformer
+
+LLM、RAG、Agent、Function Calling……这些概念的底层都是 Transformer 架构。不理解 Transformer，上层的东西就是在背 API。
+
+类比前端：Transformer 之于 AI，就像 Virtual DOM 之于 React——你可以不看源码也能写业务，但理解了它，你对整个体系的判断力完全不同。
+
+## 一句话概括
+
+Transformer 是一种**序列到序列**的神经网络架构，核心创新是用 **Self-Attention（自注意力）** 机制替代了 RNN 的循环结构，实现了并行计算和长距离依赖捕获。
+
+## 从前端视角理解整体架构
+
+```
+输入文本: "React 的虚拟 DOM 是什么"
+       ↓
+┌─────────────────────────────┐
+│  Tokenizer（分词器）          │  ← 类似 JSON.parse，把字符串变成结构化数据
+│  "React" "的" "虚拟" "DOM" "是" "什么"
+└─────────────────────────────┘
+       ↓
+┌─────────────────────────────┐
+│  Embedding（嵌入层）          │  ← 类似 CSS-in-JS，把 token 映射成数值向量
+│  每个 token → 一个高维向量（如 768 维）
+└─────────────────────────────┘
+       ↓
+┌─────────────────────────────┐
+│  Positional Encoding（位置编码）│  ← 类似 z-index，告诉模型每个词的位置
+└─────────────────────────────┘
+       ↓
+┌─────────────────────────────┐
+│  Transformer Blocks × N      │  ← 类似嵌套组件，每层做一次注意力 + 前馈
+│  ┌───────────────────────┐  │
+│  │  Self-Attention        │  │  ← 核心：每个词"看"所有其他词
+│  └───────────────────────┘  │
+│  ┌───────────────────────┐  │
+│  │  Feed-Forward Network  │  │  ← 类似 useMemo，对每个位置独立计算
+│  └───────────────────────┘  │
+└─────────────────────────────┘
+       ↓
+┌─────────────────────────────┐
+│  Output Layer                │  ← 预测下一个 token 的概率分布
+└─────────────────────────────┘
+```
+
+## 核心概念拆解
+
+### 1. Tokenization：文本变数字
+
+模型不认识文字，只认识数字。Tokenizer 把文本切成 token（子词单元），每个 token 对应一个整数 ID。
+
+```
+"React 的虚拟 DOM" → [15496, 1916, 46349, 8619, 3397]
+```
+
+类比前端：就像浏览器不认识 JSX，需要 Babel 编译成 `React.createElement` 调用。Tokenizer 就是 AI 世界的编译器。
+
+**关键认知：**
+- 一个 token ≠ 一个字。英文大约 1 token ≈ 0.75 个单词，中文大约 1 token ≈ 0.5-1 个字
+- GPT-4 的上下文窗口是 128K tokens，这就是为什么长文档需要 RAG 做检索而不是全塞进去
+- 不同模型的 Tokenizer 不同，所以同一段文本在不同模型里 token 数不一样
+
+### 2. Embedding：数字变向量
+
+每个 token ID 通过一个查找表（Embedding Matrix）映射成一个高维向量。
+
+```
+token "React" (ID: 15496) → [0.12, -0.34, 0.56, ..., 0.78]  // 768 维向量
+token "Vue"   (ID: 23891) → [0.15, -0.31, 0.52, ..., 0.81]  // 语义相近，向量也相近
+```
+
+类比前端：就像 CSS 变量把抽象的 `--primary-color` 映射成具体的 `#3b82f6`。Embedding 把离散的 token ID 映射成连续的语义空间。
+
+**关键认知：**
+- 语义相近的词，向量距离也近。这就是你 RAG 里余弦相似度检索的原理
+- 你博客里用的 `bge-m3` 模型就是一个专门训练的 Embedding 模型，输出 1024 维向量
+- Embedding 是可以训练的，模型通过大量文本学会了"什么词和什么词语义接近"
+
+### 3. Positional Encoding：告诉模型词序
+
+Attention 机制本身不关心顺序（它同时看所有词），所以需要额外注入位置信息。
+
+```
+"我 喜欢 你" 和 "你 喜欢 我" 的 token 完全一样
+但加上位置编码后，模型能区分它们
+```
+
+类比前端：就像 Flexbox 的 `order` 属性——元素本身不知道自己排第几，需要额外的属性告诉布局引擎。
+
+### 4. Self-Attention：核心中的核心 ⭐
+
+这是 Transformer 最重要的创新。一句话：**让每个词都能"看到"句子中的所有其他词，并决定该关注谁。**
+
+#### Q/K/V 直觉理解
+
+每个 token 会生成三个向量：
+
+- **Query（Q）**：我在找什么？—— 类似搜索框里输入的关键词
+- **Key（K）**：我能提供什么？—— 类似搜索结果的标题/标签
+- **Value（V）**：我的实际内容是什么？—— 类似搜索结果的正文
+
+```
+句子: "猫 坐在 垫子 上"
+
+"坐在" 的 Query: "谁在坐？坐在哪？"
+"猫" 的 Key:    "我是一个动物/主语"     → 匹配度高 ✓
+"垫子" 的 Key:  "我是一个物体/地点"     → 匹配度高 ✓
+"上" 的 Key:    "我是一个方位词"        → 匹配度中等
+```
+
+#### 计算过程
+
+```
+Attention(Q, K, V) = softmax(Q × K^T / √d_k) × V
+```
+
+别被公式吓到，拆开看：
+
+1. **Q × K^T**：每个 Query 和所有 Key 做点积，得到"关注度分数"
+2. **/ √d_k**：除以维度的平方根，防止数值太大（类似归一化）
+3. **softmax**：把分数变成概率分布（所有注意力权重加起来 = 1）
+4. **× V**：用注意力权重对 Value 做加权求和，得到最终输出
+
+类比前端：
+
+```typescript
+// Self-Attention 的 "前端伪代码"
+function selfAttention(tokens: Token[]) {
+  return tokens.map(currentToken => {
+    // 1. 当前 token 对所有 token 计算关注度
+    const scores = tokens.map(other =>
+      dotProduct(currentToken.query, other.key)
+    );
+
+    // 2. 归一化成概率
+    const weights = softmax(scores);
+
+    // 3. 加权求和得到新的表示
+    const output = tokens.reduce((sum, other, i) =>
+      sum + weights[i] * other.value
+    , zeroVector);
+
+    return output;
+  });
+}
+```
+
+#### Multi-Head Attention：多角度关注
+
+一个 Attention Head 只能学一种关注模式。Multi-Head 就是并行跑多个 Attention，每个 Head 关注不同的东西：
+
+- Head 1 可能关注语法关系（主语-谓语）
+- Head 2 可能关注指代关系（"它" 指的是谁）
+- Head 3 可能关注语义相似性
+
+类比前端：就像 `Promise.all` 并行执行多个异步任务，最后合并结果。
+
+### 5. Feed-Forward Network：独立思考
+
+每个 Attention 层后面跟一个前馈网络（FFN），对每个位置独立做非线性变换。
+
+```
+FFN(x) = ReLU(x × W1 + b1) × W2 + b2
+```
+
+类比前端：Attention 是"开会讨论"（每个词和其他词交流），FFN 是"独立思考"（每个词自己消化信息）。就像 React 组件先通过 Context 获取全局信息，再在自己的 `useMemo` 里做本地计算。
+
+### 6. 残差连接 + Layer Norm
+
+每个子层（Attention / FFN）都有：
+
+```
+output = LayerNorm(x + SubLayer(x))
+```
+
+- **残差连接（x + SubLayer(x)）**：防止深层网络梯度消失，类似 React 的 `fallback`——即使子层学废了，至少还有原始输入兜底
+- **Layer Norm**：归一化，稳定训练过程
+
+## GPT 和 BERT 的区别
+
+原始 Transformer 有 Encoder + Decoder 两部分：
+
+| | Encoder（BERT） | Decoder（GPT） |
+|---|---|---|
+| 注意力方向 | 双向（能看到前后文） | 单向（只能看到前文） |
+| 典型任务 | 理解类（分类、NER、Embedding） | 生成类（对话、写作、代码） |
+| 类比 | 阅读理解 | 续写故事 |
+
+**你博客里用的：**
+- `bge-m3`（Embedding 模型）→ Encoder 架构，擅长理解语义
+- `Kimi / GPT`（对话模型）→ Decoder 架构，擅长生成文本
+
+这就是为什么 RAG 需要两个模型：一个负责"理解"（检索），一个负责"生成"（回答）。
+
+## Token 生成过程：自回归
+
+GPT 类模型生成文本的方式是**自回归（Autoregressive）**——每次只预测下一个 token，然后把预测结果拼回输入，再预测下下个：
+
+```
+输入: "React 是"
+  → 预测: "一个"
+输入: "React 是 一个"
+  → 预测: "用于"
+输入: "React 是 一个 用于"
+  → 预测: "构建"
+...
+```
+
+类比前端：就像 `Array.reduce`——每一步的输出是下一步的输入，逐步累积结果。
+
+这也解释了为什么 LLM 的响应是流式的（你博客的 SSE 架构）——它确实是一个 token 一个 token 生成的。
+
+## Temperature 和 Top-p：控制随机性
+
+模型预测下一个 token 时，输出的是概率分布：
+
+```
+"React 是一个 ___"
+  "框架": 0.35
+  "库":   0.30
+  "工具": 0.15
+  "东西": 0.08
+  ...
+```
+
+- **Temperature**：控制概率分布的"锐度"。低温（0.1）→ 几乎总选概率最高的，输出确定性强；高温（1.0）→ 更随机，输出更有创意
+- **Top-p**：只从累积概率前 p% 的 token 里采样。Top-p=0.9 意味着只考虑概率加起来达到 90% 的那些候选词
+
+类比前端：Temperature 就像 `Math.random()` 的种子——调低了结果几乎固定，调高了每次都不一样。
+
+## 和你已有知识的串联
+
+| 你已经用过的 | 对应的 Transformer 概念 |
+|---|---|
+| `embeddings.ts` 调 bge-m3 | Embedding 层 + Encoder |
+| pgvector 余弦相似度 | 向量空间中的距离计算 |
+| LangChain `chain.stream()` | 自回归生成 + 流式输出 |
+| SSE 逐 token 推送 | Decoder 每步生成一个 token |
+| context window 限制 | Attention 的计算复杂度 O(n²) |
+| RAG 检索 + 拼接 prompt | 绕过 context window 限制的工程方案 |
+
+## 下一步
+
+理解了 Transformer，接下来的学习路线：
+
+1. **Prompt Engineering** → 理解了 token 和 attention，你就知道为什么 prompt 的措辞会影响输出
+2. **Function Calling** → 模型怎么"调用工具"，本质是在生成特定格式的 token
+3. **RAG 深入** → 你已经实现了基础版，可以深入 Reranker、HyDE 等高级检索策略
+4. **LangGraph Agent** → 把 LLM + 工具 + 状态机组合成自主决策的 Agent
+5. **多 Agent 协作** → 多个 Agent 分工合作，处理复杂任务

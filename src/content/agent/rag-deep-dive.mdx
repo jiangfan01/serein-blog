@@ -1,0 +1,353 @@
+# RAG 深入理解
+
+## 你已经有的基础
+
+在"开发经历"里你已经写过一篇 RAG 架构文章，实现了完整的检索增强生成管线：
+
+```
+MDX 笔记 → 切片 → Embedding → pgvector 存储
+用户提问 → Embedding → 余弦相似度检索 → 拼接上下文 → LLM 生成
+```
+
+这篇不重复基础，而是讲：**你现在的 RAG 有什么问题、怎么优化、业界在用什么高级策略。**
+
+## 当前实现的瓶颈
+
+### 问题 1：语义鸿沟
+
+用户的提问方式和文档的表述方式往往不一样：
+
+```
+用户问: "React 怎么避免不必要的渲染"
+文档写: "React.memo 会对 props 进行浅比较，如果 props 没有变化则跳过渲染"
+```
+
+用户用的是"避免不必要的渲染"，文档用的是"跳过渲染"。虽然语义相近，但 Embedding 向量的相似度可能不够高，导致检索不到最相关的内容。
+
+### 问题 2：检索精度 vs 召回率
+
+你现在 `topK = 3`，只取最相似的 3 个切片。问题是：
+- 太少：可能漏掉相关内容
+- 太多：不相关的内容混进来，干扰 LLM 回答
+
+### 问题 3：切片边界
+
+你用的是 800 字符切片 + 200 重叠。但有些知识点跨越了切片边界，被切断后语义不完整。
+
+### 问题 4：所有问题都走检索
+
+你现在的架构是所有用户问题都做向量检索。但有些问题不需要检索（"你好"、"你是谁"），有些问题需要不同的检索策略（"对比 React 和 Vue"需要检索两个主题）。
+
+## 优化策略
+
+### 策略 1：Query Rewriting（查询改写）
+
+在检索之前，先让 LLM 把用户的口语化问题改写成更适合检索的形式。
+
+```typescript
+import { ChatOpenAI } from '@langchain/openai';
+
+const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+
+async function rewriteQuery(originalQuery: string): Promise<string> {
+  const response = await llm.invoke([
+    {
+      role: 'system',
+      content: `你是一个查询改写助手。将用户的口语化问题改写成更适合语义检索的形式。
+规则：
+- 提取核心技术术语
+- 去掉口语化表达
+- 保持原始意图
+- 只输出改写后的查询，不要解释
+
+示例：
+输入: "React 怎么避免组件重复渲染啊"
+输出: "React 组件渲染优化 React.memo useMemo useCallback"`,
+    },
+    { role: 'user', content: originalQuery },
+  ]);
+
+  return response.content as string;
+}
+
+// 使用
+const original = 'React 怎么避免不必要的渲染';
+const rewritten = await rewriteQuery(original);
+// → "React 渲染优化 React.memo shouldComponentUpdate useMemo"
+const results = await retrieveContext(rewritten);
+```
+
+改写后的查询包含了更多相关术语，Embedding 匹配度会更高。
+
+### 策略 2：HyDE（假设性文档嵌入）
+
+思路更激进：不是改写查询，而是让 LLM 先**假装回答**这个问题，然后用这个"假回答"去做检索。
+
+```typescript
+async function hydeRetrieve(query: string): Promise<string> {
+  // 1. 让 LLM 生成一个假设性回答
+  const hypothetical = await llm.invoke([
+    {
+      role: 'system',
+      content: '请回答以下技术问题。即使你不确定，也请给出一个合理的回答。不需要完美，只需要包含相关的技术术语和概念。',
+    },
+    { role: 'user', content: query },
+  ]);
+
+  // 2. 用假设性回答做检索（而不是用原始问题）
+  const results = await retrieveContext(hypothetical.content as string);
+  return results;
+}
+```
+
+为什么有效？因为 LLM 生成的"假回答"在表述方式上更接近文档的写法，Embedding 相似度更高。
+
+```
+用户问: "React 怎么避免不必要的渲染"
+
+假设性回答: "React 中可以使用 React.memo 对组件进行浅比较优化，
+使用 useMemo 缓存计算结果，使用 useCallback 缓存函数引用，
+避免父组件重渲染时子组件不必要的更新..."
+
+这个假回答和文档的表述方式很接近 → 检索精度大幅提升
+```
+
+代价是多了一次 LLM 调用，但用便宜的小模型（gpt-4o-mini）就够了。
+
+### 策略 3：Multi-Query（多查询检索）
+
+一个问题拆成多个角度去检索，合并结果：
+
+```typescript
+async function multiQueryRetrieve(query: string): Promise<string> {
+  // 1. 让 LLM 从多个角度生成查询
+  const response = await llm.invoke([
+    {
+      role: 'system',
+      content: `将用户问题从 3 个不同角度改写，用于语义检索。
+每行一个查询，不要编号，不要解释。
+
+示例：
+输入: "React 和 Vue 的区别"
+输出:
+React 核心特性 虚拟DOM JSX 单向数据流
+Vue 核心特性 响应式 模板语法 双向绑定
+React Vue 框架对比 设计理念差异`,
+    },
+    { role: 'user', content: query },
+  ]);
+
+  const queries = (response.content as string).split('\n').filter(Boolean);
+
+  // 2. 每个查询独立检索
+  const allResults = await Promise.all(
+    queries.map(q => retrieveContext(q, 2)) // 每个查询取 top 2
+  );
+
+  // 3. 去重合并
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const result of allResults) {
+    if (result && !seen.has(result)) {
+      seen.add(result);
+      merged.push(result);
+    }
+  }
+
+  return merged.join('\n\n');
+}
+```
+
+这对"对比类"问题特别有效——"对比 React 和 Vue"会被拆成分别检索 React 和 Vue 的内容。
+
+### 策略 4：Reranker（重排序）
+
+先粗检索（topK 较大），再用专门的 Reranker 模型精排：
+
+```typescript
+async function retrieveWithRerank(
+  query: string,
+  topK = 3
+): Promise<string> {
+  // 1. 粗检索：取 top 10（比最终需要的多）
+  const candidates = await retrieveContext(query, 10);
+
+  // 2. 用 Reranker 重新打分
+  const reranked = await rerank(query, candidates);
+
+  // 3. 取重排后的 top 3
+  return reranked.slice(0, topK);
+}
+
+async function rerank(query: string, documents: string[]): Promise<string[]> {
+  // 用 SiliconFlow 的 Reranker API（免费）
+  const response = await fetch('https://api.siliconflow.cn/v1/rerank', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.SILICONFLOW_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'BAAI/bge-reranker-v2-m3',
+      query,
+      documents,
+      top_n: 3,
+    }),
+  });
+
+  const json = await response.json();
+  return json.results
+    .sort((a: any, b: any) => b.relevance_score - a.relevance_score)
+    .map((r: any) => documents[r.index]);
+}
+```
+
+为什么 Reranker 比纯向量检索准？
+- Embedding 检索是**双编码器**：query 和 document 分别编码，只比较向量距离
+- Reranker 是**交叉编码器**：把 query 和 document 拼在一起输入模型，能捕捉更细粒度的语义关系
+
+代价是 Reranker 不能做大规模检索（太慢），所以用"粗检索 + 精排"的两阶段策略。
+
+### 策略 5：路由检索（结合 Agent）
+
+不是所有问题都需要 RAG。用 Agent 的 Function Calling 能力做路由：
+
+```typescript
+// 在 LangGraph Agent 中定义不同的检索工具
+const tools = [
+  tool(async ({ query }) => {
+    return await retrieveContext(query);
+  }, {
+    name: 'semanticSearch',
+    description: '基于语义相似度搜索笔记内容。用于回答具体的技术问题，如"React hooks 怎么用"。',
+    schema: z.object({ query: z.string() }),
+  }),
+
+  tool(async ({ category }) => {
+    return await listArticlesByCategory(category);
+  }, {
+    name: 'browseArticles',
+    description: '浏览指定分类的文章列表。用于用户想看有哪些文章时，如"React 分类下有什么笔记"。',
+    schema: z.object({ category: z.string() }),
+  }),
+
+  // 不需要检索的问题，Agent 会直接回答
+];
+```
+
+这就是上一篇 LangGraph 讲的——让 Agent 自己判断该不该检索、怎么检索。
+
+## 你的 RAG 可以怎么升级
+
+按投入产出比排序：
+
+| 优先级 | 策略 | 改动量 | 效果 |
+|---|---|---|---|
+| ⭐⭐⭐ | Query Rewriting | 加一个函数 | 口语化问题的检索精度大幅提升 |
+| ⭐⭐⭐ | 路由检索 | 结合 Agent | 不该检索的问题不再浪费检索 |
+| ⭐⭐ | Reranker | 加一个 API 调用 | 检索精度提升，SiliconFlow 免费 |
+| ⭐⭐ | Multi-Query | 加一个函数 | 对比类问题效果好 |
+| ⭐ | HyDE | 加一个函数 | 效果好但多一次 LLM 调用 |
+
+最推荐先做 **Query Rewriting + Reranker**，改动小、效果明显、成本低（SiliconFlow 的 Reranker 免费）。
+
+## 进阶：Chunking 策略优化
+
+你现在用的是固定大小切片（800 字符 + 200 重叠）。更好的方案：
+
+### 语义切片
+
+按语义边界切，而不是按字符数切：
+
+```typescript
+import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+
+// 你现在的方式：固定大小
+const basicSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: 800,
+  chunkOverlap: 200,
+});
+
+// 更好的方式：按 markdown 结构切
+const markdownSplitter = RecursiveCharacterTextSplitter.fromLanguage(
+  'markdown',
+  {
+    chunkSize: 1000,
+    chunkOverlap: 200,
+  }
+);
+```
+
+`fromLanguage('markdown')` 会优先在 `##`、`###` 等标题处切分，保持每个切片的语义完整性。
+
+### 父子切片
+
+检索用小切片（精确匹配），回答用大切片（完整上下文）：
+
+```
+文档 → 大切片（2000 字符，用于回答）
+         ↓ 再切
+       小切片（400 字符，用于检索）
+
+检索时：用小切片做向量匹配（精确）
+回答时：返回匹配到的小切片所属的大切片（完整）
+```
+
+这解决了"切片太小丢上下文、切片太大检索不准"的矛盾。
+
+## Evaluation：怎么知道 RAG 变好了
+
+优化 RAG 最大的坑是**没有评估标准**，凭感觉调参。
+
+### 简单评估方法
+
+准备一组测试问题和期望答案：
+
+```typescript
+const testCases = [
+  {
+    question: 'React Fiber 是什么',
+    expectedSources: ['react/fiber.mdx'],
+    expectedKeywords: ['协调', '时间切片', '优先级'],
+  },
+  {
+    question: 'Vue 的响应式原理',
+    expectedSources: ['vue/update-mechanism.mdx'],
+    expectedKeywords: ['Proxy', '依赖收集', '派发更新'],
+  },
+  // ...更多测试用例
+];
+
+async function evaluate() {
+  for (const tc of testCases) {
+    const results = await retrieveContext(tc.question, 3);
+
+    // 检查是否检索到了正确的来源
+    const sourceHit = tc.expectedSources.some(s => results.includes(s));
+
+    // 检查关键词覆盖率
+    const keywordHits = tc.expectedKeywords.filter(k => results.includes(k));
+    const coverage = keywordHits.length / tc.expectedKeywords.length;
+
+    console.log(`${tc.question}: 来源命中=${sourceHit}, 关键词覆盖=${(coverage * 100).toFixed(0)}%`);
+  }
+}
+```
+
+每次改完检索策略跑一遍，数据说话。
+
+## 和 Agent 的关系
+
+RAG 是 Agent 最常用的工具之一。在 Agent 架构中：
+
+- **纯 RAG**：所有问题 → 检索 → 回答（你现在的方式）
+- **Agent + RAG**：Agent 判断是否需要检索、用什么策略检索、检索结果够不够（下一步）
+- **Agentic RAG**：Agent 可以多次检索、换关键词重试、结合多个来源综合回答
+
+从纯 RAG 到 Agentic RAG，就是从"固定管线"到"智能管线"的升级。这也是你新公司 AI Demo 可以讲的故事。
+
+## 下一步
+
+RAG 是 Agent 的"眼睛"（获取外部知识），Function Calling 是 Agent 的"手"（操作外部系统）。接下来：
+
+→ 你已经看过 LangGraph Agent 了，下一篇是**多 Agent 协作架构**——当一个 Agent 搞不定时，让多个 Agent 分工合作。

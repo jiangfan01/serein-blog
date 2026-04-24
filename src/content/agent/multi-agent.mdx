@@ -1,0 +1,348 @@
+# 多 Agent 协作架构
+
+## 为什么需要多 Agent
+
+单 Agent 的问题：你给它太多工具和太复杂的指令，它就开始犯迷糊——该调的工具不调，不该调的乱调，推理链路越长越容易跑偏。
+
+类比前端：就像一个 God Component 塞了几千行逻辑，什么都能干但什么都干不好。解决方案是什么？拆组件。多 Agent 就是 AI 版的"拆组件"。
+
+```
+单 Agent（God Component）：
+  一个 Agent 负责：检索、写代码、审查代码、跑测试、写文档...
+  → 工具太多，prompt 太长，决策质量下降
+
+多 Agent（组件化）：
+  检索 Agent：专门负责 RAG 检索和信息整理
+  编码 Agent：专门负责写代码
+  审查 Agent：专门负责 Code Review
+  → 每个 Agent 职责单一，prompt 精简，决策质量高
+```
+
+## 三种协作模式
+
+### 模式 1：Supervisor（主管模式）
+
+一个"主管 Agent"负责分配任务，多个"工人 Agent"负责执行。
+
+```
+                ┌──────────────┐
+                │  Supervisor  │
+                │  (主管 Agent) │
+                └──────┬───────┘
+                       │ 分配任务
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+   ┌────────────┐ ┌────────────┐ ┌────────────┐
+   │ 检索 Agent  │ │ 编码 Agent  │ │ 审查 Agent  │
+   └────────────┘ └────────────┘ └────────────┘
+```
+
+类比前端：就像 React 的父组件通过 props 控制子组件——Supervisor 决定"接下来该谁干活"，Worker 只管执行自己的任务。
+
+```typescript
+import { StateGraph, MessagesAnnotation, END } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+
+// Supervisor：决定下一步该哪个 Agent 干活
+async function supervisorNode(state: typeof MessagesAnnotation.State) {
+  const supervisor = new ChatOpenAI({ model: 'gpt-4o', temperature: 0 });
+
+  const response = await supervisor.invoke([
+    {
+      role: 'system',
+      content: `你是一个任务调度主管。根据当前对话状态，决定下一步该交给哪个 Agent 处理。
+
+可用的 Agent：
+- researcher：负责搜索和检索信息，当需要查找资料时使用
+- coder：负责编写和修改代码，当需要写代码时使用
+- reviewer：负责审查代码质量，当代码写完需要检查时使用
+
+返回 JSON 格式：{ "next": "researcher" | "coder" | "reviewer" | "FINISH" }
+当任务完成时返回 FINISH。`,
+    },
+    ...state.messages,
+  ]);
+
+  const decision = JSON.parse(response.content as string);
+  return { next: decision.next };
+}
+
+// 检索 Agent
+async function researcherNode(state: typeof MessagesAnnotation.State) {
+  const researcher = new ChatOpenAI({ model: 'gpt-4o', temperature: 0 });
+  // 绑定 RAG 检索工具
+  const withTools = researcher.bindTools([ragSearchTool]);
+  const response = await withTools.invoke([
+    {
+      role: 'system',
+      content: '你是一个技术调研专家。搜索相关资料并整理成清晰的要点。',
+    },
+    ...state.messages,
+  ]);
+  return { messages: [response] };
+}
+
+// 编码 Agent
+async function coderNode(state: typeof MessagesAnnotation.State) {
+  const coder = new ChatOpenAI({ model: 'gpt-4o', temperature: 0 });
+  const response = await coder.invoke([
+    {
+      role: 'system',
+      content: '你是一个高级前端工程师。根据需求和调研结果编写高质量的 TypeScript 代码。',
+    },
+    ...state.messages,
+  ]);
+  return { messages: [response] };
+}
+
+// 审查 Agent
+async function reviewerNode(state: typeof MessagesAnnotation.State) {
+  const reviewer = new ChatOpenAI({ model: 'gpt-4o', temperature: 0 });
+  const response = await reviewer.invoke([
+    {
+      role: 'system',
+      content: `你是一个代码审查专家。检查代码的：
+- 类型安全
+- 错误处理
+- 性能问题
+- 命名规范
+如果有问题，指出具体问题和修复建议。如果没问题，说"代码审查通过"。`,
+    },
+    ...state.messages,
+  ]);
+  return { messages: [response] };
+}
+
+// 路由函数
+function routeSupervisor(state: any) {
+  if (state.next === 'FINISH') return END;
+  return state.next;
+}
+
+// 组装图
+const graph = new StateGraph(MessagesAnnotation)
+  .addNode('supervisor', supervisorNode)
+  .addNode('researcher', researcherNode)
+  .addNode('coder', coderNode)
+  .addNode('reviewer', reviewerNode)
+  .addEdge('__start__', 'supervisor')
+  .addConditionalEdges('supervisor', routeSupervisor)
+  .addEdge('researcher', 'supervisor')  // 执行完回到主管
+  .addEdge('coder', 'supervisor')
+  .addEdge('reviewer', 'supervisor')
+  .compile();
+```
+
+执行流程示例：
+
+```
+用户: "帮我写一个 React 自定义 hook 来管理 localStorage"
+
+Supervisor → 先让 researcher 查查最佳实践
+Researcher → 检索到相关资料，返回要点
+Supervisor → 资料够了，让 coder 写代码
+Coder → 写出 useLocalStorage hook
+Supervisor → 代码写完了，让 reviewer 审查
+Reviewer → 发现缺少 SSR 兼容处理，提出修改建议
+Supervisor → 有问题，让 coder 修改
+Coder → 加上 typeof window 检查
+Supervisor → 再让 reviewer 看看
+Reviewer → 审查通过
+Supervisor → FINISH
+```
+
+### 模式 2：Handoff（交接模式）
+
+没有主管，Agent 之间直接交接。每个 Agent 完成自己的部分后，决定交给谁。
+
+```
+┌────────────┐    ┌────────────┐    ┌────────────┐
+│ 检索 Agent  │───→│ 编码 Agent  │───→│ 审查 Agent  │
+└────────────┘    └────────────┘    └────────────┘
+      ↑                                    │
+      └────────────────────────────────────┘
+                  (审查不通过时回到检索)
+```
+
+类比前端：就像 Express 的中间件链——每个中间件处理完后 `next()` 到下一个，或者根据条件跳转。
+
+```typescript
+// 每个 Agent 自己决定下一步交给谁
+async function researcherNode(state: typeof AgentState.State) {
+  const researcher = new ChatOpenAI({ model: 'gpt-4o' });
+  const response = await researcher.invoke([
+    {
+      role: 'system',
+      content: `你是调研专家。完成调研后，在回答末尾加上：
+[HANDOFF: coder] 表示交给编码 Agent
+[HANDOFF: done] 表示不需要写代码，直接回答用户`,
+    },
+    ...state.messages,
+  ]);
+
+  // 解析交接指令
+  const content = response.content as string;
+  const handoffMatch = content.match(/\[HANDOFF: (\w+)\]/);
+  const next = handoffMatch ? handoffMatch[1] : 'done';
+
+  return {
+    messages: [response],
+    next,
+  };
+}
+```
+
+Supervisor vs Handoff 怎么选：
+- **Supervisor**：任务复杂、需要灵活调度、Agent 之间没有固定顺序
+- **Handoff**：流程相对固定、像流水线一样一步步走
+
+### 模式 3：Swarm（群体模式）
+
+多个 Agent 平等协作，没有固定的调度关系。每个 Agent 都能看到共享状态，自主决定是否介入。
+
+```
+┌────────────┐
+│ 共享状态     │
+└──────┬─────┘
+       │ 所有 Agent 都能读写
+  ┌────┼────┬────────┐
+  ↓    ↓    ↓        ↓
+ A1   A2   A3  ... An
+```
+
+这个模式更适合创意类任务（头脑风暴、多角度分析），不太适合有明确流程的工程任务。了解就好，实际开发中 Supervisor 和 Handoff 用得最多。
+
+## 实战：给你的博客搭一个多 Agent 系统
+
+场景：用户在博客 AI 助手里问一个复杂问题，比如"帮我写一篇 React 和 Vue 对比的文章"。
+
+```typescript
+// Agent 1：调研员 — 负责检索博客中的相关内容
+const researcherAgent = {
+  name: 'researcher',
+  systemPrompt: `你是博客内容调研员。
+职责：根据用户需求，从博客笔记中检索相关内容。
+工具：ragSearch（语义检索）、listArticles（浏览文章列表）
+输出：整理好的要点列表，标注来源。`,
+  tools: [ragSearchTool, listArticlesTool],
+};
+
+// Agent 2：写手 — 负责根据调研结果生成内容
+const writerAgent = {
+  name: 'writer',
+  systemPrompt: `你是技术博客写手。
+职责：根据调研员提供的资料，生成高质量的技术文章。
+规则：
+- 只使用调研员提供的资料，不要编造
+- 使用 markdown 格式
+- 包含代码示例
+- 语气专业但易懂`,
+  tools: [], // 写手不需要工具，只需要调研结果
+};
+
+// Agent 3：编辑 — 负责审查和润色
+const editorAgent = {
+  name: 'editor',
+  systemPrompt: `你是技术内容编辑。
+职责：审查文章的准确性、可读性和完整性。
+检查项：
+- 技术描述是否准确
+- 代码示例是否正确
+- 结构是否清晰
+- 是否有遗漏的重要内容
+输出：修改建议或"审查通过"。`,
+  tools: [],
+};
+```
+
+流程：
+
+```
+用户: "帮我对比 React 和 Vue 的更新机制"
+  ↓
+Supervisor: 先让 researcher 查资料
+  ↓
+Researcher:
+  → ragSearch("React 更新机制 Fiber") → 找到 Fiber 那篇
+  → ragSearch("Vue 响应式更新") → 找到 Vue 那篇
+  → 整理成要点返回
+  ↓
+Supervisor: 资料够了，让 writer 写
+  ↓
+Writer: 根据两篇笔记的内容，生成对比文章
+  ↓
+Supervisor: 让 editor 审查
+  ↓
+Editor: "React 部分缺少 Concurrent Mode 的说明，建议补充"
+  ↓
+Supervisor: 让 researcher 补充检索
+  ↓
+Researcher: → ragSearch("React Concurrent Mode") → 补充资料
+  ↓
+Supervisor: 让 writer 修改
+  ↓
+Writer: 补充完善
+  ↓
+Editor: "审查通过"
+  ↓
+Supervisor: FINISH → 返回最终文章
+```
+
+## 多 Agent 的成本问题
+
+每个 Agent 都是一次 LLM 调用，多 Agent 意味着成本翻倍。控制成本的方法：
+
+| 策略 | 做法 |
+|---|---|
+| 分级用模型 | Supervisor 用 gpt-4o（决策要准），Worker 用 gpt-4o-mini（执行够用） |
+| 减少轮次 | 设置最大循环次数，防止 Agent 之间反复踢皮球 |
+| 缓存结果 | 相同的检索查询不重复调用 |
+| 按需启动 | 简单问题不走多 Agent，只有复杂任务才启动完整流程 |
+
+```typescript
+// 按复杂度路由
+async function routeByComplexity(query: string) {
+  // 简单问题：单 Agent 直接回答
+  if (isSimpleQuestion(query)) {
+    return singleAgentGraph.invoke({ messages: [new HumanMessage(query)] });
+  }
+  // 复杂问题：多 Agent 协作
+  return multiAgentGraph.invoke({ messages: [new HumanMessage(query)] });
+}
+```
+
+## 多 Agent 的常见坑
+
+### 1. Agent 之间信息丢失
+Agent A 的输出传给 Agent B 时，关键信息可能被截断或遗漏。
+解决：用结构化的共享状态，而不是只靠消息传递。
+
+### 2. 无限踢皮球
+Agent A 说"这个应该让 B 处理"，Agent B 说"这个应该让 A 处理"。
+解决：设置最大轮次 + 在 Supervisor 的 prompt 里明确"不要把同一个任务反复分配"。
+
+### 3. 职责边界模糊
+两个 Agent 都觉得某个任务是自己的，或者都觉得不是自己的。
+解决：每个 Agent 的 system prompt 里写清楚"你负责什么"和"你不负责什么"。
+
+### 4. 调试困难
+多 Agent 的执行链路长，出了问题不知道是哪个 Agent 的锅。
+解决：每个节点执行后记录日志，用 LangSmith 可视化整个执行过程。
+
+## 什么时候用多 Agent
+
+| 场景 | 推荐 |
+|---|---|
+| 简单问答 | 单 Agent 够了 |
+| RAG + 工具调用 | 单 Agent 够了 |
+| 复杂多步任务 | 多 Agent（Supervisor） |
+| 流水线式处理 | 多 Agent（Handoff） |
+| 需要"审查-修改"循环 | 多 Agent（Supervisor） |
+
+不要为了用多 Agent 而用多 Agent。先用单 Agent 做，发现单 Agent 搞不定了再拆。就像前端不要一上来就拆微前端，先单体做，大了再拆。
+
+## 下一步
+
+到这里你已经掌握了从单 Agent 到多 Agent 的完整知识链。最后一篇是总结：
+
+→ **Agent 设计模式总结**：把所有模式放在一起对比，帮你建立选型判断力。
