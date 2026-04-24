@@ -49,7 +49,7 @@ export function ChatPage() {
       </header>
 
       {/* 对话区域 */}
-      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto" data-lenis-prevent>
         {messages.length === 0 ? (
           <WelcomeScreen onSend={sendMessage} />
         ) : (
