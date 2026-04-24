@@ -19,6 +19,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   toolStatus?: string; // "正在搜索博客笔记..." 等
+  toolName?: string; // "rag_search" | "web_search" — 用于渲染不同图标
 }
 
 // 工具名到中文标签的映射
@@ -93,16 +94,23 @@ export function useChat() {
   /**
    * 更新最后一条 assistant 消息的工具状态
    */
-  const setToolStatus = useCallback((status: string | undefined) => {
-    setMessages((prev) => {
-      const updated = [...prev];
-      const last = updated[updated.length - 1];
-      if (last?.role === "assistant") {
-        updated[updated.length - 1] = { ...last, toolStatus: status };
-      }
-      return updated;
-    });
-  }, []);
+  const setToolStatus = useCallback(
+    (status: string | undefined, toolName?: string) => {
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last?.role === "assistant") {
+          updated[updated.length - 1] = {
+            ...last,
+            toolStatus: status,
+            toolName: status ? toolName : undefined,
+          };
+        }
+        return updated;
+      });
+    },
+    []
+  );
 
   /**
    * 发送消息
@@ -134,7 +142,7 @@ export function useChat() {
 
         onToolStart: (tool, _args) => {
           const label = TOOL_LABELS[tool] || tool;
-          setToolStatus(`正在${label}...`);
+          setToolStatus(`正在${label}...`, tool);
         },
 
         onToolEnd: (_tool, _result) => {

@@ -48,17 +48,17 @@ export function AiChat() {
               <DialogTitle>AI 助手</DialogTitle>
             </VisuallyHidden.Root>
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-default)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-default)]">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] flex items-center justify-center">
                   <Bot className="w-5 h-5 text-[var(--accent)]" />
                 </div>
-                <div>
-                  <span className="font-semibold text-sm text-[var(--text-strong)]">
-                    AI 助手
+                <div className="flex flex-col">
+                  <span className="font-semibold text-[15px] text-[var(--text-strong)] leading-tight">
+                    Serein AI
                   </span>
-                  <span className="text-xs text-[var(--text-tertiary)] ml-2">
-                    Agent · RAG + 联网搜索
+                  <span className="text-xs text-[var(--text-tertiary)] leading-tight mt-0.5">
+                    知识库检索 · 联网搜索
                   </span>
                 </div>
               </div>
@@ -114,15 +114,19 @@ export function AiChat() {
   return (
     <div className="fixed bottom-6 right-6 z-50 w-[480px] h-[680px] flex flex-col rounded-2xl border border-[var(--border-default)] bg-[var(--app-bg)] shadow-2xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)] bg-[var(--surface-secondary)]/30">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)] bg-[var(--surface-secondary)]/40">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-[var(--accent-soft)] flex items-center justify-center">
             <Bot className="w-4 h-4 text-[var(--accent)]" />
           </div>
-          <span className="font-semibold text-sm text-[var(--text-strong)]">
-            AI 助手
-          </span>
-          <span className="text-xs text-[var(--text-tertiary)]">Agent</span>
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm text-[var(--text-strong)] leading-tight">
+              Serein AI
+            </span>
+            <span className="text-[11px] text-[var(--text-tertiary)] leading-tight">
+              Agent 驱动
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-0.5">
           <button

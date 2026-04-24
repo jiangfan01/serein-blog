@@ -1,17 +1,18 @@
 /**
  * 消息列表渲染组件
  *
- * 对应你上家架构的：渲染层（StreamEventRenderer）
- * 根据消息类型路由到不同的渲染方式
- *
- * 职责单一：只负责渲染消息列表，不管状态和逻辑
+ * 设计决策：
+ * - 用户消息右对齐，accent 背景，简洁
+ * - AI 消息左对齐，surface 背景，宽松呼吸感
+ * - 工具状态和思考状态内联在 AI 消息气泡内
+ * - 全屏模式消息居中，最大宽度限制保证可读性
  */
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { Bot, User, Loader2 } from "lucide-react";
+import { Bot, User } from "lucide-react";
 import { MarkdownRenderer } from "./markdown-renderer";
-import { ToolStatus } from "./tool-status";
+import { ToolStatus, ThinkingStatus } from "./tool-status";
 import type { ChatMessage } from "@/hooks/use-chat";
 
 interface ChatMessagesProps {
@@ -35,89 +36,88 @@ export function ChatMessages({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // 空状态
   if (messages.length === 0) {
+    return <EmptyState />;
+  }
+
+  return (
+    <div
+      className="flex-1 overflow-y-auto px-4 py-5 space-y-5"
+      data-lenis-prevent
+    >
+      {isFullscreen && (
+        <div className="max-w-3xl mx-auto w-full flex flex-col gap-5">
+          {messages.map((msg, i) => (
+            <MessageRow
+              key={i}
+              message={msg}
+              isLast={i === messages.length - 1}
+              loading={loading}
+              wide
+            />
+          ))}
+        </div>
+      )}
+
+      {!isFullscreen &&
+        messages.map((msg, i) => (
+          <MessageRow
+            key={i}
+            message={msg}
+            isLast={i === messages.length - 1}
+            loading={loading}
+          />
+        ))}
+
+      <div ref={messagesEndRef} />
+    </div>
+  );
+}
+
+function MessageRow({
+  message,
+  isLast,
+  loading,
+  wide = false,
+}: {
+  message: ChatMessage;
+  isLast: boolean;
+  loading: boolean;
+  wide?: boolean;
+}) {
+  if (message.role === "user") {
     return (
-      <div
-        className="flex-1 overflow-y-auto px-4 py-4"
-        data-lenis-prevent
-      >
-        <div className="flex flex-col items-center justify-center h-full text-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center">
-            <Bot className="w-8 h-8 text-[var(--accent)]" />
-          </div>
-          <div>
-            <p className="text-base font-medium text-[var(--text-strong)] mb-1">
-              Serein AI 助手
-            </p>
-            <p className="text-sm text-[var(--text-tertiary)]">
-              基于博客笔记的 AI Agent
-              <br />
-              支持知识库检索和联网搜索
-            </p>
-          </div>
+      <div className="flex justify-end gap-2.5">
+        <div
+          className={`${wide ? "max-w-[65ch]" : "max-w-[85%]"} px-4 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed bg-[var(--accent)] text-white`}
+        >
+          {message.content}
+        </div>
+        <div className="w-7 h-7 rounded-lg bg-[var(--text-strong)]/8 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <User className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-      data-lenis-prevent
-    >
-      {messages.map((msg, i) => (
-        <div
-          key={i}
-          className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-        >
-          {/* AI 头像 */}
-          {msg.role === "assistant" && (
-            <div className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Bot className="w-4 h-4 text-[var(--accent)]" />
-            </div>
-          )}
-
-          {/* 消息气泡 */}
-          <div
-            className={`${isFullscreen ? "max-w-[80%]" : "max-w-[85%]"} px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
-              msg.role === "user"
-                ? "bg-[var(--accent)] text-white rounded-br-md"
-                : "bg-[var(--surface-secondary)] text-[var(--text-strong)] rounded-bl-md"
-            }`}
-          >
-            {msg.role === "assistant" ? (
-              <AssistantContent
-                message={msg}
-                isLast={i === messages.length - 1}
-                loading={loading}
-              />
-            ) : (
-              msg.content
-            )}
-          </div>
-
-          {/* 用户头像 */}
-          {msg.role === "user" && (
-            <div className="w-7 h-7 rounded-lg bg-[var(--text-strong)]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <User className="w-4 h-4 text-[var(--text-secondary)]" />
-            </div>
-          )}
-        </div>
-      ))}
-      <div ref={messagesEndRef} />
+    <div className="flex gap-2.5">
+      <div className="w-7 h-7 rounded-lg bg-[var(--accent-soft)] flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Bot className="w-3.5 h-3.5 text-[var(--accent)]" />
+      </div>
+      <div
+        className={`${wide ? "max-w-[65ch]" : "max-w-[88%]"} px-4 py-3 rounded-2xl rounded-bl-md text-sm leading-relaxed bg-[var(--surface-secondary)] text-[var(--text-strong)]`}
+      >
+        <AssistantContent
+          message={message}
+          isLast={isLast}
+          loading={loading}
+        />
+      </div>
     </div>
   );
 }
 
-/**
- * AI 消息内容渲染
- *
- * 三种状态：
- * 1. 有内容 → 渲染 Markdown
- * 2. 无内容 + 有工具状态 → 显示工具调用中
- * 3. 无内容 + 无工具状态 + loading → 显示思考中
- */
 function AssistantContent({
   message,
   isLast,
@@ -127,26 +127,36 @@ function AssistantContent({
   isLast: boolean;
   loading: boolean;
 }) {
-  // 有内容，渲染 Markdown
   if (message.content) {
     return <MarkdownRenderer content={message.content} />;
   }
 
-  // 最后一条消息 + loading 状态
   if (isLast && loading) {
-    // 有工具状态，显示工具调用
     if (message.toolStatus) {
-      return <ToolStatus status={message.toolStatus} />;
+      return <ToolStatus status={message.toolStatus} tool={message.toolName} />;
     }
-
-    // 默认显示思考中
-    return (
-      <div className="flex items-center gap-2 py-1">
-        <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
-        <span className="text-xs text-[var(--text-tertiary)]">思考中...</span>
-      </div>
-    );
+    return <ThinkingStatus />;
   }
 
   return null;
+}
+
+function EmptyState() {
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-4" data-lenis-prevent>
+      <div className="flex flex-col items-center justify-center h-full text-center gap-5">
+        <div className="w-14 h-14 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center">
+          <Bot className="w-7 h-7 text-[var(--accent)]" />
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold text-[var(--text-strong)]">
+            Serein AI
+          </p>
+          <p className="text-sm text-[var(--text-tertiary)] leading-relaxed">
+            知识库检索 · 联网搜索 · Agent 驱动
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
