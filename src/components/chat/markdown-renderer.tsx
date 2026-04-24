@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface MarkdownRendererProps {
   content: string;
@@ -12,6 +13,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
       components={{
         p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
         strong: ({ children }) => (
@@ -58,6 +60,33 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           </blockquote>
         ),
         hr: () => <hr className="my-2 border-[var(--border-default)]" />,
+        table: ({ children }) => (
+          <div className="my-3 max-w-full overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)]">
+            <table className="w-full min-w-[520px] border-collapse text-left text-xs">
+              {children}
+            </table>
+          </div>
+        ),
+        thead: ({ children }) => (
+          <thead className="border-b border-[var(--border-default)] bg-[var(--surface-secondary)]/70">
+            {children}
+          </thead>
+        ),
+        tbody: ({ children }) => (
+          <tbody className="divide-y divide-[var(--border-subtle)]">
+            {children}
+          </tbody>
+        ),
+        th: ({ children }) => (
+          <th className="px-3 py-2 font-semibold text-[var(--text-strong)] whitespace-nowrap">
+            {children}
+          </th>
+        ),
+        td: ({ children }) => (
+          <td className="px-3 py-2 align-top text-[var(--text-secondary)]">
+            {children}
+          </td>
+        ),
         a: ({ href, children }) => (
           <a
             href={href}
