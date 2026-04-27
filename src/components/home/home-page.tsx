@@ -15,6 +15,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { techStack } from "@/data/tech-stack";
+import { EditorialButton } from "@/components/home/editorial-button";
 
 const focusAreas = [
   {
@@ -200,20 +201,23 @@ function HeroSection() {
       </p>
 
       <div className="mt-10 flex w-full flex-col items-center justify-center gap-3 sm:w-auto sm:flex-row">
-        <Link
+        <EditorialButton
           href="/notes"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-7 py-3.5 text-sm font-medium text-[var(--accent-contrast)] transition-transform duration-300 hover:-translate-y-0.5 sm:w-auto"
+          icon={ArrowRight}
+          fillDirection="left"
+          tone="accent"
+          className="w-full sm:w-auto"
         >
           阅读笔记
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-        <Link
+        </EditorialButton>
+        <EditorialButton
           href="/chat"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--surface)] px-7 py-3.5 text-sm font-medium text-[var(--text-strong)] transition-colors duration-300 hover:border-[var(--text-strong)] sm:w-auto"
+          icon={Bot}
+          fillDirection="bottom"
+          className="w-full sm:w-auto"
         >
           打开 Serein AI
-          <Bot className="h-4 w-4 text-[var(--text-tertiary)]" />
-        </Link>
+        </EditorialButton>
       </div>
 
       <div className="mt-24 grid w-full grid-cols-2 gap-6 border-t border-[var(--border-subtle)] pt-10 text-left md:grid-cols-4">
@@ -350,15 +354,15 @@ function ProjectsSection() {
                   </span>
                 ))}
                 {project.href && (
-                  <a
+                  <EditorialButton
                     href={project.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-strong)] transition-colors duration-300 hover:text-[var(--accent)]"
+                    icon={ChevronRight}
+                    fillDirection="right"
+                    size="compact"
+                    className="ml-auto"
                   >
                     查看案例
-                    <ChevronRight className="h-4 w-4" />
-                  </a>
+                  </EditorialButton>
                 )}
               </div>
             </div>
@@ -423,13 +427,14 @@ function ClosingSection() {
       <h2 className="mx-auto max-w-3xl text-3xl font-semibold leading-tight text-[var(--text-strong)] sm:text-4xl">
         下一步会把 AI Chat、笔记系统和项目复盘收敛成一套完整的工作台体验。
       </h2>
-      <Link
+      <EditorialButton
         href="/about"
-        className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-[var(--text-strong)] px-7 py-3.5 text-sm font-medium text-[var(--text-inverse)] transition-transform duration-300 hover:-translate-y-0.5"
+        icon={ArrowRight}
+        fillDirection="top"
+        className="mt-8"
       >
         关于我
-        <ArrowRight className="h-4 w-4" />
-      </Link>
+      </EditorialButton>
     </section>
   );
 }

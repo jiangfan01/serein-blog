@@ -310,11 +310,119 @@ body::-webkit-scrollbar,
   filter: blur(0);
 }
 
+.editorial-button {
+  --button-border: var(--border-default);
+  --button-fill: var(--text-strong);
+  --button-text: var(--text-strong);
+  --button-hover-text: var(--text-inverse);
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  overflow: hidden;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  padding: 0.85rem 1.65rem;
+  color: var(--button-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    border-color 260ms var(--ease-soft),
+    color 260ms var(--ease-soft),
+    transform 260ms var(--ease-soft);
+}
+
+.editorial-button[data-tone="accent"] {
+  --button-border: var(--accent);
+  --button-fill: var(--accent);
+  --button-text: var(--accent);
+  --button-hover-text: var(--accent-contrast);
+}
+
+.editorial-button[data-size="compact"] {
+  min-height: 2.35rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.editorial-button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--button-fill);
+  content: "";
+  transition: transform 420ms var(--ease-soft);
+}
+
+.editorial-button[data-fill="left"]::before {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.editorial-button[data-fill="right"]::before {
+  transform: scaleX(0);
+  transform-origin: right center;
+}
+
+.editorial-button[data-fill="top"]::before {
+  transform: scaleY(0);
+  transform-origin: center top;
+}
+
+.editorial-button[data-fill="bottom"]::before {
+  transform: scaleY(0);
+  transform-origin: center bottom;
+}
+
+.editorial-button:hover {
+  border-color: var(--button-fill);
+  color: var(--button-hover-text);
+  transform: translateY(-1px);
+}
+
+.editorial-button:hover::before {
+  transform: scale(1);
+}
+
+.editorial-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.editorial-button-label,
+.editorial-button-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.editorial-button-icon {
+  height: 1rem;
+  width: 1rem;
+  flex: 0 0 auto;
+  transition: transform 260ms var(--ease-soft);
+}
+
+.editorial-button:hover .editorial-button-icon {
+  transform: translateX(2px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-scroll-reveal {
     opacity: 1;
     transform: none;
     filter: none;
+    transition: none;
+  }
+
+  .editorial-button,
+  .editorial-button::before,
+  .editorial-button-icon {
     transition: none;
   }
 }
