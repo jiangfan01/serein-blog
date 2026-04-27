@@ -99,13 +99,6 @@ const projects = [
   },
 ];
 
-const principles = [
-  "工具状态必须可见",
-  "复杂交互先做分层",
-  "UI 先统一 token",
-  "笔记要服务复盘",
-];
-
 const stackGroups = [
   {
     title: "前端",
@@ -220,18 +213,6 @@ function HeroSection() {
         </EditorialButton>
       </div>
 
-      <div className="mt-24 grid w-full grid-cols-2 gap-6 border-t border-[var(--border-subtle)] pt-10 text-left md:grid-cols-4">
-        {principles.map((item, index) => (
-          <div key={item} className="space-y-2">
-            <span className="font-mono text-xs text-[var(--text-quaternary)]">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <p className="text-sm font-medium leading-6 text-[var(--text-secondary)]">
-              {item}
-            </p>
-          </div>
-        ))}
-      </div>
     </section>
   );
 }

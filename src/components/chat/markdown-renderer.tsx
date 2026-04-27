@@ -1,6 +1,7 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -23,21 +24,20 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         ),
         em: ({ children }) => <em className="italic">{children}</em>,
         code: ({ children, className }) => {
-          const isBlock = className?.includes("language-");
+          const codeText = getCodeText(children);
+          const isBlock = className?.includes("language-") || codeText.includes("\n");
+
           if (isBlock) {
-            return (
-              <code className="block my-2 p-2 rounded-md bg-black/10 dark:bg-white/10 text-xs font-mono overflow-x-auto whitespace-pre">
-                {children}
-              </code>
-            );
+            return <CodeBlock value={codeText} className={className} />;
           }
+
           return (
-            <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-xs font-mono">
+            <code className="rounded bg-[var(--accent-soft)] px-1 py-0.5 font-mono text-xs text-[var(--accent-strong)]">
               {children}
             </code>
           );
         },
-        pre: ({ children }) => <pre className="my-0">{children}</pre>,
+        pre: ({ children }) => <>{children}</>,
         ul: ({ children }) => (
           <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>
         ),
@@ -103,3 +103,45 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     </ReactMarkdown>
   );
 });
+
+function CodeBlock({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const language = className?.replace("language-", "").trim();
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
+  return (
+    <div className="chat-code-block group">
+      {language && <span className="chat-code-lang">{language}</span>}
+      <button
+        type="button"
+        className="chat-code-copy"
+        onClick={handleCopy}
+        aria-label={copied ? "已复制代码" : "复制代码"}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </button>
+      <pre className="chat-code-pre">
+        <code className={className}>{value}</code>
+      </pre>
+    </div>
+  );
+}
+
+function getCodeText(children: ReactNode) {
+  return String(children).replace(/\n$/, "");
+}
