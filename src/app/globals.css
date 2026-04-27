@@ -8,33 +8,32 @@
   color-scheme: light;
 
   /* Core palette */
-  --app-bg: #f5f5f2;
-  --app-fg: #121417;
+  --app-bg: #f7f4ee;
+  --app-fg: #171714;
 
   /* Surfaces */
-  --surface: #ffffff;
-  --surface-secondary: #f0f1ed;
-  --surface-tertiary: #e8eae5;
-  --surface-inverse: #171a1f;
+  --surface: #fffdfa;
+  --surface-secondary: #efe9de;
+  --surface-tertiary: #e4dccf;
+  --surface-inverse: #171714;
 
   /* Text */
-  --text-strong: #121417;
-  --text-primary: #262b31;
-  --text-secondary: #5f6771;
-  --text-tertiary: #7b848f;
-  --text-quaternary: #9ca3af;
-  --text-inverse: #f5f7fa;
+  --text-strong: #171714;
+  --text-primary: #2b2a26;
+  --text-secondary: #676158;
+  --text-tertiary: #8a8378;
+  --text-quaternary: #aaa296;
+  --text-inverse: #f8f5ee;
 
   /* Lines */
-  --border-subtle: #e4e6e1;
-  --border-default: #d6d9d2;
-  --border-strong: #bcc2bb;
+  --border-subtle: #e8dfd2;
+  --border-default: #d8ccba;
+  --border-strong: #bfb09d;
 
-  /* Accent - 浅色模式使用深色调的 teal */
-  --accent: #1a7a72;
-  --accent-strong: #0a5c56;
-  --accent-soft: #d7ece9;
-  --accent-contrast: #f4fbfa;
+  --accent: #0f7f72;
+  --accent-strong: #095f56;
+  --accent-soft: #dceee9;
+  --accent-contrast: #f8fffc;
 
   /* States */
   --success: #1f7a55;
@@ -84,9 +83,9 @@
   --radius-pill: 999px;
 
   /* Shadow */
-  --shadow-soft: 0 14px 40px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 18px 48px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 24px 80px rgba(15, 23, 42, 0.1);
+  --shadow-soft: 0 14px 40px rgba(51, 43, 32, 0.05);
+  --shadow-md: 0 18px 48px rgba(51, 43, 32, 0.08);
+  --shadow-lg: 0 24px 80px rgba(51, 43, 32, 0.11);
 
   /* Motion */
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
@@ -176,29 +175,29 @@
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     color-scheme: dark;
-    --app-bg: #0c0f12;
-    --app-fg: #f2f4f7;
+    --app-bg: #0f1110;
+    --app-fg: #f4f1ea;
 
-    --surface: #111419;
-    --surface-secondary: #171b20;
-    --surface-tertiary: #1f252c;
-    --surface-inverse: #f3f5f7;
+    --surface: #171918;
+    --surface-secondary: #20231f;
+    --surface-tertiary: #2a2e28;
+    --surface-inverse: #f4f1ea;
 
-    --text-strong: #f2f4f7;
-    --text-primary: #dde2e8;
-    --text-secondary: #aab3bc;
-    --text-tertiary: #8a949e;
-    --text-quaternary: #6b7280;
-    --text-inverse: #13161a;
+    --text-strong: #f4f1ea;
+    --text-primary: #dfdad1;
+    --text-secondary: #b8b0a4;
+    --text-tertiary: #948c81;
+    --text-quaternary: #726b62;
+    --text-inverse: #11140f;
 
-    --border-subtle: #20252c;
-    --border-default: #2b323a;
-    --border-strong: #3a444f;
+    --border-subtle: #272a24;
+    --border-default: #363a31;
+    --border-strong: #4a4f43;
 
-    --accent: #2f9b92;
-    --accent-strong: #5fb7af;
-    --accent-soft: rgba(47, 155, 146, 0.18);
-    --accent-contrast: #eefcfa;
+    --accent: #47b5a6;
+    --accent-strong: #74d2c6;
+    --accent-soft: rgba(71, 181, 166, 0.16);
+    --accent-contrast: #071613;
 
     --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
     --shadow-md: 0 20px 48px rgba(0, 0, 0, 0.3);
@@ -209,29 +208,29 @@
 /* next-themes .dark class */
 .dark {
   color-scheme: dark;
-  --app-bg: #0c0f12;
-  --app-fg: #f2f4f7;
+  --app-bg: #0f1110;
+  --app-fg: #f4f1ea;
 
-  --surface: #111419;
-  --surface-secondary: #171b20;
-  --surface-tertiary: #1f252c;
-  --surface-inverse: #f3f5f7;
+  --surface: #171918;
+  --surface-secondary: #20231f;
+  --surface-tertiary: #2a2e28;
+  --surface-inverse: #f4f1ea;
 
-  --text-strong: #f2f4f7;
-  --text-primary: #dde2e8;
-  --text-secondary: #aab3bc;
-  --text-tertiary: #8a949e;
-  --text-quaternary: #6b7280;
-  --text-inverse: #13161a;
+  --text-strong: #f4f1ea;
+  --text-primary: #dfdad1;
+  --text-secondary: #b8b0a4;
+  --text-tertiary: #948c81;
+  --text-quaternary: #726b62;
+  --text-inverse: #11140f;
 
-  --border-subtle: #20252c;
-  --border-default: #2b323a;
-  --border-strong: #3a444f;
+  --border-subtle: #272a24;
+  --border-default: #363a31;
+  --border-strong: #4a4f43;
 
-  --accent: #2f9b92;
-  --accent-strong: #5fb7af;
-  --accent-soft: rgba(47, 155, 146, 0.18);
-  --accent-contrast: #eefcfa;
+  --accent: #47b5a6;
+  --accent-strong: #74d2c6;
+  --accent-soft: rgba(71, 181, 166, 0.16);
+  --accent-contrast: #071613;
 
   --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
   --shadow-md: 0 20px 48px rgba(0, 0, 0, 0.3);
@@ -294,102 +293,29 @@ body::-webkit-scrollbar,
   display: none;
 }
 
-.home-intro-ring {
-  --ring-progress: 0;
-  width: clamp(10rem, 18vw, 15rem);
-  height: clamp(10rem, 18vw, 15rem);
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 58%),
-    conic-gradient(
-      from -90deg,
-      var(--accent) calc(var(--ring-progress) * 1turn),
-      rgba(255, 255, 255, 0.08) 0turn
-    );
-  padding: 0.95rem;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 30px 80px rgba(0, 0, 0, 0.35);
-}
-
-.home-intro-core {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  background: #0c0f12;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-}
-
-.home-reveal-layer {
-  --reveal-progress: 0;
-  position: absolute;
-  inset: 0;
-  clip-path: circle(calc(0.75rem + var(--reveal-progress) * 130vmax) at 50% 50%);
-}
-
-.home-reveal-site {
-  --site-opacity: 0;
-  --site-scale: 0.94;
-  opacity: var(--site-opacity);
-  transform: scale(var(--site-scale));
-  transform-origin: center center;
-  will-change: transform, opacity;
-}
-
-@keyframes ripple {
-  0% {
-    width: 20px;
-    height: 20px;
-    opacity: 0.5;
-  }
-  100% {
-    width: 300px;
-    height: 300px;
-    opacity: 0;
-  }
-}
-
-.animate-ripple {
-  animation: ripple 0.6s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.home-reveal {
+.home-scroll-reveal {
   opacity: 0;
-  animation: home-reveal 720ms var(--ease-soft) forwards;
+  transform: translateY(24px);
+  filter: blur(10px);
+  transition:
+    opacity 720ms var(--ease-soft),
+    transform 720ms var(--ease-soft),
+    filter 720ms var(--ease-soft);
+  transition-delay: var(--home-reveal-delay, 0ms);
 }
 
-.home-reveal-delay-1 {
-  animation-delay: 140ms;
-}
-
-@keyframes home-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-    filter: blur(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
+.home-scroll-reveal.home-reveal-in {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-reveal {
+  .home-scroll-reveal {
     opacity: 1;
-    animation: none;
+    transform: none;
+    filter: none;
+    transition: none;
   }
 }
 
