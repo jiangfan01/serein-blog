@@ -41,10 +41,10 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
         socialItems={socialItems}
         displaySocials={true}
         displayItemNumbering={true}
-        menuButtonColor="var(--app-fg)"
-        openMenuButtonColor="#000"
+        menuButtonColor="var(--text-strong)"
+        openMenuButtonColor="var(--text-strong)"
         changeMenuColorOnOpen={true}
-        colors={['var(--accent-soft)', 'var(--accent)']}
+        colors={['var(--surface-secondary)', 'var(--accent-soft)']}
         accentColor="var(--accent)"
         isFixed={true}
         closeOnClickAway={true}
