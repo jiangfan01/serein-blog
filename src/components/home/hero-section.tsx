@@ -70,7 +70,7 @@ export function HeroSection() {
           data-hero
           className="text-[var(--font-size-hero)] font-extrabold tracking-[-0.04em] leading-[0.95] text-[var(--text-strong)] mb-8 opacity-0"
         >
-          全栈
+          Serein
         </h1>
 
         {/* Tagline */}
@@ -98,7 +98,7 @@ export function HeroSection() {
           {/* Secondary CTA */}
           <Link
             href="/chat"
-            className="group inline-flex items-center gap-2.5 px-7 py-3.5 border border-[var(--border-default)] text-[var(--text-primary)] text-sm font-medium tracking-wide rounded-full hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors duration-300"
+            className="group inline-flex items-center gap-2.5 px-7 py-3.5 bg-[var(--text-strong)]/10 text-[var(--text-primary)] text-sm font-medium tracking-wide rounded-full hover:bg-[var(--accent)]/15 hover:text-[var(--accent)] transition-colors duration-300 backdrop-blur-sm"
           >
             <span>AI 对话</span>
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
