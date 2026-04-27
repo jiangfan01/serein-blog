@@ -94,7 +94,7 @@ function TechStackSection() {
       <div className="max-w-6xl mx-auto">
         {/* Section header */}
         <div className="mb-24">
-          <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-[var(--text-tertiary)] mb-4">
+          <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-[var(--accent)] mb-4">
             技术能力
           </p>
           <h2 className="text-[var(--font-size-display)] font-bold tracking-[-0.03em] leading-[1.1] text-[var(--text-strong)]">
