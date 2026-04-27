@@ -15,15 +15,15 @@ const LazyLineWaves = React.lazy(() =>
 /* ── Skeleton fallbacks (min-height prevents layout shift) ── */
 
 function TechStackSkeleton() {
-  return <div style={{ minHeight: "80vh" }} />;
+  return <div style={{ minHeight: "100vh" }} />;
 }
 
 function ProjectsSkeleton() {
-  return <div style={{ minHeight: "120vh" }} />;
+  return <div style={{ minHeight: "150vh" }} />;
 }
 
 function CTASkeleton() {
-  return <div style={{ minHeight: "60vh" }} />;
+  return <div style={{ minHeight: "80vh" }} />;
 }
 
 /* ── Error boundary for LineWaves (renders nothing on failure) ── */
@@ -86,19 +86,19 @@ export function HomePage() {
         <LazyWrapper
           factory={() => import("./tech-stack-section")}
           fallback={<TechStackSkeleton />}
-          rootMargin="300px"
+          rootMargin="600px"
         />
 
         <LazyWrapper
           factory={() => import("./projects-section")}
           fallback={<ProjectsSkeleton />}
-          rootMargin="300px"
+          rootMargin="600px"
         />
 
         <LazyWrapper
           factory={() => import("./cta-section")}
           fallback={<CTASkeleton />}
-          rootMargin="200px"
+          rootMargin="400px"
         />
       </div>
     </>

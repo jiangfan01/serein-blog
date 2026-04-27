@@ -116,7 +116,7 @@ function TechStackSection() {
               >
                 {/* Number */}
                 <div className="md:col-span-1">
-                  <span className="font-mono text-sm text-[var(--text-tertiary)] tabular-nums">
+                  <span className="font-mono text-sm text-[var(--accent)] tabular-nums">
                     {group.num}
                   </span>
                 </div>
@@ -142,10 +142,10 @@ function TechStackSection() {
                       >
                         <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-[var(--accent)] shrink-0 opacity-60 group-hover/item:opacity-100 transition-opacity" />
                         <div className="flex flex-col">
-                          <span className="text-[var(--text-primary)] text-[15px] font-medium group-hover/item:text-[var(--accent)] transition-colors">
+                          <span className="text-[var(--text-strong)] text-[15px] font-medium group-hover/item:text-[var(--accent)] transition-colors">
                             {tech.name}
                           </span>
-                          <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-[var(--text-tertiary)]">
+                          <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-[var(--accent)]/60">
                             {tech.category}
                           </span>
                         </div>

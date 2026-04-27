@@ -96,7 +96,7 @@ function ProjectsSection() {
                     }`}
                     style={{ direction: "ltr" }}
                   >
-                    <span className="block font-mono text-[clamp(4rem,8vw,6rem)] font-black leading-none text-[var(--text-strong)] opacity-[0.06] select-none mb-4">
+                    <span className="block font-mono text-[clamp(4rem,8vw,6rem)] font-black leading-none text-[var(--text-strong)] opacity-[0.12] select-none mb-4">
                       {project.id}
                     </span>
                     <h3 className="text-2xl md:text-3xl font-bold text-[var(--text-strong)] tracking-tight mb-3">
@@ -114,7 +114,7 @@ function ProjectsSection() {
                     }`}
                     style={{ direction: "ltr" }}
                   >
-                    <p className="text-[var(--text-secondary)] text-base leading-[1.8] mb-8 max-w-2xl">
+                    <p className="text-[var(--text-strong)]/80 text-base leading-[1.8] mb-8 max-w-2xl">
                       {project.description}
                     </p>
 
@@ -122,7 +122,7 @@ function ProjectsSection() {
                       {project.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="font-mono text-[11px] tracking-wide text-[var(--text-tertiary)] px-3 py-1.5 bg-[var(--surface-secondary)] rounded-full"
+                          className="font-mono text-[11px] tracking-wide text-[var(--text-strong)]/60 px-3 py-1.5 bg-[var(--accent)]/10 rounded-full"
                         >
                           {tag}
                         </span>
@@ -134,13 +134,13 @@ function ProjectsSection() {
                         href={project.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group/link inline-flex items-center gap-2 text-sm font-medium text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                        className="group/link inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:opacity-80 transition-opacity"
                       >
                         <span>查看项目</span>
                         <ArrowRight className="h-4 w-4 transition-transform group-hover/link:translate-x-1" />
                       </Link>
                     ) : (
-                      <span className="inline-flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
+                      <span className="inline-flex items-center gap-2 text-sm text-[var(--text-strong)]/50">
                         内部项目
                       </span>
                     )}
