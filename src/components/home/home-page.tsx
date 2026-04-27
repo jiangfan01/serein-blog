@@ -8,9 +8,6 @@ import {
   Bot,
   ChevronRight,
   Code2,
-  Database,
-  Layers3,
-  Radio,
   Sparkles,
   TerminalSquare,
 } from "lucide-react";
@@ -23,28 +20,24 @@ const focusAreas = [
     title: "Agent 编排",
     description: "ReAct 循环、工具调用、SSE 状态流、多轮观察与最终回答。",
     href: "/notes/agent",
-    icon: Bot,
   },
   {
     id: "02",
     title: "前端架构",
     description: "组件边界、状态分层、渲染性能、复杂交互的工程化落地。",
     href: "/notes/react",
-    icon: Layers3,
   },
   {
     id: "03",
     title: "实时体验",
     description: "ReadableStream、打字机、消息合并、长文本 Markdown 渲染。",
     href: "/notes/interview/long-text-rendering",
-    icon: Radio,
   },
   {
     id: "04",
     title: "全栈实践",
     description: "Next.js、Prisma、数据库、部署、工具型产品的完整闭环。",
     href: "/projects",
-    icon: Database,
   },
 ];
 
@@ -222,39 +215,32 @@ function FocusSection() {
     <section className="home-scroll-reveal" data-home-reveal>
       <SectionHeader title="当前关注" subtitle="围绕真实产品问题沉淀方法" />
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2">
-        {focusAreas.map((item, index) => {
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.title}
-              href={item.href}
-              className="home-scroll-reveal group flex min-h-64 flex-col rounded-lg border border-[var(--border-subtle)] bg-[var(--surface)] p-8 transition-all duration-300 hover:-translate-y-1 hover:border-[var(--border-default)] hover:shadow-[var(--shadow-md)]"
-              data-home-reveal
-              style={{ "--home-reveal-delay": `${index * 70}ms` } as CSSProperties}
-            >
-              <div className="mb-8 flex items-center justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--app-bg)] transition-colors duration-300 group-hover:border-[var(--accent)]">
-                  <Icon className="h-5 w-5 text-[var(--text-tertiary)] transition-colors duration-300 group-hover:text-[var(--accent)]" />
-                </div>
-                <span className="font-mono text-xs text-[var(--text-quaternary)]">
-                  {item.id}
-                </span>
-              </div>
-              <h3 className="text-xl font-semibold text-[var(--text-strong)]">
+      <div className="mt-12 border-y border-[var(--border-subtle)]">
+        {focusAreas.map((item, index) => (
+          <Link
+            key={item.title}
+            href={item.href}
+            className="home-scroll-reveal group grid gap-4 border-b border-[var(--border-subtle)] py-7 transition-colors duration-300 last:border-b-0 hover:border-[var(--border-default)] md:grid-cols-[76px_1fr_140px] md:items-center"
+            data-home-reveal
+            style={{ "--home-reveal-delay": `${index * 70}ms` } as CSSProperties}
+          >
+            <span className="font-mono text-xs text-[var(--text-quaternary)] transition-colors duration-300 group-hover:text-[var(--accent)]">
+              {item.id}
+            </span>
+            <span className="grid gap-3 md:grid-cols-[180px_1fr] md:items-baseline">
+              <span className="text-xl font-semibold tracking-normal text-[var(--text-strong)]">
                 {item.title}
-              </h3>
-              <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
+              </span>
+              <span className="max-w-xl text-sm leading-7 text-[var(--text-secondary)]">
                 {item.description}
-              </p>
-              <div className="mt-auto flex items-center gap-2 pt-8 text-sm font-medium text-[var(--text-tertiary)] transition-colors duration-300 group-hover:text-[var(--accent)]">
-                继续阅读
-                <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-              </div>
-            </Link>
-          );
-        })}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-[var(--text-tertiary)] transition-colors duration-300 group-hover:text-[var(--accent)] md:justify-end">
+              查看路径
+              <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </span>
+          </Link>
+        ))}
       </div>
     </section>
   );
