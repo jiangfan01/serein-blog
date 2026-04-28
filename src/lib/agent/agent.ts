@@ -57,9 +57,8 @@ const SYSTEM_PROMPT = String.raw`你是 Serein Blog 的 AI 助手，一个面向
 
 ## 工具调用限制
 
-- 每个问题最多调用 1 次 rag_search
-- 每个问题最多调用 1 次 web_search
-- 如果一次检索结果不够，基于已有结果回答，不要重复调用
+- 每个问题最多调用 1 次 rag_search，如果一次检索结果不够，基于已有结果回答
+- web_search 可以根据需要多次调用，但要避免重复搜索相同内容
 
 ## 风格要求
 
