@@ -13,33 +13,10 @@
  * - data: {"type":"done"}
  *
  * 前端按 type 字段分发处理，互不干扰。
- *
- * 环境变量：
- * - AGENT_MODE=enterprise 使用企业级版本（动态路由 + 监控）
- * - AGENT_MODE=langgraph 使用 LangGraph 版本
- * - AGENT_MODE=basic 或不设置，使用基础版 Function Calling 循环
  */
 import { NextRequest } from "next/server";
-// 三个版本的 Agent 实现
-import { runAgent as runAgentBasic } from "@/lib/agent/agent";
-import { runAgent as runAgentGraph } from "@/lib/agent/agent-graph";
-import { runAgent as runAgentEnterprise } from "@/lib/agent/agent-enterprise";
+import { runAgent } from "@/lib/agent/agent";
 import type { SSEEvent } from "@/lib/agent/types";
-
-// 根据环境变量选择 Agent 实现
-function getAgentRunner() {
-  const mode = process.env.AGENT_MODE || "enterprise";
-  
-  switch (mode) {
-    case "enterprise":
-      return runAgentEnterprise;
-    case "langgraph":
-      return runAgentGraph;
-    case "basic":
-    default:
-      return runAgentBasic;
-  }
-}
 
 /**
  * 把 SSEEvent 编码成 SSE 格式的字节
@@ -57,8 +34,6 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "请输入问题" }, { status: 400 });
     }
 
-    const runAgent = getAgentRunner();
-
     const readable = new ReadableStream({
       async start(controller) {
         try {
@@ -67,8 +42,6 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encodeSSE(event));
           }
 
-          // 发送结束事件
-          controller.enqueue(encodeSSE({ type: "done" }));
           controller.close();
         } catch (error) {
           console.error("[Chat Route] Stream error:", error);
