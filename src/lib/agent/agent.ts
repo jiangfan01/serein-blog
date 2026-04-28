@@ -116,6 +116,10 @@ function createToolPreview(result: string): string {
  * 根据路由结果创建 LLM
  */
 function createLLMFromRoute(route: RouteResult, bindTools = false) {
+  // DeepSeek V4 默认开启思考模式，但思考模式与 Tool Calls 不兼容
+  // 需要显式禁用思考模式
+  const isDeepSeek = route.baseUrl.includes("deepseek");
+  
   const llm = new ChatOpenAI({
     model: route.modelName,
     apiKey: process.env[route.apiKeyEnv],
@@ -124,7 +128,14 @@ function createLLMFromRoute(route: RouteResult, bindTools = false) {
     },
     temperature: 0,
     streaming: true,
-    ...(route.extraParams && {
+    // DeepSeek 需要显式禁用思考模式，否则 Tool Calls 会报错
+    ...(isDeepSeek && {
+      modelKwargs: {
+        thinking: { type: "disabled" },
+      },
+    }),
+    // 其他模型的额外参数
+    ...(!isDeepSeek && route.extraParams && {
       modelKwargs: route.extraParams,
     }),
   });
