@@ -65,11 +65,9 @@ async function main() {
       contextLength: 1000000,
       inputPrice: new Prisma.Decimal(0.003), // 限时2.5折后的价格
       outputPrice: new Prisma.Decimal(0.006),
-      capabilities: ["chat", "tool_call", "thinking"],
-      extraParams: {
-        thinking: { type: "enabled" },
-        reasoningEffort: "medium",
-      },
+      capabilities: ["chat", "tool_call"],
+      // 注意：思考模式与 Tool Calls 多轮对话不兼容，暂时禁用
+      extraParams: null,
       priority: 90,
     },
     {

@@ -130,7 +130,17 @@ export class IntentClassifier {
       q.includes("原理") ||
       q.includes("底层") ||
       q.includes("深入") ||
-      q.includes("详细分析")
+      q.includes("详细分析") ||
+      q.includes("从头到尾") ||
+      q.includes("详细讲") ||
+      q.includes("讲一遍") ||
+      q.includes("完整讲") ||
+      q.includes("系统讲") ||
+      q.includes("全面讲") ||
+      q.includes("机制") ||
+      q.includes("架构") ||
+      q.includes("设计思想") ||
+      q.includes("实现原理")
     ) {
       return {
         intent: "complex_reasoning",
