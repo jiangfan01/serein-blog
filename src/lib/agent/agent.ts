@@ -1,18 +1,17 @@
 /**
- * Agent 编排层
+ * Agent 编排层 - 多模型路由版本
  *
- * 核心逻辑：Function Calling 循环
+ * 核心改造：
+ * 1. 根据用户问题自动选择模型（flash / pro）
+ * 2. 简单问题用 flash（快、便宜）
+ * 3. 复杂推理用 pro（开启思考模式）
  *
+ * Function Calling 循环逻辑不变：
  * 1. 把用户问题 + 工具定义发给模型
  * 2. 模型返回两种可能：
- *    a. 直接回答（不需要工具）→ 流式输出 text_delta 事件
- *    b. tool_calls（需要调工具）→ 输出 tool_start/tool_end 事件 → 再流式输出最终回答
- *
- * 改造点（相比上一版）：
- * - yield 的不再是纯字符串，而是 SSEEvent 对象
- * - 工具调用过程也会 yield 事件，前端能看到 Agent 在干什么
+ *    a. 直接回答 → 流式输出 text_delta 事件
+ *    b. tool_calls → 执行工具 → 再流式输出最终回答
  */
-import { ChatOpenAI } from "@langchain/openai";
 import {
   HumanMessage,
   SystemMessage,
@@ -20,6 +19,7 @@ import {
 } from "@langchain/core/messages";
 import type { BaseMessage, AIMessage } from "@langchain/core/messages";
 import { allTools } from "./tools";
+import { selectModel, createLLM, ModelType } from "./models";
 import type { SSEEvent } from "./types";
 
 const SYSTEM_PROMPT = String.raw`你是 Serein Blog 的 AI 助手，一个面向开发者的技术知识库工作台。你的目标不是单纯聊天，而是根据用户意图，在「直接回答」「检索博客知识库」「联网搜索」之间做出正确决策，并给出清晰、可靠、可验证的中文回答。
@@ -168,39 +168,6 @@ web_search 适合回答：
 - 用户没有明确要求检索，且问题是稳定通用知识 → 直接回答
 - 不确定是否需要最新信息时，优先判断问题是否会随时间变化；会变化就 web_search`;
 
-/**
- * 创建绑定了工具的 LLM
- */
-function createAgentLLM() {
-  const llm = new ChatOpenAI({
-    model: "kimi-k2-0711-preview",
-    apiKey: process.env.MOONSHOT_API_KEY,
-    configuration: {
-      baseURL: "https://api.moonshot.cn/v1",
-    },
-    temperature: 0,
-    streaming: true,
-  });
-
-  return llm.bindTools(allTools);
-}
-
-/**
- * 创建不绑定工具的 LLM，用于工具结果回填后的最终总结。
- * 这里不再开放工具，避免模型在第二轮继续产生 tool_calls 而不输出正文。
- */
-function createAnswerLLM() {
-  return new ChatOpenAI({
-    model: "kimi-k2-0711-preview",
-    apiKey: process.env.MOONSHOT_API_KEY,
-    configuration: {
-      baseURL: "https://api.moonshot.cn/v1",
-    },
-    temperature: 0,
-    streaming: true,
-  });
-}
-
 function extractTextContent(content: unknown): string {
   if (typeof content === "string") return content;
 
@@ -242,7 +209,6 @@ async function executeTool(
   }
 
   try {
-    // LangChain tool.invoke 接受 ToolCall 格式
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (targetTool as any).invoke(toolArgs);
     return typeof result === "string" ? result : JSON.stringify(result);
@@ -251,10 +217,15 @@ async function executeTool(
   }
 }
 
+/**
+ * 流式输出最终回答
+ */
 async function* streamFinalAnswer(
-  llm: ChatOpenAI,
-  messages: BaseMessage[]
+  messages: BaseMessage[],
+  modelType: ModelType = "deepseek-flash"
 ): AsyncGenerator<SSEEvent, void, unknown> {
+  // 最终回答不需要工具，用纯 LLM
+  const llm = createLLM(modelType);
   const stream = await llm.stream(messages);
 
   for await (const chunk of stream) {
@@ -266,24 +237,35 @@ async function* streamFinalAnswer(
 }
 
 /**
- * Agent 主函数
+ * Agent 主函数 - 多模型路由版本
  *
- * 现在 yield 的是 SSEEvent 对象，不再是纯字符串。
- * route.ts 拿到后直接 JSON.stringify 推给前端。
+ * 改造点：
+ * 1. 根据问题自动选择模型
+ * 2. 新增 model_select 事件，前端可以显示用了哪个模型
  */
 export async function* runAgent(
   question: string
 ): AsyncGenerator<SSEEvent, void, unknown> {
-  const llm = createAgentLLM();
-  const answerLLM = createAnswerLLM();
   const maxToolRounds = 3;
+
+  // ===== 多模型路由：根据问题选择模型 =====
+  const { llm, intent, modelType, modelName } = selectModel(question, {
+    bindTools: true,
+    tools: allTools,
+  });
+
+  // 通知前端：选择了哪个模型
+  yield {
+    type: "model_select",
+    model: modelName,
+    intent,
+  };
 
   const messages: BaseMessage[] = [
     new SystemMessage(SYSTEM_PROMPT),
     new HumanMessage(question),
   ];
 
-  // ===== 第一次调用模型（非流式，因为要判断有没有 tool_calls）=====
   // 通知前端：模型开始思考
   yield { type: "thinking" };
 
@@ -291,9 +273,9 @@ export async function* runAgent(
     const response = await llm.invoke(messages);
     const aiMessage = response as AIMessage;
 
-    // 模型判断不再需要工具，进入最终回答阶段。
+    // 模型判断不再需要工具，进入最终回答阶段
     if (!aiMessage.tool_calls || aiMessage.tool_calls.length === 0) {
-      yield* streamFinalAnswer(answerLLM, messages);
+      yield* streamFinalAnswer(messages, modelType);
       return;
     }
 
@@ -327,5 +309,5 @@ export async function* runAgent(
     }
   }
 
-  yield* streamFinalAnswer(answerLLM, messages);
+  yield* streamFinalAnswer(messages, modelType);
 }

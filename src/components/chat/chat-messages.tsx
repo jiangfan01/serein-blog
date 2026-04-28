@@ -117,6 +117,9 @@ function AssistantContent({
 
   return (
     <>
+      {/* 模型信息（显示在最上方） */}
+      {message.model && <ModelBadge model={message.model} intent={message.intent} />}
+
       {/* 工具调用记录（始终展示，不会消失） */}
       {hasToolCalls && <ToolCallList records={message.toolCalls!} />}
 
@@ -133,6 +136,64 @@ function AssistantContent({
       {/* 有工具在跑但还没出文本（等待模型第二次调用） */}
       {isLast && loading && hasRunningTool && !hasContent && null}
     </>
+  );
+}
+
+/**
+ * 模型信息徽章
+ */
+function ModelBadge({ model, intent }: { model: string; intent?: string }) {
+  // 模型名称映射
+  const modelLabels: Record<string, { label: string; color: "default" | "pro" | "kimi" }> = {
+    "deepseek-v4-flash": { label: "DeepSeek Flash", color: "default" },
+    "deepseek-v4-pro": { label: "DeepSeek Pro", color: "pro" },
+    "moonshot-v1-8k": { label: "Kimi 8K", color: "kimi" },
+    "moonshot-v1-32k": { label: "Kimi 32K", color: "kimi" },
+    "moonshot-v1-128k": { label: "Kimi 128K", color: "kimi" },
+    "kimi-k2-0711-preview": { label: "Kimi K2", color: "kimi" },
+  };
+
+  // 意图映射
+  const intentLabels: Record<string, string> = {
+    simple_chat: "闲聊",
+    rag_query: "知识库",
+    web_search: "联网",
+    complex_reasoning: "深度推理",
+    code_analysis: "代码分析",
+  };
+
+  const modelInfo = modelLabels[model] || { label: model, color: "default" as const };
+  const intentLabel = intent ? intentLabels[intent] || intent : null;
+
+  // 颜色样式
+  const colorStyles = {
+    default: "bg-[var(--surface-secondary)] text-[var(--text-tertiary)]",
+    pro: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    kimi: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  };
+
+  const dotStyles = {
+    default: "bg-[var(--text-quaternary)]",
+    pro: "bg-amber-500",
+    kimi: "bg-blue-500",
+  };
+
+  return (
+    <div className="mb-2 flex items-center gap-1.5">
+      <span
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide ${colorStyles[modelInfo.color]}`}
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${dotStyles[modelInfo.color]}`}
+        />
+        {modelInfo.label}
+      </span>
+      {intentLabel && (
+        <span className="text-[10px] text-[var(--text-quaternary)]">
+          · {intentLabel}
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -20,16 +20,23 @@ interface SSEHandlers {
   onTextDelta: (content: string) => void;
   onToolStart: (tool: string, args: Record<string, unknown>) => void;
   onToolEnd: (tool: string, result: string) => void;
+  onModelSelect: (model: string, intent: string) => void;
   onError: (message: string) => void;
   onDone: () => void;
 }
 
 /**
- * 解析单行 SSE data，返回 SSEEvent 或 null
+ * 解析一个完整 SSE event block，返回 SSEEvent 或 null
  */
-function parseSSELine(line: string): SSEEvent | null {
-  if (!line.startsWith("data: ")) return null;
-  const data = line.slice(6);
+function parseSSEBlock(block: string): SSEEvent | null {
+  const data = block
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .join("\n");
+
+  if (!data) return null;
+
   try {
     return JSON.parse(data) as SSEEvent;
   } catch {
@@ -80,40 +87,55 @@ export function useSSEParser() {
 
         const decoder = new TextDecoder();
 
+        let pendingText = "";
+
+        const dispatchEvent = (event: SSEEvent) => {
+          // 按 type 分发到对应 handler
+          switch (event.type) {
+            case "thinking":
+              handlers.onThinking();
+              break;
+            case "model_select":
+              handlers.onModelSelect(event.model, event.intent);
+              break;
+            case "text_delta":
+              handlers.onTextDelta(event.content);
+              break;
+            case "tool_start":
+              handlers.onToolStart(event.tool, event.args);
+              break;
+            case "tool_end":
+              handlers.onToolEnd(event.tool, event.result);
+              break;
+            case "error":
+              handlers.onError(event.message);
+              break;
+            case "done":
+              handlers.onDone();
+              break;
+          }
+        };
+
         // 读取流
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const text = decoder.decode(value, { stream: true });
-          const lines = text.split("\n").filter((l) => l.startsWith("data: "));
+          pendingText += decoder.decode(value, { stream: true });
+          const blocks = pendingText.split(/\n\n/);
+          pendingText = blocks.pop() ?? "";
 
-          for (const line of lines) {
-            const event = parseSSELine(line);
+          for (const block of blocks) {
+            const event = parseSSEBlock(block);
             if (!event) continue;
-
-            // 按 type 分发到对应 handler
-            switch (event.type) {
-              case "thinking":
-                handlers.onThinking();
-                break;
-              case "text_delta":
-                handlers.onTextDelta(event.content);
-                break;
-              case "tool_start":
-                handlers.onToolStart(event.tool, event.args);
-                break;
-              case "tool_end":
-                handlers.onToolEnd(event.tool, event.result);
-                break;
-              case "error":
-                handlers.onError(event.message);
-                break;
-              case "done":
-                handlers.onDone();
-                break;
-            }
+            dispatchEvent(event);
           }
+        }
+
+        pendingText += decoder.decode();
+        const trailingEvent = parseSSEBlock(pendingText.trim());
+        if (trailingEvent) {
+          dispatchEvent(trailingEvent);
         }
 
         // 流读完了但没收到 done 事件，兜底触发

@@ -32,11 +32,195 @@ model NoteMeta {
 
 /// RAG 向量存储：存储文档切片和对应的 embedding
 model DocumentChunk {
-  id        String                   @id @default(cuid())
-  content   String                   /// 文本内容
-  metadata  Json                     /// { source, category, title }
+  id        String                      @id @default(cuid())
+  content   String                      /// 文本内容
+  metadata  Json                        /// { source, category, title }
   embedding Unsupported("vector(1024)") /// BAAI/bge-m3 embedding 1024 维
-  createdAt DateTime                 @default(now())
+  createdAt DateTime                    @default(now())
 
   @@map("document_chunks")
+}
+
+// ============================================================
+// AI 模型路由系统 - 企业级表结构
+// ============================================================
+
+/// 模型提供商配置
+model ModelProvider {
+  id        String   @id @default(cuid())
+  name      String   @unique /// deepseek, kimi, openai
+  baseUrl   String   /// API 地址
+  apiKeyEnv String   /// 环境变量名，如 DEEPSEEK_API_KEY
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models ModelConfig[]
+
+  @@map("model_providers")
+}
+
+/// 模型配置表 - 支持动态配置模型参数
+model ModelConfig {
+  id             String   @id @default(cuid())
+  providerId     String
+  provider       ModelProvider @relation(fields: [providerId], references: [id])
+  
+  modelId        String   @unique /// 内部标识，如 deepseek-flash
+  modelName      String   /// API 模型名，如 deepseek-v4-flash
+  displayName    String   /// 显示名称，如 DeepSeek Flash
+  
+  contextLength  Int      @default(128000) /// 上下文长度
+  inputPrice     Decimal  @db.Decimal(10, 6) /// 输入价格 (元/千token)
+  outputPrice    Decimal  @db.Decimal(10, 6) /// 输出价格 (元/千token)
+  
+  /// 模型能力标签
+  capabilities   String[] /// ["chat", "tool_call", "thinking", "long_context"]
+  
+  /// 模型特殊参数 (JSON)
+  /// 如 DeepSeek Pro: { "thinking": { "type": "enabled" }, "reasoningEffort": "medium" }
+  extraParams    Json?
+  
+  enabled        Boolean  @default(true)
+  priority       Int      @default(0) /// 同类模型的优先级，数字越大优先级越高
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  routingRules   RoutingRule[]
+  fallbackFor    RoutingRule[] @relation("FallbackModel")
+  callLogs       ModelCallLog[]
+  healthChecks   ModelHealthCheck[]
+
+  @@map("model_configs")
+}
+
+/// 路由规则表 - 意图到模型的映射
+model RoutingRule {
+  id             String   @id @default(cuid())
+  
+  /// 规则名称和描述
+  name           String   /// 如 "RAG问答路由"
+  description    String?
+  
+  /// 匹配条件
+  intentType     String   /// simple_chat, rag_query, web_search, complex_reasoning, code_analysis
+  
+  /// 额外匹配条件 (JSON)
+  /// 如 { "minTokens": 1000, "userTier": "premium" }
+  conditions     Json?
+  
+  /// 路由目标
+  modelId        String
+  model          ModelConfig @relation(fields: [modelId], references: [id])
+  
+  /// 降级模型
+  fallbackModelId String?
+  fallbackModel   ModelConfig? @relation("FallbackModel", fields: [fallbackModelId], references: [id])
+  
+  /// 规则权重，用于多规则匹配时的优先级
+  weight         Int      @default(100)
+  
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([intentType, weight]) /// 同一意图下权重唯一
+  @@map("routing_rules")
+}
+
+/// 模型调用记录表 - 记录每次调用的详细信息
+model ModelCallLog {
+  id             String   @id @default(cuid())
+  
+  /// 关联模型
+  modelId        String
+  model          ModelConfig @relation(fields: [modelId], references: [id])
+  
+  /// 请求信息
+  sessionId      String?  /// 会话ID，用于追踪多轮对话
+  intentType     String   /// 意图分类
+  
+  /// Token 统计
+  inputTokens    Int      /// 输入 token 数
+  outputTokens   Int      /// 输出 token 数
+  totalTokens    Int      /// 总 token 数
+  
+  /// 成本计算 (元)
+  cost           Decimal  @db.Decimal(10, 6)
+  
+  /// 性能指标
+  latencyMs      Int      /// 总延迟 (毫秒)
+  firstTokenMs   Int?     /// 首 token 延迟 (毫秒)
+  
+  /// 状态
+  status         String   @default("success") /// success, error, timeout, fallback
+  errorMessage   String?
+  
+  /// 是否使用了降级
+  usedFallback   Boolean  @default(false)
+  fallbackReason String?
+  
+  /// 工具调用信息
+  toolCalls      Json?    /// [{ tool: "rag_search", latencyMs: 200 }]
+  
+  createdAt      DateTime @default(now())
+
+  @@index([modelId, createdAt])
+  @@index([sessionId])
+  @@index([intentType, createdAt])
+  @@index([status, createdAt])
+  @@map("model_call_logs")
+}
+
+/// 模型健康检查记录
+model ModelHealthCheck {
+  id             String   @id @default(cuid())
+  
+  modelId        String
+  model          ModelConfig @relation(fields: [modelId], references: [id])
+  
+  /// 健康状态
+  isHealthy      Boolean
+  latencyMs      Int?
+  errorMessage   String?
+  
+  /// 检查时间
+  checkedAt      DateTime @default(now())
+
+  @@index([modelId, checkedAt])
+  @@map("model_health_checks")
+}
+
+/// 模型使用统计 (按天聚合，用于报表)
+model ModelUsageStats {
+  id             String   @id @default(cuid())
+  
+  modelId        String
+  date           DateTime @db.Date /// 统计日期
+  
+  /// 调用统计
+  totalCalls     Int      @default(0)
+  successCalls   Int      @default(0)
+  errorCalls     Int      @default(0)
+  fallbackCalls  Int      @default(0)
+  
+  /// Token 统计
+  totalInputTokens  BigInt @default(0)
+  totalOutputTokens BigInt @default(0)
+  
+  /// 成本统计 (元)
+  totalCost      Decimal  @db.Decimal(12, 4)
+  
+  /// 性能统计
+  avgLatencyMs   Int?
+  p95LatencyMs   Int?
+  p99LatencyMs   Int?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([modelId, date])
+  @@index([date])
+  @@map("model_usage_stats")
 }

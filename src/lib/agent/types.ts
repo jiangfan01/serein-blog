@@ -40,6 +40,13 @@ export interface ThinkingEvent {
   type: "thinking";
 }
 
+// 模型选择事件 — 告诉前端用了哪个模型
+export interface ModelSelectEvent {
+  type: "model_select";
+  model: string; // 模型名，如 "deepseek-v4-flash"
+  intent: string; // 意图分类，如 "rag_query"
+}
+
 // 结束事件
 export interface DoneEvent {
   type: "done";
@@ -51,5 +58,6 @@ export type SSEEvent =
   | ToolStartEvent
   | ToolEndEvent
   | ThinkingEvent
+  | ModelSelectEvent
   | ErrorEvent
   | DoneEvent;

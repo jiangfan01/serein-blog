@@ -21,6 +21,8 @@ export interface ChatMessage {
   toolStatus?: string; // 当前正在执行的工具状态（进行中才有）
   toolName?: string;
   toolCalls?: ToolCallRecord[]; // 已完成的工具调用记录（永久保留）
+  model?: string; // 使用的模型名称
+  intent?: string; // 意图分类
 }
 
 // 工具调用记录
@@ -37,6 +39,16 @@ const TOOL_LABELS: Record<string, string> = {
   web_search: "联网搜索",
 };
 
+const INITIAL_TYPEWRITER_DELAY = 160;
+const FRAME_INTERVAL = 28;
+
+function getTypewriterStep(remaining: number) {
+  if (remaining > 180) return 8;
+  if (remaining > 80) return 5;
+  if (remaining > 28) return 3;
+  return 1;
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,23 +58,35 @@ export function useChat() {
   const bufferRef = useRef("");
   const displayedRef = useRef("");
   const rafIdRef = useRef<number>(0);
+  const firstBufferedAtRef = useRef(0);
+  const lastFlushAtRef = useRef(0);
 
   /**
    * 启动打字机 RAF 循环
-   * 每帧从 buffer 取 1~3 个字符刷到最后一条 assistant 消息
+   * 每帧按 buffer 剩余量动态消费，避免模型分批到达时前端过快吃空。
    */
   const startTypewriter = useCallback(() => {
     displayedRef.current = "";
     bufferRef.current = "";
+    firstBufferedAtRef.current = 0;
+    lastFlushAtRef.current = 0;
 
-    const tick = () => {
+    const tick = (now: number) => {
       const buf = bufferRef.current;
       const displayed = displayedRef.current;
+      const firstBufferedAt = firstBufferedAtRef.current;
+      const hasEnoughWarmup =
+        firstBufferedAt > 0 &&
+        (now - firstBufferedAt >= INITIAL_TYPEWRITER_DELAY ||
+          buf.length > 80);
+      const canFlush = now - lastFlushAtRef.current >= FRAME_INTERVAL;
 
-      if (buf.length > displayed.length) {
-        const charsPerFrame = Math.min(3, buf.length - displayed.length);
+      if (hasEnoughWarmup && canFlush && buf.length > displayed.length) {
+        const remaining = buf.length - displayed.length;
+        const charsPerFrame = Math.min(getTypewriterStep(remaining), remaining);
         const next = buf.slice(0, displayed.length + charsPerFrame);
         displayedRef.current = next;
+        lastFlushAtRef.current = now;
 
         setMessages((prev) => {
           const updated = [...prev];
@@ -122,9 +146,24 @@ export function useChat() {
           // thinking 状态由 loading + 空 content 自动显示
         },
 
+        onModelSelect: (model, intent) => {
+          // 记录使用的模型和意图
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.role === "assistant") {
+              updated[updated.length - 1] = { ...last, model, intent };
+            }
+            return updated;
+          });
+        },
+
         onTextDelta: (content) => {
           // 只往 buffer 追加，不直接 setState
           // RAF 循环会自动把 buffer 内容刷到 UI
+          if (!firstBufferedAtRef.current) {
+            firstBufferedAtRef.current = performance.now();
+          }
           bufferRef.current += content;
         },
 
