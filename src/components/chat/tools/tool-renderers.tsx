@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ToolCallRecord } from "@/hooks/use-chat";
+import { parseWebSearchResult, type WebSourceItem } from "@/lib/tool-parsers";
 
 type ToolMeta = {
   icon: LucideIcon;
@@ -67,7 +68,7 @@ function RagSearchResult({ record }: ToolRendererProps) {
 }
 
 function WebSearchResult({ record }: ToolRendererProps) {
-  const parsed = parseTavilyResult(record.result);
+  const parsed = parseWebSearchResult(record.result);
 
   return (
     <ToolOutputBlock title="搜索结果">
@@ -174,33 +175,4 @@ export function getToolQueryDescription(args: Record<string, unknown>) {
   }
 
   return undefined;
-}
-
-type WebSourceItem = {
-  index: number;
-  title: string;
-  content: string;
-  url: string;
-};
-
-function parseTavilyResult(value: string): {
-  answer?: string;
-  items: WebSourceItem[];
-} {
-  const answerMatch = value.match(/直接答案：([\s\S]*?)(?:\n\n搜索结果：|$)/);
-  const answer = answerMatch?.[1]?.trim();
-  const itemRegex =
-    /\[(\d+)\]\s+(.+?)\n([\s\S]*?)\n来源:\s*(https?:\/\/\S+)/g;
-  const items: WebSourceItem[] = [];
-
-  for (const match of value.matchAll(itemRegex)) {
-    items.push({
-      index: Number(match[1]),
-      title: match[2].trim(),
-      content: match[3].trim(),
-      url: match[4].trim(),
-    });
-  }
-
-  return { answer, items };
 }
