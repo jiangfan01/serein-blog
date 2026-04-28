@@ -31,22 +31,19 @@ export const webSearchTool = tool(
 
       const data = await response.json();
 
-      let result = "";
-      if (data.answer) {
-        result += `直接答案：${data.answer}\n\n`;
-      }
+      // 返回结构化 JSON，方便前端美化展示
+      const result = {
+        answer: data.answer || null,
+        results: (data.results || []).map(
+          (r: { title: string; content: string; url: string }) => ({
+            title: r.title,
+            content: r.content,
+            url: r.url,
+          })
+        ),
+      };
 
-      if (data.results?.length) {
-        const formatted = data.results
-          .map(
-            (r: { title: string; content: string; url: string }, i: number) =>
-              `[${i + 1}] ${r.title}\n${r.content}\n来源: ${r.url}`
-          )
-          .join("\n\n");
-        result += `搜索结果：\n${formatted}`;
-      }
-
-      return result || "没有找到相关的搜索结果。";
+      return JSON.stringify(result);
     } catch (error) {
       return `搜索出错: ${error instanceof Error ? error.message : "未知错误"}`;
     }
