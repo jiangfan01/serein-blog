@@ -131,7 +131,9 @@ export function ChatPage() {
           const newSession = await createSession.mutateAsync();
           sessionId = newSession.id;
           setActiveSession(sessionId);
-          router.replace(`/chat?session=${sessionId}`);
+          
+          // 用 history.replaceState 更新 URL，不触发 React 重新渲染
+          window.history.replaceState(null, "", `/chat?session=${sessionId}`);
           
           // 新会话，乐观更新标题
           const newTitle = question.trim().slice(0, 50) + (question.trim().length > 50 ? "..." : "");
@@ -152,7 +154,7 @@ export function ChatPage() {
 
       sendMessage(question, sessionId);
     },
-    [activeSessionId, sessions, createSession, setActiveSession, router, optimisticUpdateTitle, sendMessage]
+    [activeSessionId, sessions, createSession, setActiveSession, optimisticUpdateTitle, sendMessage]
   );
 
   // 滚动到底部
