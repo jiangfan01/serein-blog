@@ -132,8 +132,8 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
       <div className="flex-shrink-0 px-4 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[var(--text-strong)] flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-[var(--app-bg)]" strokeWidth={2} />
+            <div className="w-7 h-7 rounded-lg bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-[var(--text-secondary)]" strokeWidth={2} />
             </div>
             <span className="text-[15px] font-semibold text-[var(--text-strong)] tracking-tight">
               Serein
@@ -148,14 +148,14 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
         </div>
       </div>
 
-      {/* ========== 新建对话按钮 (Vercel 风格：黑白灰) ========== */}
+      {/* ========== 新建对话按钮 ========== */}
       <div className="flex-shrink-0 px-3 py-2">
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-[var(--text-strong)] hover:opacity-90 transition-all duration-150 group"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface)] hover:bg-[var(--surface-secondary)] transition-all duration-150 group"
         >
-          <SquarePen className="w-4 h-4 text-[var(--app-bg)]" strokeWidth={1.8} />
-          <span className="text-[13px] font-medium text-[var(--app-bg)]">
+          <SquarePen className="w-4 h-4 text-[var(--text-secondary)]" strokeWidth={1.8} />
+          <span className="text-[13px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-strong)]">
             新建对话
           </span>
         </button>
@@ -249,8 +249,8 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
       {/* ========== 底部品牌信息 ========== */}
       <div className="flex-shrink-0 px-4 py-4 border-t border-[var(--border-subtle)]">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-[var(--text-quaternary)] flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-[var(--surface)]" strokeWidth={2} />
+          <div className="w-5 h-5 rounded-md bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center">
+            <Sparkles className="w-3 h-3 text-[var(--text-tertiary)]" strokeWidth={2} />
           </div>
           <span className="text-[11px] font-medium text-[var(--text-quaternary)]">
             from Serein
