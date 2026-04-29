@@ -56,7 +56,7 @@ export default function ChatHomePage() {
       <div className="flex-1 overflow-y-auto" data-lenis-prevent>
         <div className="flex flex-col justify-center min-h-full px-4 md:px-6 py-12 max-w-3xl mx-auto w-full">
           {/* Header */}
-          <div className="mb-10 text-left">
+          <div className="mb-10 text-left animate-in fade-in slide-in-from-bottom-3 duration-300">
             <h1 className="text-2xl font-semibold text-[var(--text-strong)] tracking-tight flex items-center gap-2">
               Serein{" "}
               <span className="text-[var(--text-tertiary)] font-normal">
@@ -77,12 +77,13 @@ export default function ChatHomePage() {
                   key={idx}
                   onClick={() => handleSend(s.text)}
                   disabled={createSession.isPending}
-                  className="group flex flex-col items-start p-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] hover:border-[var(--text-strong)] transition-colors text-left disabled:opacity-50"
+                  style={{ animationDelay: `${50 + idx * 50}ms` }}
+                  className="group flex flex-col items-start p-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] hover:border-[var(--text-strong)] transition-all duration-150 text-left disabled:opacity-50 animate-in fade-in slide-in-from-bottom-2"
                 >
-                  <div className="mb-3 text-[var(--text-tertiary)] group-hover:text-[var(--text-strong)] transition-colors">
+                  <div className="mb-3 text-[var(--text-tertiary)] group-hover:text-[var(--text-strong)] transition-colors duration-150">
                     <Icon strokeWidth={1.5} className="w-5 h-5" />
                   </div>
-                  <span className="text-[14px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] transition-colors">
+                  <span className="text-[14px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] transition-colors duration-150">
                     {s.text}
                   </span>
                 </button>

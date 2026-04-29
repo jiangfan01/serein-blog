@@ -135,6 +135,10 @@ const sessionApi = {
 
 /**
  * 无限滚动获取会话列表
+ * 
+ * 缓存策略：
+ * - staleTime: 1分钟内不重新请求
+ * - 窗口聚焦时不自动刷新（避免打断用户操作）
  */
 export function useInfiniteSessions() {
   const accessToken = useTokenStore((s) => s.accessToken);
@@ -146,7 +150,9 @@ export function useInfiniteSessions() {
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
     enabled: !!accessToken,
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000, // 1 分钟内不重新请求
+    gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -166,6 +172,11 @@ export function useSession(id: string | null) {
 
 /**
  * 获取会话消息
+ * 
+ * 缓存策略：
+ * - staleTime: 10分钟内认为数据新鲜，不重新请求
+ * - gcTime: 30分钟后才清理缓存
+ * - 切换会话时优先使用缓存，后台静默刷新
  */
 export function useSessionMessages(sessionId: string | null) {
   const accessToken = useTokenStore((s) => s.accessToken);
@@ -174,8 +185,9 @@ export function useSessionMessages(sessionId: string | null) {
     queryKey: sessionKeys.messages(sessionId || ""),
     queryFn: () => sessionApi.getMessages(sessionId!),
     enabled: !!accessToken && !!sessionId,
-    staleTime: 5 * 60 * 1000, // 5 分钟缓存
-    gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
+    staleTime: 10 * 60 * 1000, // 10 分钟内不重新请求
+    gcTime: 30 * 60 * 1000, // 30 分钟后垃圾回收
+    refetchOnWindowFocus: false, // 窗口聚焦不刷新
     select: (data) => data.messages,
   });
 }
@@ -321,4 +333,28 @@ export function useUpdateSession() {
       }
     },
   });
+}
+
+/**
+ * 预取会话消息
+ * 用于鼠标悬停时提前加载，减少切换延迟
+ */
+export function usePrefetchSessionMessages() {
+  const queryClient = useQueryClient();
+  const accessToken = useTokenStore((s) => s.accessToken);
+
+  return (sessionId: string) => {
+    if (!accessToken || !sessionId) return;
+
+    // 检查是否已有缓存
+    const cached = queryClient.getQueryData(sessionKeys.messages(sessionId));
+    if (cached) return;
+
+    // 预取
+    queryClient.prefetchQuery({
+      queryKey: sessionKeys.messages(sessionId),
+      queryFn: () => sessionApi.getMessages(sessionId),
+      staleTime: 10 * 60 * 1000,
+    });
+  };
 }

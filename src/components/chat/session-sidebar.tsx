@@ -16,6 +16,7 @@ import {
   useInfiniteSessions,
   useDeleteSession,
   useUpdateSession,
+  usePrefetchSessionMessages,
 } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { toast } from "@/components/ui/toast";
@@ -36,6 +37,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
+  const prefetchMessages = usePrefetchSessionMessages();
   const { setSidebarOpen } = useSessionStore();
   const pathname = usePathname();
 
@@ -149,7 +151,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
           </div>
         ) : (
           <div className="space-y-0.5">
-            {sessions.map((session) => (
+            {sessions.map((session, index) => (
               <SessionItem
                 key={session.id}
                 id={session.id}
@@ -161,12 +163,14 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
                 showDeleteConfirm={deleteConfirmId === session.id}
                 isEditing={editingId === session.id}
                 onSelect={() => handleSelectSession(session.id)}
+                onMouseEnter={() => prefetchMessages(session.id)}
                 onDeleteClick={() => setDeleteConfirmId(session.id)}
                 onDeleteConfirm={() => handleDeleteSession(session.id)}
                 onDeleteCancel={() => setDeleteConfirmId(null)}
                 onEditClick={() => setEditingId(session.id)}
                 onEditConfirm={(newTitle) => handleUpdateTitle(session.id, newTitle)}
                 onEditCancel={() => setEditingId(null)}
+                animationDelay={index * 30}
               />
             ))}
             {isFetchingNextPage && (
@@ -195,12 +199,14 @@ interface SessionItemProps {
   showDeleteConfirm: boolean;
   isEditing: boolean;
   onSelect: () => void;
+  onMouseEnter: () => void;
   onDeleteClick: () => void;
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
   onEditClick: () => void;
   onEditConfirm: (newTitle: string) => void;
   onEditCancel: () => void;
+  animationDelay?: number;
 }
 
 function SessionItem({
@@ -212,12 +218,14 @@ function SessionItem({
   showDeleteConfirm,
   isEditing,
   onSelect,
+  onMouseEnter,
   onDeleteClick,
   onDeleteConfirm,
   onDeleteCancel,
   onEditClick,
   onEditConfirm,
   onEditCancel,
+  animationDelay = 0,
 }: SessionItemProps) {
   const displayTitle = title || "新对话";
   const [editValue, setEditValue] = useState(displayTitle);
@@ -246,7 +254,7 @@ function SessionItem({
   // 删除确认
   if (showDeleteConfirm) {
     return (
-      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)]">
+      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)] animate-in fade-in duration-150">
         <span className="flex-1 text-[13px] text-[var(--text-secondary)] truncate">删除此对话？</span>
         <button
           onClick={onDeleteConfirm}
@@ -268,7 +276,7 @@ function SessionItem({
   // 编辑模式
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)]">
+      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)] animate-in fade-in duration-150">
         <input
           ref={inputRef}
           type="text"
@@ -301,7 +309,9 @@ function SessionItem({
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex items-center gap-2 h-10 px-3 rounded-lg cursor-pointer transition-colors ${
+      onMouseEnter={onMouseEnter}
+      style={{ animationDelay: `${animationDelay}ms` }}
+      className={`group relative flex items-center gap-2 h-10 px-3 rounded-lg cursor-pointer transition-all duration-150 animate-in fade-in slide-in-from-left-2 ${
         isActive
           ? "bg-[var(--surface)]"
           : "hover:bg-[var(--surface)]"

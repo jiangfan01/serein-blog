@@ -52,6 +52,7 @@ export function ChatMessages({
           message={msg}
           isLast={i === messages.length - 1}
           loading={loading}
+          isNew={i === messages.length - 1 || i === messages.length - 2}
         />
       ))}
       <div ref={messagesEndRef} />
@@ -63,29 +64,29 @@ function MessageRow({
   message,
   isLast,
   loading,
+  isNew,
 }: {
   message: ChatMessage;
   isLast: boolean;
   loading: boolean;
+  isNew?: boolean;
 }) {
   if (message.role === "user") {
     return (
-      <div className="flex gap-3">
-        {/* 用户标识：实心小圆 */}
-        <div className="w-6 h-6 rounded-full bg-[var(--text-strong)] flex items-center justify-center flex-shrink-0 mt-0.5">
-          <span className="text-[10px] font-bold text-[var(--app-bg)]">U</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[var(--text-strong)] leading-relaxed">
-            {message.content}
-          </p>
+      <div className={`flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+        <div className="max-w-[85%] md:max-w-[70%]">
+          <div className="bg-[var(--surface-secondary)] rounded-2xl rounded-br-sm px-4 py-2.5">
+            <p className="text-sm text-[var(--text-strong)] leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200`}>
       {/* AI 标识：描边小圆 */}
       <div className="w-6 h-6 rounded-full border border-[var(--border-strong)] flex items-center justify-center flex-shrink-0 mt-0.5">
         <Bot className="w-3 h-3 text-[var(--text-secondary)]" />

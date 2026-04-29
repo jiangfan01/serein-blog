@@ -76,18 +76,18 @@ export default function SessionPage() {
       {/* 对话区域 */}
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto" data-lenis-prevent>
         {messagesLoading ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full animate-in fade-in duration-200">
             <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-[13px]">加载中...</span>
             </div>
           </div>
         ) : messages.length === 0 && !loading ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full animate-in fade-in duration-200">
             <p className="text-[13px] text-[var(--text-tertiary)]">发送消息开始对话</p>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-8">
+          <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-8 animate-in fade-in duration-200">
             <ChatMessages
               messages={messages}
               loading={loading}
