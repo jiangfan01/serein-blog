@@ -15,14 +15,14 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Terminal, Cpu, Network, Library, Lock, LogOut } from "lucide-react";
+import { ArrowLeft, Terminal, Cpu, Network, Library, Lock, LogOut, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { ChatMessages } from "./chat-messages";
 import { ChatInput } from "./chat-input";
 import { MobileSidebarDrawer, MobileMenuButton } from "./mobile-sidebar-drawer";
 import { useChat } from "@/hooks/use-chat";
 import { useAuth } from "@/hooks/use-auth";
-import { useInfiniteSessions, useSessionMessages, useCreateSession } from "@/hooks/use-sessions";
+import { useInfiniteSessions, useSessionMessages, useCreateSession, useOptimisticUpdateTitle } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { toast } from "@/components/ui/toast";
 
@@ -34,6 +34,7 @@ export function ChatPage() {
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { data: sessionsData, isLoading: sessionsLoading, isFetched } = useInfiniteSessions();
   const createSession = useCreateSession();
+  const optimisticUpdateTitle = useOptimisticUpdateTitle();
   const { activeSessionId, setActiveSession } = useSessionStore();
 
   // 扁平化所有页的会话
@@ -43,7 +44,7 @@ export function ChatPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // 获取当前会话的历史消息
-  const { data: historyMessages } = useSessionMessages(activeSessionId);
+  const { data: historyMessages, isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
   // 初始化标记 - 用 ref 避免 Strict Mode 重复执行
   const initRef = useRef(false);
@@ -123,13 +124,22 @@ export function ChatPage() {
 
   /**
    * 发送消息（包装 sessionId）
+   * 如果当前会话没有标题，乐观更新侧边栏
    */
   const handleSendMessage = useCallback(
     (question: string) => {
       if (!activeSessionId) return;
+
+      // 检查当前会话是否有标题，没有则乐观更新
+      const currentSession = sessions.find((s) => s.id === activeSessionId);
+      if (currentSession && !currentSession.title) {
+        const newTitle = question.trim().slice(0, 50) + (question.trim().length > 50 ? "..." : "");
+        optimisticUpdateTitle(activeSessionId, newTitle);
+      }
+
       sendMessage(question, activeSessionId);
     },
-    [activeSessionId, sendMessage]
+    [activeSessionId, sessions, optimisticUpdateTitle, sendMessage]
   );
 
   // 滚动到底部
@@ -191,7 +201,14 @@ export function ChatPage() {
 
         {/* 对话区域 */}
         <div ref={scrollAreaRef} className="flex-1 overflow-y-auto" data-lenis-prevent>
-          {messages.length === 0 ? (
+          {messagesLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-[13px]">加载中...</span>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <WelcomeScreen onSend={handleSendMessage} />
           ) : (
             <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-8">

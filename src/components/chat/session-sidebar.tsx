@@ -1,28 +1,23 @@
 /**
  * 会话侧边栏组件
  *
- * 设计方向：终端/工作站风格的精致极简主义
- * - 单色调配色，强调层次感
- * - 精细的边框和阴影
- * - 流畅的微交互动画
- * - 等宽字体点缀，增加技术感
- * - 无限滚动加载更多
+ * 简洁设计，专注功能
  */
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Plus, Trash2, MessageSquare, Loader2, Sparkles } from "lucide-react";
+import { Plus, Trash2, MessageSquare, Loader2, Pencil, Check, X } from "lucide-react";
 import {
   useInfiniteSessions,
   useCreateSession,
   useDeleteSession,
+  useUpdateSession,
 } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { formatRelativeTime } from "@/lib/utils/format-time";
 import { toast } from "@/components/ui/toast";
 
 interface SessionSidebarProps {
-  /** 会话切换回调 */
   onSessionChange?: (sessionId: string) => void;
 }
 
@@ -38,37 +33,27 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 
   const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
+  const updateSession = useUpdateSession();
   const { activeSessionId, setActiveSession, setSidebarOpen } = useSessionStore();
 
-  // 删除确认状态
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  // 滚动容器 ref
+  const [editingId, setEditingId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 扁平化所有页的会话
   const sessions = useMemo(() => {
     if (!data?.pages) return [];
     return data.pages.flatMap((page) => page.sessions);
   }, [data]);
 
-  // 总数（第一页返回的 hasMore 可以推断是否有更多）
-  const totalCount = sessions.length;
-
-  /**
-   * 无限滚动：滚动到底部时加载更多
-   */
+  // 无限滚动
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
-      // 距离底部 100px 时触发加载
-      if (scrollHeight - scrollTop - clientHeight < 100) {
-        if (hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
+      if (scrollHeight - scrollTop - clientHeight < 100 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
       }
     };
 
@@ -76,24 +61,17 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     return () => container.removeEventListener("scroll", handleScroll);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  /**
-   * 创建新会话
-   */
   const handleCreateSession = async () => {
     try {
       const newSession = await createSession.mutateAsync();
       setActiveSession(newSession.id);
       onSessionChange?.(newSession.id);
       setSidebarOpen(false);
-    } catch (error) {
-      console.error("创建会话失败:", error);
-      toast.error("创建会话失败，请重试");
+    } catch {
+      toast.error("创建会话失败");
     }
   };
 
-  /**
-   * 切换会话
-   */
   const handleSelectSession = (sessionId: string) => {
     if (sessionId === activeSessionId) return;
     setActiveSession(sessionId);
@@ -101,9 +79,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     setSidebarOpen(false);
   };
 
-  /**
-   * 删除会话
-   */
   const handleDeleteSession = async (sessionId: string) => {
     try {
       await deleteSession.mutateAsync(sessionId);
@@ -118,142 +93,109 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
           handleCreateSession();
         }
       }
+      toast.success("已删除");
+    } catch {
+      toast.error("删除失败");
+    }
+  };
 
-      toast.success("会话已删除");
-    } catch (error) {
-      console.error("删除会话失败:", error);
-      toast.error("删除会话失败，请重试");
+  const handleUpdateTitle = async (sessionId: string, newTitle: string) => {
+    try {
+      await updateSession.mutateAsync({ id: sessionId, title: newTitle });
+      setEditingId(null);
+    } catch {
+      toast.error("更新失败");
     }
   };
 
   return (
-    <div className="flex h-full flex-col bg-[var(--app-bg)]">
-      {/* 头部：品牌 + 新建按钮 */}
-      <div className="flex-shrink-0 p-4 border-b border-[var(--border-subtle)]">
-        {/* 品牌标识 */}
-        <div className="flex items-center gap-2 mb-4">
-          <div className="relative">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center shadow-sm">
-              <Sparkles className="w-4 h-4 text-white" strokeWidth={2} />
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[var(--accent)] border-2 border-[var(--app-bg)] animate-pulse" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-[var(--text-strong)] tracking-tight">
-              Serein
-            </span>
-            <span className="text-[10px] font-mono text-[var(--text-quaternary)] uppercase tracking-wider">
-              Workspace
-            </span>
-          </div>
-        </div>
-
-        {/* 新建按钮 */}
+    <div className="h-full flex flex-col">
+      {/* 头部 */}
+      <div className="flex-shrink-0 p-3 border-b border-[var(--border-subtle)]">
         <button
           onClick={handleCreateSession}
           disabled={createSession.isPending}
-          className="group relative w-full flex items-center justify-center gap-2 h-10 rounded-lg border border-dashed border-[var(--border-default)] bg-transparent text-[13px] font-medium text-[var(--text-secondary)] transition-all duration-[var(--duration-base)] ease-[var(--ease-soft)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+          className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-[var(--text-strong)] text-[var(--app-bg)] text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >
-          <span className="absolute inset-0 bg-gradient-to-r from-[var(--accent-soft)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-          <span className="relative flex items-center gap-2">
-            {createSession.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 transition-transform duration-200 group-hover:rotate-90" />
-            )}
-            <span>新建对话</span>
-          </span>
+          {createSession.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          <span>新对话</span>
         </button>
       </div>
 
-      {/* 会话列表 */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {/* 列表标题 */}
-        <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between">
-          <span className="text-[10px] font-mono text-[var(--text-quaternary)] uppercase tracking-widest">
-            对话历史
-          </span>
-          {totalCount > 0 && (
-            <span className="text-[10px] font-mono text-[var(--text-quaternary)] tabular-nums">
-              {totalCount}
-              {hasNextPage && "+"}
-            </span>
-          )}
-        </div>
-
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto px-2 pb-4"
-          data-lenis-prevent
-        >
-          {isLoading ? (
-            <SessionListSkeleton />
-          ) : isError ? (
-            <ErrorState />
-          ) : sessions.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <div className="space-y-1">
-              {sessions.map((session, index) => (
-                <SessionItem
-                  key={session.id}
-                  id={session.id}
-                  title={session.title}
-                  updatedAt={session.updatedAt}
-                  isActive={session.id === activeSessionId}
-                  isDeleting={
-                    deleteSession.isPending && deleteConfirmId === session.id
-                  }
-                  showDeleteConfirm={deleteConfirmId === session.id}
-                  index={index}
-                  onSelect={() => handleSelectSession(session.id)}
-                  onDeleteClick={() => setDeleteConfirmId(session.id)}
-                  onDeleteConfirm={() => handleDeleteSession(session.id)}
-                  onDeleteCancel={() => setDeleteConfirmId(null)}
-                />
-              ))}
-
-              {/* 加载更多指示器 */}
-              {isFetchingNextPage && (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-4 h-4 animate-spin text-[var(--text-quaternary)]" />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 底部装饰 */}
-      <div className="flex-shrink-0 px-4 py-3 border-t border-[var(--border-subtle)]">
-        <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-quaternary)]">
-          <span className="uppercase tracking-wider">Agent v1.0</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-            <span>在线</span>
+      {/* 列表 */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto"
+        data-lenis-prevent
+      >
+        {isLoading ? (
+          <div className="p-3 space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-14 rounded-lg bg-[var(--surface-secondary)] animate-pulse" />
+            ))}
           </div>
-        </div>
+        ) : isError ? (
+          <div className="p-6 text-center text-[13px] text-[var(--text-tertiary)]">
+            加载失败
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="p-6 text-center text-[13px] text-[var(--text-tertiary)]">
+            暂无对话
+          </div>
+        ) : (
+          <div className="p-2 space-y-0.5">
+            {sessions.map((session) => (
+              <SessionItem
+                key={session.id}
+                id={session.id}
+                title={session.title}
+                updatedAt={session.updatedAt}
+                isActive={session.id === activeSessionId}
+                isDeleting={deleteSession.isPending && deleteConfirmId === session.id}
+                isUpdating={updateSession.isPending && editingId === session.id}
+                showDeleteConfirm={deleteConfirmId === session.id}
+                isEditing={editingId === session.id}
+                onSelect={() => handleSelectSession(session.id)}
+                onDeleteClick={() => setDeleteConfirmId(session.id)}
+                onDeleteConfirm={() => handleDeleteSession(session.id)}
+                onDeleteCancel={() => setDeleteConfirmId(null)}
+                onEditClick={() => setEditingId(session.id)}
+                onEditConfirm={(newTitle) => handleUpdateTitle(session.id, newTitle)}
+                onEditCancel={() => setEditingId(null)}
+              />
+            ))}
+            {isFetchingNextPage && (
+              <div className="py-3 flex justify-center">
+                <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/**
- * 单个会话项
- */
 interface SessionItemProps {
   id: string;
   title: string | null;
   updatedAt: string;
   isActive: boolean;
   isDeleting: boolean;
+  isUpdating: boolean;
   showDeleteConfirm: boolean;
-  index: number;
+  isEditing: boolean;
   onSelect: () => void;
   onDeleteClick: () => void;
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
+  onEditClick: () => void;
+  onEditConfirm: (newTitle: string) => void;
+  onEditCancel: () => void;
 }
 
 function SessionItem({
@@ -261,41 +203,60 @@ function SessionItem({
   updatedAt,
   isActive,
   isDeleting,
+  isUpdating,
   showDeleteConfirm,
-  index,
+  isEditing,
   onSelect,
   onDeleteClick,
   onDeleteConfirm,
   onDeleteCancel,
+  onEditClick,
+  onEditConfirm,
+  onEditCancel,
 }: SessionItemProps) {
   const displayTitle = title || "新对话";
+  const [editValue, setEditValue] = useState(displayTitle);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // 删除确认状态
+  // 进入编辑模式时聚焦输入框
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  // 重置编辑值
+  useEffect(() => {
+    setEditValue(displayTitle);
+  }, [displayTitle, isEditing]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (editValue.trim()) {
+        onEditConfirm(editValue.trim());
+      }
+    } else if (e.key === "Escape") {
+      onEditCancel();
+    }
+  };
+
   if (showDeleteConfirm) {
     return (
-      <div className="rounded-lg bg-[var(--surface-secondary)] p-3 animate-in fade-in slide-in-from-left-2 duration-200">
-        <p className="text-[12px] text-[var(--text-secondary)] mb-3">
-          确定删除这个对话吗？
-        </p>
+      <div className="p-2.5 rounded-lg bg-[var(--surface-secondary)]">
+        <p className="text-[12px] text-[var(--text-secondary)] mb-2">删除此对话？</p>
         <div className="flex gap-2">
           <button
             onClick={onDeleteConfirm}
             disabled={isDeleting}
-            className="flex-1 h-8 rounded-md text-[12px] font-medium bg-[var(--danger)] text-white hover:bg-[var(--danger)]/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+            className="flex-1 h-7 rounded text-[12px] font-medium bg-[var(--danger)] text-white disabled:opacity-50"
           >
-            {isDeleting ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>删除中</span>
-              </>
-            ) : (
-              <span>删除</span>
-            )}
+            {isDeleting ? "..." : "删除"}
           </button>
           <button
             onClick={onDeleteCancel}
-            disabled={isDeleting}
-            className="flex-1 h-8 rounded-md text-[12px] font-medium bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-strong)] transition-colors"
+            className="flex-1 h-7 rounded text-[12px] font-medium bg-[var(--surface)] text-[var(--text-secondary)]"
           >
             取消
           </button>
@@ -304,142 +265,81 @@ function SessionItem({
     );
   }
 
-  // 只对前 10 个做入场动画，避免大量列表卡顿
-  const shouldAnimate = index < 10;
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-[var(--surface)]">
+        <input
+          ref={inputRef}
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-w-0 h-7 px-2 text-[13px] bg-[var(--surface-secondary)] border border-[var(--border-default)] rounded text-[var(--text-strong)] outline-none focus:border-[var(--accent)]"
+          maxLength={100}
+        />
+        <button
+          onClick={() => editValue.trim() && onEditConfirm(editValue.trim())}
+          disabled={isUpdating || !editValue.trim()}
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--accent)] disabled:opacity-50"
+        >
+          {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+        </button>
+        <button
+          onClick={onEditCancel}
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)]"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
       onClick={onSelect}
-      className={`
-        group relative flex items-start gap-3 rounded-lg px-3 py-2.5 cursor-pointer
-        transition-all duration-[var(--duration-fast)] ease-[var(--ease-soft)]
-        ${shouldAnimate ? "animate-in fade-in slide-in-from-left-2" : ""}
-        ${
-          isActive
-            ? "bg-[var(--surface)] shadow-[var(--shadow-soft)]"
-            : "hover:bg-[var(--surface-secondary)]"
-        }
-      `}
-      style={shouldAnimate ? { animationDelay: `${index * 30}ms` } : undefined}
+      className={`group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+        isActive
+          ? "bg-[var(--surface)]"
+          : "hover:bg-[var(--surface-secondary)]"
+      }`}
     >
-      {/* 活跃指示器 */}
-      {isActive && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-[var(--accent)]" />
-      )}
-
-      {/* 图标 */}
-      <div
-        className={`
-          relative w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
-          transition-colors duration-[var(--duration-fast)]
-          ${
-            isActive
-              ? "bg-[var(--accent-soft)]"
-              : "bg-[var(--surface-secondary)] group-hover:bg-[var(--surface-tertiary)]"
-          }
-        `}
-      >
-        <MessageSquare
-          className={`w-4 h-4 transition-colors duration-[var(--duration-fast)] ${
-            isActive
-              ? "text-[var(--accent)]"
-              : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"
-          }`}
-          strokeWidth={1.5}
-        />
-      </div>
-
-      {/* 内容 */}
-      <div className="flex-1 min-w-0 py-0.5">
-        <p
-          className={`text-[13px] font-medium truncate leading-tight transition-colors duration-[var(--duration-fast)] ${
-            isActive
-              ? "text-[var(--text-strong)]"
-              : "text-[var(--text-secondary)] group-hover:text-[var(--text-strong)]"
-          }`}
-        >
+      <MessageSquare
+        className={`w-4 h-4 flex-shrink-0 ${
+          isActive ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
+        }`}
+        strokeWidth={1.5}
+      />
+      <div className="flex-1 min-w-0">
+        <p className={`text-[13px] truncate ${
+          isActive ? "text-[var(--text-strong)] font-medium" : "text-[var(--text-secondary)]"
+        }`}>
           {displayTitle}
         </p>
-        <p className="text-[11px] font-mono text-[var(--text-quaternary)] mt-1 tabular-nums">
+        <p className="text-[11px] text-[var(--text-quaternary)]">
           {formatRelativeTime(updatedAt)}
         </p>
       </div>
-
-      {/* 删除按钮 */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDeleteClick();
-        }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-[var(--danger)]/10 transition-all duration-[var(--duration-fast)]"
-        aria-label="删除对话"
-      >
-        <Trash2 className="w-3.5 h-3.5 text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors" />
-      </button>
-    </div>
-  );
-}
-
-/**
- * 加载状态 Skeleton
- */
-function SessionListSkeleton() {
-  return (
-    <div className="space-y-1">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          className="flex items-start gap-3 rounded-lg px-3 py-2.5 animate-pulse"
-          style={{ animationDelay: `${i * 100}ms` }}
+      {/* 操作按钮 */}
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEditClick();
+          }}
+          className="p-1 rounded hover:bg-[var(--surface-tertiary)] transition-colors"
         >
-          <div className="w-8 h-8 rounded-lg bg-[var(--surface-secondary)]" />
-          <div className="flex-1 py-0.5">
-            <div className="h-4 w-3/4 rounded bg-[var(--surface-secondary)]" />
-            <div className="h-3 w-1/3 rounded bg-[var(--surface-secondary)] mt-2" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * 空状态
- */
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-[var(--surface-secondary)] flex items-center justify-center mb-4">
-        <MessageSquare
-          className="w-6 h-6 text-[var(--text-quaternary)]"
-          strokeWidth={1.5}
-        />
+          <Pencil className="w-3.5 h-3.5 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteClick();
+          }}
+          className="p-1 rounded hover:bg-[var(--surface-tertiary)] transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5 text-[var(--text-tertiary)] hover:text-[var(--danger)]" />
+        </button>
       </div>
-      <p className="text-[13px] font-medium text-[var(--text-secondary)] mb-1">
-        暂无对话
-      </p>
-      <p className="text-[11px] text-[var(--text-quaternary)]">
-        点击上方按钮开始新对话
-      </p>
-    </div>
-  );
-}
-
-/**
- * 错误状态
- */
-function ErrorState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-[var(--danger)]/10 flex items-center justify-center mb-4">
-        <span className="text-2xl">⚠️</span>
-      </div>
-      <p className="text-[13px] font-medium text-[var(--danger)] mb-1">
-        加载失败
-      </p>
-      <p className="text-[11px] text-[var(--text-quaternary)]">
-        请刷新页面重试
-      </p>
     </div>
   );
 }

@@ -174,7 +174,8 @@ export function useSessionMessages(sessionId: string | null) {
     queryKey: sessionKeys.messages(sessionId || ""),
     queryFn: () => sessionApi.getMessages(sessionId!),
     enabled: !!accessToken && !!sessionId,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // 5 分钟缓存
+    gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
     select: (data) => data.messages,
   });
 }
@@ -239,6 +240,85 @@ export function useDeleteSession() {
       queryClient.removeQueries({
         queryKey: sessionKeys.messages(deletedId),
       });
+    },
+  });
+}
+
+/**
+ * 乐观更新会话标题
+ * 用于发送首条消息时立即更新侧边栏显示
+ */
+export function useOptimisticUpdateTitle() {
+  const queryClient = useQueryClient();
+
+  return (sessionId: string, title: string) => {
+    queryClient.setQueryData<{
+      pages: SessionsPage[];
+      pageParams: (string | undefined)[];
+    }>(sessionKeys.infinite(), (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page) => ({
+          ...page,
+          sessions: page.sessions.map((s) =>
+            s.id === sessionId ? { ...s, title, updatedAt: new Date().toISOString() } : s
+          ),
+        })),
+      };
+    });
+  };
+}
+
+/**
+ * 更新会话标题（带 API 调用）
+ * 用于用户手动编辑标题
+ */
+export function useUpdateSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      return fetchWithAuth(`/api/sessions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      }) as Promise<Session>;
+    },
+    onMutate: async ({ id, title }) => {
+      // 取消正在进行的请求
+      await queryClient.cancelQueries({ queryKey: sessionKeys.infinite() });
+
+      // 保存旧数据用于回滚
+      const previousData = queryClient.getQueryData<{
+        pages: SessionsPage[];
+        pageParams: (string | undefined)[];
+      }>(sessionKeys.infinite());
+
+      // 乐观更新
+      queryClient.setQueryData<{
+        pages: SessionsPage[];
+        pageParams: (string | undefined)[];
+      }>(sessionKeys.infinite(), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            sessions: page.sessions.map((s) =>
+              s.id === id ? { ...s, title, updatedAt: new Date().toISOString() } : s
+            ),
+          })),
+        };
+      });
+
+      return { previousData };
+    },
+    onError: (_, __, context) => {
+      // 回滚
+      if (context?.previousData) {
+        queryClient.setQueryData(sessionKeys.infinite(), context.previousData);
+      }
     },
   });
 }
