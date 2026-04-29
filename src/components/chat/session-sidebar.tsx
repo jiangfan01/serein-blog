@@ -13,7 +13,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { SquarePen, Trash2, Loader2, Check, X, Pencil, MessageSquare } from "lucide-react";
 import {
   useInfiniteSessions,
-  useCreateSession,
   useDeleteSession,
   useUpdateSession,
 } from "@/hooks/use-sessions";
@@ -34,7 +33,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     isFetchingNextPage,
   } = useInfiniteSessions();
 
-  const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
   const { activeSessionId, setActiveSession, setSidebarOpen } = useSessionStore();
@@ -64,15 +62,14 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     return () => container.removeEventListener("scroll", handleScroll);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const handleCreateSession = async () => {
-    try {
-      const newSession = await createSession.mutateAsync();
-      setActiveSession(newSession.id);
-      onSessionChange?.(newSession.id);
-      setSidebarOpen(false);
-    } catch {
-      toast.error("创建失败");
-    }
+  /**
+   * 新聊天 = 进入无会话状态（欢迎页）
+   * 不创建会话，等用户发送消息时才创建
+   */
+  const handleNewChat = () => {
+    setActiveSession(null);
+    onSessionChange?.("");
+    setSidebarOpen(false);
   };
 
   const handleSelectSession = (sessionId: string) => {
@@ -119,15 +116,10 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       {/* 新聊天按钮 */}
       <div className="flex-shrink-0 p-2">
         <button
-          onClick={handleCreateSession}
-          disabled={createSession.isPending}
-          className="w-full flex items-center gap-2 h-10 px-3 rounded-lg hover:bg-[var(--surface)] transition-colors disabled:opacity-50"
+          onClick={handleNewChat}
+          className="w-full flex items-center gap-2 h-10 px-3 rounded-lg hover:bg-[var(--surface)] transition-colors"
         >
-          {createSession.isPending ? (
-            <Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" />
-          ) : (
-            <SquarePen className="w-5 h-5 text-[var(--text-secondary)]" strokeWidth={1.5} />
-          )}
+          <SquarePen className="w-5 h-5 text-[var(--text-secondary)]" strokeWidth={1.5} />
           <span className="text-[14px] text-[var(--text-secondary)]">新聊天</span>
         </button>
       </div>
