@@ -4,6 +4,7 @@
  * 职责：管理当前活跃会话和侧边栏状态
  * - activeSessionId: 当前选中的会话 ID
  * - sidebarOpen: 侧边栏展开状态（移动端用）
+ * - desktopCollapsed: 桌面端侧边栏折叠状态
  *
  * 与 TanStack Query 配合：
  * - Query 负责会话列表的获取、缓存、同步
@@ -18,6 +19,9 @@ interface SessionState {
   /** 侧边栏是否展开（移动端） */
   sidebarOpen: boolean;
 
+  /** 桌面端侧边栏是否折叠 */
+  desktopCollapsed: boolean;
+
   /** 设置当前活跃会话 */
   setActiveSession: (sessionId: string | null) => void;
 
@@ -26,11 +30,15 @@ interface SessionState {
 
   /** 设置侧边栏状态 */
   setSidebarOpen: (open: boolean) => void;
+
+  /** 设置桌面端折叠状态 */
+  setDesktopCollapsed: (collapsed: boolean) => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
   activeSessionId: null,
   sidebarOpen: false,
+  desktopCollapsed: false,
 
   setActiveSession: (sessionId) =>
     set({ activeSessionId: sessionId }),
@@ -40,4 +48,7 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   setSidebarOpen: (open) =>
     set({ sidebarOpen: open }),
+
+  setDesktopCollapsed: (collapsed) =>
+    set({ desktopCollapsed: collapsed }),
 }));

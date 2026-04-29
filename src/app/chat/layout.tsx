@@ -11,7 +11,7 @@ import { useRef, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, LogOut } from "lucide-react";
 import Link from "next/link";
-import { MobileSidebarDrawer, MobileMenuButton } from "@/components/chat/mobile-sidebar-drawer";
+import { MobileSidebarDrawer, MobileMenuButton, DesktopExpandButton } from "@/components/chat/mobile-sidebar-drawer";
 import { useAuth } from "@/hooks/use-auth";
 import { ToastContainer } from "@/components/ui/toast";
 
@@ -54,9 +54,10 @@ export default function ChatLayout({
         {/* 顶部导航 */}
         <header className="flex-shrink-0 border-b border-[var(--border-subtle)]">
           <div className="flex items-center justify-between px-4 md:px-6 h-14">
-            {/* 左侧：移动端菜单 + 返回按钮 */}
+            {/* 左侧：移动端菜单 + 桌面端展开 + 返回按钮 */}
             <div className="flex items-center gap-2">
               <MobileMenuButton />
+              <DesktopExpandButton />
               <Link
                 href="/"
                 className="flex items-center gap-2 text-[var(--text-tertiary)] hover:text-[var(--text-strong)] transition-colors"
