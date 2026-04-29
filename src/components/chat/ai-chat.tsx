@@ -31,12 +31,12 @@ import {
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { ChatMessages } from "./chat-messages";
 import { ChatInput } from "./chat-input";
-import { useChat } from "@/hooks/use-chat";
+import { useSimpleChat } from "@/hooks/use-simple-chat";
 
 export function AiChat() {
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const { messages, loading, sendMessage } = useChat();
+  const { messages, loading, sendMessage } = useSimpleChat();
 
   // 全屏 Dialog 模式
   if (fullscreen) {

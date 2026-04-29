@@ -60,9 +60,13 @@ export function useSSEParser() {
    * 2. 拿到 ReadableStream
    * 3. 逐 chunk 读取，按 \n 分行
    * 4. 每行解析成 SSEEvent，按 type 分发到对应 handler
+   *
+   * @param question 用户问题
+   * @param sessionId 会话 ID（必须）
+   * @param handlers SSE 事件处理器
    */
   const streamChat = useCallback(
-    async (question: string, handlers: SSEHandlers) => {
+    async (question: string, sessionId: string, handlers: SSEHandlers) => {
       // 取消上一次未完成的请求
       abortRef.current?.abort();
       const controller = new AbortController();
@@ -82,7 +86,7 @@ export function useSSEParser() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers,
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({ question, sessionId }),
           signal: controller.signal,
         });
 

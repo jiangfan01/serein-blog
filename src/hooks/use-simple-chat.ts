@@ -1,41 +1,31 @@
 /**
- * 聊天状态管理 Hook
+ * 简化版聊天 Hook（不支持多会话）
  *
- * 职责：消息列表管理 + 发送逻辑 + 打字机效果
+ * 用于小窗聊天组件 (ai-chat.tsx)
+ * 不需要 sessionId，消息不持久化到数据库
  *
- * 多会话支持：
- * - sessionId: 当前会话 ID（必须）
- * - loadHistory: 加载历史消息
- * - clearMessages: 清空消息（切换会话时用）
- *
- * 打字机效果：buffer 收集 + RAF 批量刷新
- * - SSE chunk 到达时只往 buffer 追加，不触发渲染
- * - RAF 每帧从 buffer 取字符刷到 state
- * - 这样 React 每帧最多渲染一次，避免高频 setState 卡顿
+ * 注意：这是一个临时方案，后续可以考虑让小窗也支持多会话
  */
 import { useState, useRef, useCallback } from "react";
 import { useSSEParser } from "./use-sse-parser";
-import type { SessionMessage } from "./use-sessions";
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  toolStatus?: string; // 当前正在执行的工具状态（进行中才有）
+  toolStatus?: string;
   toolName?: string;
-  toolCalls?: ToolCallRecord[]; // 已完成的工具调用记录（永久保留）
-  model?: string; // 使用的模型名称
-  intent?: string; // 意图分类
+  toolCalls?: ToolCallRecord[];
+  model?: string;
+  intent?: string;
 }
 
-// 工具调用记录
 export interface ToolCallRecord {
-  tool: string; // "rag_search" | "web_search"
+  tool: string;
   args: Record<string, unknown>;
   result: string;
   status: "running" | "done" | "error";
 }
 
-// 工具名到中文标签的映射
 const TOOL_LABELS: Record<string, string> = {
   rag_search: "搜索博客笔记",
   web_search: "联网搜索",
@@ -52,39 +42,10 @@ function getTypewriterStep(remaining: number) {
 }
 
 /**
- * 将数据库消息格式转换为 UI 消息格式
+ * 简化版聊天 Hook
+ * 不需要 sessionId，适用于小窗聊天
  */
-function convertToUIMessage(msg: SessionMessage): ChatMessage | null {
-  // 只处理 user 和 assistant 消息
-  if (msg.role !== "user" && msg.role !== "assistant") {
-    return null;
-  }
-
-  const uiMsg: ChatMessage = {
-    role: msg.role,
-    content: msg.content,
-  };
-
-  // 转换 toolCalls
-  if (msg.toolCalls && msg.toolCalls.length > 0) {
-    uiMsg.toolCalls = msg.toolCalls.map((tc) => ({
-      tool: tc.tool,
-      args: tc.args,
-      result: tc.result,
-      status: "done" as const,
-    }));
-  }
-
-  // 转换 metadata
-  if (msg.metadata) {
-    uiMsg.model = msg.metadata.model;
-    uiMsg.intent = msg.metadata.intent;
-  }
-
-  return uiMsg;
-}
-
-export function useChat() {
+export function useSimpleChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { streamChat, cancel } = useSSEParser();
@@ -96,31 +57,9 @@ export function useChat() {
   const firstBufferedAtRef = useRef(0);
   const lastFlushAtRef = useRef(0);
 
-  /**
-   * 加载历史消息
-   */
-  const loadHistory = useCallback((historyMessages: SessionMessage[]) => {
-    const uiMessages = historyMessages
-      .map(convertToUIMessage)
-      .filter((m): m is ChatMessage => m !== null);
-    setMessages(uiMessages);
-  }, []);
+  // 临时 sessionId（每次组件挂载生成一个）
+  const tempSessionIdRef = useRef<string | null>(null);
 
-  /**
-   * 清空消息（切换会话时用）
-   */
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-    // 重置打字机状态
-    bufferRef.current = "";
-    displayedRef.current = "";
-    cancelAnimationFrame(rafIdRef.current);
-  }, []);
-
-  /**
-   * 启动打字机 RAF 循环
-   * 每帧按 buffer 剩余量动态消费，避免模型分批到达时前端过快吃空。
-   */
   const startTypewriter = useCallback(() => {
     displayedRef.current = "";
     bufferRef.current = "";
@@ -133,8 +72,7 @@ export function useChat() {
       const firstBufferedAt = firstBufferedAtRef.current;
       const hasEnoughWarmup =
         firstBufferedAt > 0 &&
-        (now - firstBufferedAt >= INITIAL_TYPEWRITER_DELAY ||
-          buf.length > 80);
+        (now - firstBufferedAt >= INITIAL_TYPEWRITER_DELAY || buf.length > 80);
       const canFlush = now - lastFlushAtRef.current >= FRAME_INTERVAL;
 
       if (hasEnoughWarmup && canFlush && buf.length > displayed.length) {
@@ -160,9 +98,6 @@ export function useChat() {
     rafIdRef.current = requestAnimationFrame(tick);
   }, []);
 
-  /**
-   * 停止打字机，把 buffer 里剩余内容一次性刷完
-   */
   const stopTypewriter = useCallback(() => {
     cancelAnimationFrame(rafIdRef.current);
     const final = bufferRef.current;
@@ -181,15 +116,58 @@ export function useChat() {
   }, []);
 
   /**
-   * 发送消息
-   * @param question 用户问题
-   * @param sessionId 会话 ID（必须）
+   * 获取或创建临时会话
    */
-  const sendMessage = useCallback(
-    async (question: string, sessionId: string) => {
-      if (!question.trim() || loading || !sessionId) return;
+  const getOrCreateTempSession = useCallback(async (): Promise<string | null> => {
+    if (tempSessionIdRef.current) {
+      return tempSessionIdRef.current;
+    }
 
-      // 添加用户消息 + 空的 assistant 消息（占位）
+    try {
+      // 动态导入 token store
+      const { useTokenStore } = await import("./use-auth");
+      const accessToken = useTokenStore.getState().accessToken;
+
+      if (!accessToken) {
+        return null;
+      }
+
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        return null;
+      }
+
+      const session = await res.json();
+      tempSessionIdRef.current = session.id;
+      return session.id;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const sendMessage = useCallback(
+    async (question: string) => {
+      if (!question.trim() || loading) return;
+
+      // 获取或创建临时会话
+      const sessionId = await getOrCreateTempSession();
+      if (!sessionId) {
+        // 没有登录或创建会话失败，显示错误
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", content: question },
+          { role: "assistant", content: "请先登录后再使用聊天功能" },
+        ]);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
         { role: "user", content: question },
@@ -200,12 +178,9 @@ export function useChat() {
       startTypewriter();
 
       await streamChat(question, sessionId, {
-        onThinking: () => {
-          // thinking 状态由 loading + 空 content 自动显示
-        },
+        onThinking: () => {},
 
         onModelSelect: (model, intent) => {
-          // 记录使用的模型和意图
           setMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -217,8 +192,6 @@ export function useChat() {
         },
 
         onTextDelta: (content) => {
-          // 只往 buffer 追加，不直接 setState
-          // RAF 循环会自动把 buffer 内容刷到 UI
           if (!firstBufferedAtRef.current) {
             firstBufferedAtRef.current = performance.now();
           }
@@ -227,7 +200,6 @@ export function useChat() {
 
         onToolStart: (tool, args) => {
           const label = TOOL_LABELS[tool] || tool;
-          // 添加一条 running 状态的工具记录
           setMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -245,13 +217,14 @@ export function useChat() {
         },
 
         onToolEnd: (tool, result) => {
-          // 把最后一条 running 的工具记录标记为 done
           setMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
             if (last?.role === "assistant" && last.toolCalls) {
               const calls = [...last.toolCalls];
-              const idx = calls.findLastIndex((c) => c.tool === tool && c.status === "running");
+              const idx = calls.findLastIndex(
+                (c) => c.tool === tool && c.status === "running"
+              );
               if (idx >= 0) {
                 calls[idx] = { ...calls[idx], result, status: "done" };
               }
@@ -280,15 +253,13 @@ export function useChat() {
         },
       });
     },
-    [loading, streamChat, startTypewriter, stopTypewriter]
+    [loading, streamChat, startTypewriter, stopTypewriter, getOrCreateTempSession]
   );
 
   return {
     messages,
     loading,
     sendMessage,
-    loadHistory,
-    clearMessages,
     cancel,
   };
 }
