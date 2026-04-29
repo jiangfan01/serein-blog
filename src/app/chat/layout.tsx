@@ -8,7 +8,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, LogOut } from "lucide-react";
 import Link from "next/link";
 import { MobileSidebarDrawer, MobileMenuButton } from "@/components/chat/mobile-sidebar-drawer";
@@ -21,7 +21,6 @@ export default function ChatLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
 
   /**

@@ -10,6 +10,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { SquarePen, Trash2, Loader2, Check, X, Pencil, MessageSquare } from "lucide-react";
 import {
   useInfiniteSessions,
@@ -35,7 +36,14 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
-  const { activeSessionId, setActiveSession, setSidebarOpen } = useSessionStore();
+  const { setSidebarOpen } = useSessionStore();
+  const pathname = usePathname();
+
+  // 从 URL 读取当前会话 ID：/chat/[sessionId]
+  const activeSessionId = useMemo(() => {
+    const match = pathname.match(/^\/chat\/(.+)$/);
+    return match ? match[1] : null;
+  }, [pathname]);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -64,7 +72,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 
   const handleSelectSession = (sessionId: string) => {
     if (sessionId === activeSessionId) return;
-    setActiveSession(sessionId);
     onSessionChange?.(sessionId);
     setSidebarOpen(false);
     setEditingId(null);
@@ -75,7 +82,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
    * 新聊天 = 跳转到 /chat（欢迎页）
    */
   const handleNewChat = () => {
-    setActiveSession(null);
     onSessionChange?.("");
     setSidebarOpen(false);
   };
@@ -88,10 +94,8 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       if (sessionId === activeSessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
-          setActiveSession(remaining[0].id);
           onSessionChange?.(remaining[0].id);
         } else {
-          setActiveSession(null);
           onSessionChange?.("");
         }
       }
