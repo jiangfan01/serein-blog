@@ -73,7 +73,7 @@ export function ChatPage() {
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
             <span>联网搜索</span>
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />
-            <span>Kimi 驱动</span>
+            <span>Kimi/DeepSeek 驱动</span>
           </div>
         </div>
       </div>

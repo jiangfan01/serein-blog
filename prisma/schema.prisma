@@ -42,6 +42,139 @@ model DocumentChunk {
 }
 
 // ============================================================
+// 用户认证系统
+// ============================================================
+
+/// 用户表
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String    /// bcrypt 加密后的密码
+  name          String?   /// 显示名称
+  avatar        String?   /// 头像 URL
+  role          String    @default("user") /// user, admin
+  
+  /// 状态
+  emailVerified Boolean   @default(false)
+  enabled       Boolean   @default(true)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  /// 关联
+  chatSessions  ChatSession[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// Refresh Token 表（用于 JWT 刷新）
+model RefreshToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token       String   @unique /// refresh token 值
+  expiresAt   DateTime /// 过期时间
+  
+  /// 设备信息（可选）
+  userAgent   String?
+  ip          String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// 聊天会话系统 - 三表分离架构
+// ============================================================
+
+/// 会话表 - 会话元数据
+model ChatSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title       String?  /// 会话标题（可自动生成）
+  
+  /// 状态
+  archived    Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// 关联
+  messages    ChatMessage[]
+  executions  ChatExecution[]
+
+  @@index([userId, updatedAt])
+  @@map("chat_sessions")
+}
+
+/// 消息表 - 纯消息存储
+model ChatMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  /// 消息内容
+  role        String   /// user, assistant, system, tool
+  content     String   /// 消息文本
+  
+  /// 工具调用相关（assistant 消息）
+  toolCalls   Json?    /// [{ id, name, args }]
+  
+  /// 工具结果（tool 消息）
+  toolCallId  String?  /// 对应的 tool_call id
+  toolName    String?  /// 工具名称
+  
+  /// 元数据
+  metadata    Json?    /// { model, tokens, latency }
+  
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+/// 执行记录表 - Agent 运行状态追踪（支持断线重连）
+model ChatExecution {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  /// 触发消息
+  triggerMessageId String? /// 触发这次执行的用户消息 ID
+  
+  /// 执行状态
+  status      String   @default("running") /// running, paused, completed, failed, cancelled
+  
+  /// 进度追踪（用于断线重连恢复）
+  progress    Json?    /// { step: "tool_call", tool: "rag_search", ... }
+  
+  /// 结果
+  result      Json?    /// 最终结果或错误信息
+  
+  /// 统计
+  inputTokens  Int     @default(0)
+  outputTokens Int     @default(0)
+  latencyMs    Int?
+  
+  /// 时间戳
+  startedAt   DateTime @default(now())
+  pausedAt    DateTime?
+  completedAt DateTime?
+
+  @@index([sessionId, status])
+  @@index([status, startedAt])
+  @@map("chat_executions")
+}
+
+// ============================================================
 // AI 模型路由系统 - 企业级表结构
 // ============================================================
 
