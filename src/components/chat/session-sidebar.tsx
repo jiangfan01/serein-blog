@@ -19,7 +19,6 @@ import {
   X, 
   Pencil,
   ChevronDown,
-  ChevronRight,
   Sparkles,
   PanelLeftClose
 } from "lucide-react";
@@ -163,7 +162,7 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
       </div>
 
       {/* ========== 历史记录区域（可折叠） ========== */}
-      <div className="flex-1 flex flex-col min-h-0 px-3 pt-4">
+      <div className="flex-1 flex flex-col min-h-0 px-3 pt-4 overflow-hidden">
         {/* 折叠标题 */}
         <button
           onClick={() => setHistoryExpanded(!historyExpanded)}
@@ -172,25 +171,29 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
           <span className="text-[11px] font-semibold text-[var(--text-quaternary)] uppercase tracking-[0.1em]">
             历史记录
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {sessions.length > 0 && (
               <span className="text-[10px] text-[var(--text-quaternary)] tabular-nums">
                 {sessions.length}
               </span>
             )}
-            {historyExpanded ? (
-              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)] transition-colors" />
-            ) : (
-              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)] transition-colors" />
-            )}
+            <ChevronDown 
+              className={`w-3.5 h-3.5 text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)] transition-all duration-200 ${
+                historyExpanded ? "" : "-rotate-90"
+              }`} 
+            />
           </div>
         </button>
 
-        {/* 会话列表 */}
-        {historyExpanded && (
+        {/* 会话列表（带折叠动画） */}
+        <div 
+          className={`flex-1 overflow-hidden transition-all duration-200 ease-out ${
+            historyExpanded ? "opacity-100" : "opacity-0 max-h-0"
+          }`}
+        >
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto -mx-1 px-1"
+            className="h-full overflow-y-auto -mx-1 px-1"
             style={{ scrollbarWidth: "none" }}
             data-lenis-prevent
           >
@@ -240,7 +243,7 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* ========== 底部品牌信息 ========== */}
