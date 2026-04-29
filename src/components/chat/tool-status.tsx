@@ -39,7 +39,7 @@ export function ToolCallItem({ record }: { record: ToolCallRecord }) {
       <button
         onClick={() => canExpand && setExpanded((value) => !value)}
         disabled={!canExpand}
-        className="flex w-fit max-w-full items-center gap-2 rounded-md py-1 pl-1 pr-3 text-left transition-colors hover:bg-[var(--surface-secondary)]/60 disabled:hover:bg-transparent"
+        className={`flex w-fit max-w-full items-center gap-2 rounded-md py-1 pl-1 pr-3 text-left transition-colors hover:bg-[var(--surface-secondary)]/60 disabled:hover:bg-transparent ${isRunning ? 'tool-running-shine bg-[var(--surface-secondary)]/40' : ''}`}
       >
         <span className="flex h-5 w-5 shrink-0 items-center justify-center">
           {canExpand && expanded ? (

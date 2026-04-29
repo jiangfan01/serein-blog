@@ -73,13 +73,17 @@ function MessageRow({
 }) {
   if (message.role === "user") {
     return (
-      <div className={`flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+      <div className={`flex justify-end gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200`}>
         <div className="max-w-[85%] md:max-w-[70%]">
           <div className="bg-[var(--surface-secondary)] rounded-2xl rounded-br-sm px-4 py-2.5">
             <p className="text-sm text-[var(--text-strong)] leading-relaxed whitespace-pre-wrap">
               {message.content}
             </p>
           </div>
+        </div>
+        {/* 用户标识：实心小圆 */}
+        <div className="w-6 h-6 rounded-full bg-[var(--text-strong)] flex items-center justify-center flex-shrink-0 mt-0.5">
+          <span className="text-[10px] font-bold text-[var(--app-bg)]">U</span>
         </div>
       </div>
     );
