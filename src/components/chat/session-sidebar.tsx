@@ -1,12 +1,16 @@
 /**
  * 会话侧边栏组件
  *
- * 简洁设计，专注功能
+ * 设计原则：Absolute Sharpness + Monospace Hierarchy
+ * - 极简终端风格，等宽字体层级
+ * - Hash 符号代替聊天气泡（工程笔记语义）
+ * - 左侧激活指示线
+ * - 行内编辑/删除状态
  */
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Plus, Trash2, MessageSquare, Loader2, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Loader2, Check, X, PenLine, Hash } from "lucide-react";
 import {
   useInfiniteSessions,
   useCreateSession,
@@ -45,7 +49,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     return data.pages.flatMap((page) => page.sessions);
   }, [data]);
 
-  // 无限滚动
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -77,6 +80,9 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     setActiveSession(sessionId);
     onSessionChange?.(sessionId);
     setSidebarOpen(false);
+    // 切换会话时，重置所有状态
+    setEditingId(null);
+    setDeleteConfirmId(null);
   };
 
   const handleDeleteSession = async (sessionId: string) => {
@@ -87,11 +93,9 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       if (sessionId === activeSessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
-          // 切换到第一个剩余会话
           setActiveSession(remaining[0].id);
           onSessionChange?.(remaining[0].id);
         } else {
-          // 没有剩余会话，清空 activeSession
           setActiveSession(null);
           onSessionChange?.("");
         }
@@ -112,45 +116,56 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 头部 */}
-      <div className="flex-shrink-0 p-3 border-b border-[var(--border-subtle)]">
+    <div className="h-full flex flex-col bg-[var(--surface-secondary)] border-r border-[var(--border-subtle)] font-sans selection:bg-[var(--text-strong)] selection:text-[var(--app-bg)]">
+      
+      {/* 极简头部 & 新建按钮 */}
+      <div className="flex-shrink-0 p-4 border-b border-[var(--border-subtle)]">
         <button
           onClick={handleCreateSession}
           disabled={createSession.isPending}
-          className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-[var(--text-strong)] text-[var(--app-bg)] text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="group w-full flex items-center justify-between h-10 px-4 rounded-md bg-[var(--surface)] border border-[var(--border-default)] hover:border-[var(--text-strong)] transition-colors disabled:opacity-50 shadow-sm hover:shadow-none"
         >
+          <span className="text-[12px] font-semibold text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] tracking-wide uppercase">
+            New Thread
+          </span>
           {createSession.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-tertiary)]" />
           ) : (
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--text-strong)] transition-colors" />
           )}
-          <span>新对话</span>
         </button>
       </div>
 
-      {/* 列表 */}
+      {/* 列表标签 (仿终端风格) */}
+      <div className="px-5 py-3 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-quaternary)]" />
+        <span className="text-[10px] font-mono text-[var(--text-tertiary)] uppercase tracking-[0.2em]">
+          Session History
+        </span>
+      </div>
+
+      {/* 列表滚动区 */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto px-2 pb-4"
         data-lenis-prevent
       >
         {isLoading ? (
-          <div className="p-3 space-y-2">
+          <div className="space-y-1">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 rounded-lg bg-[var(--surface-secondary)] animate-pulse" />
+              <div key={i} className="h-16 rounded-md bg-[var(--surface)] animate-pulse mx-2" />
             ))}
           </div>
         ) : isError ? (
-          <div className="p-6 text-center text-[13px] text-[var(--text-tertiary)]">
-            加载失败
+          <div className="py-10 text-center font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
+            Failed to load
           </div>
         ) : sessions.length === 0 ? (
-          <div className="p-6 text-center text-[13px] text-[var(--text-tertiary)]">
-            暂无对话
+          <div className="py-10 text-center font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
+            No history found
           </div>
         ) : (
-          <div className="p-2 space-y-0.5">
+          <div className="space-y-0.5">
             {sessions.map((session) => (
               <SessionItem
                 key={session.id}
@@ -172,8 +187,8 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
               />
             ))}
             {isFetchingNextPage && (
-              <div className="py-3 flex justify-center">
-                <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
+              <div className="py-4 flex justify-center">
+                <Loader2 className="w-4 h-4 animate-spin text-[var(--text-quaternary)]" />
               </div>
             )}
           </div>
@@ -182,6 +197,10 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     </div>
   );
 }
+
+// ==========================================
+// Session Item 组件
+// ==========================================
 
 interface SessionItemProps {
   id: string;
@@ -217,11 +236,10 @@ function SessionItem({
   onEditConfirm,
   onEditCancel,
 }: SessionItemProps) {
-  const displayTitle = title || "新对话";
+  const displayTitle = title || "Untitled Session";
   const [editValue, setEditValue] = useState(displayTitle);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 进入编辑模式时聚焦输入框
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
@@ -229,7 +247,6 @@ function SessionItem({
     }
   }, [isEditing]);
 
-  // 重置编辑值
   useEffect(() => {
     setEditValue(displayTitle);
   }, [displayTitle, isEditing]);
@@ -237,110 +254,124 @@ function SessionItem({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (editValue.trim()) {
-        onEditConfirm(editValue.trim());
-      }
+      if (editValue.trim()) onEditConfirm(editValue.trim());
     } else if (e.key === "Escape") {
       onEditCancel();
     }
   };
 
+  // --- 状态 1: 确认删除 ---
   if (showDeleteConfirm) {
     return (
-      <div className="p-2.5 rounded-lg bg-[var(--surface-secondary)]">
-        <p className="text-[12px] text-[var(--text-secondary)] mb-2">删除此对话？</p>
+      <div className="flex flex-col gap-2 p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mx-1 my-1">
+        <p className="text-[11px] font-mono text-red-600 dark:text-red-400 uppercase tracking-wide">
+          Confirm Deletion?
+        </p>
         <div className="flex gap-2">
           <button
             onClick={onDeleteConfirm}
             disabled={isDeleting}
-            className="flex-1 h-7 rounded text-[12px] font-medium bg-[var(--danger)] text-white disabled:opacity-50"
+            className="flex-1 h-7 rounded bg-red-600 text-white text-[11px] font-semibold tracking-wide hover:bg-red-700 transition-colors disabled:opacity-50"
           >
-            {isDeleting ? "..." : "删除"}
+            {isDeleting ? "..." : "YES"}
           </button>
           <button
             onClick={onDeleteCancel}
-            className="flex-1 h-7 rounded text-[12px] font-medium bg-[var(--surface)] text-[var(--text-secondary)]"
+            className="flex-1 h-7 rounded bg-[var(--surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-[11px] font-semibold tracking-wide hover:bg-[var(--surface-secondary)] transition-colors"
           >
-            取消
+            NO
           </button>
         </div>
       </div>
     );
   }
 
+  // --- 状态 2: 编辑模式 ---
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-[var(--surface)]">
+      <div className="flex flex-col gap-2 p-3 rounded-md bg-[var(--surface)] border border-[var(--text-strong)] shadow-sm mx-1 my-1">
         <input
           ref={inputRef}
           type="text"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 min-w-0 h-7 px-2 text-[13px] bg-[var(--surface-secondary)] border border-[var(--border-default)] rounded text-[var(--text-strong)] outline-none focus:border-[var(--accent)]"
-          maxLength={100}
+          className="w-full text-[13px] font-medium text-[var(--text-strong)] bg-transparent border-b border-[var(--border-default)] pb-1 outline-none focus:border-[var(--text-strong)] transition-colors"
+          maxLength={60}
+          placeholder="Session name..."
         />
-        <button
-          onClick={() => editValue.trim() && onEditConfirm(editValue.trim())}
-          disabled={isUpdating || !editValue.trim()}
-          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--accent)] disabled:opacity-50"
-        >
-          {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-        </button>
-        <button
-          onClick={onEditCancel}
-          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)]"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex justify-end gap-1 mt-1">
+          <button
+            onClick={onEditCancel}
+            className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => editValue.trim() && onEditConfirm(editValue.trim())}
+            disabled={isUpdating || !editValue.trim()}
+            className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-strong)] transition-colors disabled:opacity-50"
+          >
+            {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
     );
   }
 
+  // --- 状态 3: 默认展示模式 ---
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+      className={`group relative flex items-start gap-3 p-3 mx-1 my-0.5 rounded-md cursor-pointer transition-all duration-200 ${
         isActive
-          ? "bg-[var(--surface)]"
-          : "hover:bg-[var(--surface-secondary)]"
+          ? "bg-[var(--surface)] shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.2)]"
+          : "hover:bg-[var(--surface)]"
       }`}
     >
-      <MessageSquare
-        className={`w-4 h-4 flex-shrink-0 ${
-          isActive ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
+      {/* 极简左侧激活线 */}
+      {isActive && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-3/5 bg-[var(--text-strong)] rounded-r-full" />
+      )}
+
+      {/* 采用 Hash (#) 符号代替气泡，更符合工程笔记/终端语义 */}
+      <Hash
+        className={`w-4 h-4 flex-shrink-0 mt-[2px] transition-colors ${
+          isActive ? "text-[var(--text-strong)]" : "text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)]"
         }`}
-        strokeWidth={1.5}
+        strokeWidth={2}
       />
-      <div className="flex-1 min-w-0">
-        <p className={`text-[13px] truncate ${
-          isActive ? "text-[var(--text-strong)] font-medium" : "text-[var(--text-secondary)]"
+      
+      <div className="flex-1 min-w-0 pr-8">
+        <p className={`text-[13px] leading-snug truncate transition-colors ${
+          isActive ? "text-[var(--text-strong)] font-semibold" : "text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-strong)]"
         }`}>
           {displayTitle}
         </p>
-        <p className="text-[11px] text-[var(--text-quaternary)]">
+        <p className="font-mono text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">
           {formatRelativeTime(updatedAt)}
         </p>
       </div>
-      {/* 操作按钮 */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+
+      {/* 悬浮操作按钮组 (绝对定位以防文字挤压) */}
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onEditClick();
           }}
-          className="p-1 rounded hover:bg-[var(--surface-tertiary)] transition-colors"
+          className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-strong)] hover:bg-[var(--surface-secondary)] transition-all"
         >
-          <Pencil className="w-3.5 h-3.5 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]" />
+          <PenLine className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDeleteClick();
           }}
-          className="p-1 rounded hover:bg-[var(--surface-tertiary)] transition-colors"
+          className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
         >
-          <Trash2 className="w-3.5 h-3.5 text-[var(--text-tertiary)] hover:text-[var(--danger)]" />
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
