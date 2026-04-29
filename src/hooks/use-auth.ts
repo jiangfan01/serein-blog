@@ -2,11 +2,17 @@
 
 /**
  * 认证状态管理 Hook
- * 
- * 使用 Zustand 管理全局认证状态
+ *
+ * 使用 TanStack Query + Zustand 管理认证状态
+ * - TanStack Query: 处理 API 请求、缓存、自动刷新
+ * - Zustand: 存储 accessToken（内存）
  */
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+// ============================================================
+// Types
+// ============================================================
 
 interface User {
   id: string;
@@ -14,151 +20,204 @@ interface User {
   name: string | null;
   avatar: string | null;
   role: string;
+  canUseChat?: boolean;
 }
 
-interface AuthState {
-  user: User | null;
+interface AuthResponse {
+  user: User;
+  accessToken: string;
+}
+
+// ============================================================
+// Token Store (Zustand) - 只存 accessToken
+// ============================================================
+
+interface TokenState {
   accessToken: string | null;
-  isLoading: boolean;
-  
-  // Actions
-  setAuth: (user: User, accessToken: string) => void;
-  clearAuth: () => void;
-  setLoading: (loading: boolean) => void;
+  setAccessToken: (token: string | null) => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      accessToken: null,
-      isLoading: true,
-      
-      setAuth: (user, accessToken) => set({ user, accessToken, isLoading: false }),
-      clearAuth: () => set({ user: null, accessToken: null, isLoading: false }),
-      setLoading: (isLoading) => set({ isLoading }),
-    }),
-    {
-      name: "auth-storage",
-      partialize: (state) => ({ user: state.user, accessToken: state.accessToken }),
-    }
-  )
-);
+export const useTokenStore = create<TokenState>((set) => ({
+  accessToken: null,
+  setAccessToken: (accessToken) => set({ accessToken }),
+}));
 
-/**
- * 认证 API 封装
- */
+// ============================================================
+// Auth API
+// ============================================================
+
 export const authApi = {
-  async login(email: string, password: string) {
+  async login(email: string, password: string): Promise<AuthResponse> {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    
+
     if (!res.ok) {
       const data = await res.json();
       throw new Error(data.error || "登录失败");
     }
-    
+
     return res.json();
   },
-  
-  async register(email: string, password: string, name?: string, inviteCode?: string) {
+
+  async register(
+    email: string,
+    password: string,
+    name?: string,
+    inviteCode?: string
+  ): Promise<AuthResponse> {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name, inviteCode }),
     });
-    
+
     if (!res.ok) {
       const data = await res.json();
       throw new Error(data.error || "注册失败");
     }
-    
+
     return res.json();
   },
-  
-  async logout() {
+
+  async logout(): Promise<void> {
     await fetch("/api/auth/logout", { method: "POST" });
   },
-  
-  async refresh() {
+
+  async refresh(): Promise<AuthResponse> {
     const res = await fetch("/api/auth/refresh", { method: "POST" });
-    
+
     if (!res.ok) {
       throw new Error("Token 刷新失败");
     }
-    
+
     return res.json();
   },
-  
-  async getMe(accessToken: string) {
-    const res = await fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+
+  async changePassword(oldPassword: string, newPassword: string, accessToken: string): Promise<void> {
+    const res = await fetch("/api/auth/password", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ oldPassword, newPassword }),
     });
-    
+
     if (!res.ok) {
-      throw new Error("获取用户信息失败");
+      const data = await res.json();
+      throw new Error(data.error || "修改密码失败");
     }
-    
-    return res.json();
   },
 };
 
-/**
- * 认证 Hook
- */
+// ============================================================
+// Query Keys
+// ============================================================
+
+export const authKeys = {
+  all: ["auth"] as const,
+  user: () => [...authKeys.all, "user"] as const,
+};
+
+// ============================================================
+// useAuth Hook
+// ============================================================
+
 export function useAuth() {
-  const { user, accessToken, isLoading, setAuth, clearAuth, setLoading } = useAuthStore();
-  
-  const login = async (email: string, password: string) => {
-    const data = await authApi.login(email, password);
-    setAuth(data.user, data.accessToken);
-    return data;
-  };
-  
-  const register = async (email: string, password: string, name?: string, inviteCode?: string) => {
-    const data = await authApi.register(email, password, name, inviteCode);
-    setAuth(data.user, data.accessToken);
-    return data;
-  };
-  
-  const logout = async () => {
-    await authApi.logout();
-    clearAuth();
-  };
-  
-  const refreshToken = async () => {
-    try {
+  const queryClient = useQueryClient();
+  const { accessToken, setAccessToken } = useTokenStore();
+
+  // 用户信息查询（通过 refresh token 获取）
+  const {
+    data: user,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: authKeys.user(),
+    queryFn: async () => {
       const data = await authApi.refresh();
-      setAuth(data.user, data.accessToken);
-      return true;
-    } catch {
-      clearAuth();
-      return false;
-    }
-  };
-  
-  // 初始化时尝试刷新 token
-  const initAuth = async () => {
-    setLoading(true);
-    try {
-      await refreshToken();
-    } catch {
-      clearAuth();
-    }
-  };
-  
+      setAccessToken(data.accessToken);
+      return data.user;
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000, // 5 分钟
+    refetchOnWindowFocus: false,
+  });
+
+  // 登录
+  const loginMutation = useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) =>
+      authApi.login(email, password),
+    onSuccess: (data) => {
+      setAccessToken(data.accessToken);
+      queryClient.setQueryData(authKeys.user(), data.user);
+    },
+  });
+
+  // 注册
+  const registerMutation = useMutation({
+    mutationFn: ({
+      email,
+      password,
+      name,
+      inviteCode,
+    }: {
+      email: string;
+      password: string;
+      name?: string;
+      inviteCode?: string;
+    }) => authApi.register(email, password, name, inviteCode),
+    onSuccess: (data) => {
+      setAccessToken(data.accessToken);
+      queryClient.setQueryData(authKeys.user(), data.user);
+    },
+  });
+
+  // 登出
+  const logoutMutation = useMutation({
+    mutationFn: authApi.logout,
+    onSuccess: () => {
+      setAccessToken(null);
+      queryClient.setQueryData(authKeys.user(), null);
+      queryClient.removeQueries({ queryKey: authKeys.user() });
+    },
+  });
+
+  // 修改密码
+  const changePasswordMutation = useMutation({
+    mutationFn: ({ oldPassword, newPassword }: { oldPassword: string; newPassword: string }) => {
+      if (!accessToken) throw new Error("未登录");
+      return authApi.changePassword(oldPassword, newPassword, accessToken);
+    },
+  });
+
   return {
-    user,
+    // 状态
+    user: user ?? null,
     accessToken,
     isLoading,
+    isError,
     isAuthenticated: !!user,
-    login,
-    register,
-    logout,
-    refreshToken,
-    initAuth,
+
+    // 操作
+    login: loginMutation.mutateAsync,
+    register: registerMutation.mutateAsync,
+    logout: logoutMutation.mutateAsync,
+    changePassword: changePasswordMutation.mutateAsync,
+    refetch,
+
+    // Mutation 状态
+    loginPending: loginMutation.isPending,
+    registerPending: registerMutation.isPending,
+    logoutPending: logoutMutation.isPending,
+    changePasswordPending: changePasswordMutation.isPending,
+
+    // 错误
+    loginError: loginMutation.error,
+    registerError: registerMutation.error,
   };
 }

@@ -14,6 +14,7 @@
  */
 import { useCallback, useRef } from "react";
 import type { SSEEvent } from "@/lib/agent/types";
+import { useTokenStore } from "@/hooks/use-auth";
 
 interface SSEHandlers {
   onThinking: () => void;
@@ -47,6 +48,9 @@ function parseSSEBlock(block: string): SSEEvent | null {
 export function useSSEParser() {
   // 用 ref 存 AbortController，支持取消请求
   const abortRef = useRef<AbortController | null>(null);
+  
+  // 获取 accessToken
+  const getAccessToken = () => useTokenStore.getState().accessToken;
 
   /**
    * 发送请求并解析 SSE 流
@@ -65,9 +69,19 @@ export function useSSEParser() {
       abortRef.current = controller;
 
       try {
+        const accessToken = getAccessToken();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        
+        // 添加认证 header
+        if (accessToken) {
+          headers["Authorization"] = `Bearer ${accessToken}`;
+        }
+
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ question }),
           signal: controller.signal,
         });

@@ -10,7 +10,7 @@ type Mode = "login" | "register";
 
 export function LoginClient() {
   const router = useRouter();
-  const { login, register } = useAuth();
+  const { login, register, loginPending, registerPending } = useAuth();
   
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -18,24 +18,22 @@ export function LoginClient() {
   const [name, setName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+
+  const isLoading = loginPending || registerPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setIsLoading(true);
 
     try {
       if (mode === "login") {
-        await login(email, password);
+        await login({ email, password });
       } else {
-        await register(email, password, name, inviteCode);
+        await register({ email, password, name: name || undefined, inviteCode });
       }
       router.push("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
-    } finally {
-      setIsLoading(false);
     }
   };
 
