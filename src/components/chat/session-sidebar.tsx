@@ -62,16 +62,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     return () => container.removeEventListener("scroll", handleScroll);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  /**
-   * 新聊天 = 进入无会话状态（欢迎页）
-   * 不创建会话，等用户发送消息时才创建
-   */
-  const handleNewChat = () => {
-    setActiveSession(null);
-    onSessionChange?.("");
-    setSidebarOpen(false);
-  };
-
   const handleSelectSession = (sessionId: string) => {
     if (sessionId === activeSessionId) return;
     setActiveSession(sessionId);
@@ -79,6 +69,15 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     setSidebarOpen(false);
     setEditingId(null);
     setDeleteConfirmId(null);
+  };
+
+  /**
+   * 新聊天 = 跳转到 /chat（欢迎页）
+   */
+  const handleNewChat = () => {
+    setActiveSession(null);
+    onSessionChange?.("");
+    setSidebarOpen(false);
   };
 
   const handleDeleteSession = async (sessionId: string) => {
