@@ -2,7 +2,7 @@
  * 会话管理 Hooks (TanStack Query)
  *
  * 职责：会话 CRUD 操作的数据获取和缓存管理
- * - useSessions: 获取会话列表
+ * - useInfiniteSessions: 无限滚动获取会话列表
  * - useSessionMessages: 获取会话消息
  * - useCreateSession: 创建新会话
  * - useDeleteSession: 删除会话
@@ -13,7 +13,12 @@
  */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTokenStore } from "./use-auth";
 
 // ============================================================
@@ -25,6 +30,12 @@ export interface Session {
   title: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SessionsPage {
+  sessions: Session[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export interface SessionMessage {
@@ -51,6 +62,7 @@ export const sessionKeys = {
   all: ["sessions"] as const,
   lists: () => [...sessionKeys.all, "list"] as const,
   list: () => [...sessionKeys.lists()] as const,
+  infinite: () => [...sessionKeys.lists(), "infinite"] as const,
   details: () => [...sessionKeys.all, "detail"] as const,
   detail: (id: string) => [...sessionKeys.details(), id] as const,
   messages: (id: string) => [...sessionKeys.detail(id), "messages"] as const,
@@ -85,9 +97,12 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 }
 
 const sessionApi = {
-  /** 获取会话列表 */
-  async list(): Promise<{ sessions: Session[] }> {
-    return fetchWithAuth("/api/sessions");
+  /** 获取会话列表（分页） */
+  async list(cursor?: string): Promise<SessionsPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    const url = `/api/sessions${params.toString() ? `?${params}` : ""}`;
+    return fetchWithAuth(url);
   },
 
   /** 获取会话详情 */
@@ -119,17 +134,19 @@ const sessionApi = {
 // ============================================================
 
 /**
- * 获取会话列表
+ * 无限滚动获取会话列表
  */
-export function useSessions() {
+export function useInfiniteSessions() {
   const accessToken = useTokenStore((s) => s.accessToken);
 
-  return useQuery({
-    queryKey: sessionKeys.list(),
-    queryFn: sessionApi.list,
+  return useInfiniteQuery({
+    queryKey: sessionKeys.infinite(),
+    queryFn: ({ pageParam }) => sessionApi.list(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
     enabled: !!accessToken,
-    staleTime: 30 * 1000, // 30 秒
-    select: (data) => data.sessions,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -143,7 +160,7 @@ export function useSession(id: string | null) {
     queryKey: sessionKeys.detail(id || ""),
     queryFn: () => sessionApi.get(id!),
     enabled: !!accessToken && !!id,
-    staleTime: 60 * 1000, // 1 分钟
+    staleTime: 60 * 1000,
   });
 }
 
@@ -157,7 +174,7 @@ export function useSessionMessages(sessionId: string | null) {
     queryKey: sessionKeys.messages(sessionId || ""),
     queryFn: () => sessionApi.getMessages(sessionId!),
     enabled: !!accessToken && !!sessionId,
-    staleTime: 0, // 总是重新获取
+    staleTime: 0,
     select: (data) => data.messages,
   });
 }
@@ -171,14 +188,26 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: sessionApi.create,
     onSuccess: (newSession) => {
-      // 乐观更新：把新会话插入列表头部
-      queryClient.setQueryData<{ sessions: Session[] }>(
-        sessionKeys.list(),
-        (old) => {
-          if (!old) return { sessions: [newSession] };
-          return { sessions: [newSession, ...old.sessions] };
+      // 乐观更新：把新会话插入无限列表的第一页头部
+      queryClient.setQueryData<{
+        pages: SessionsPage[];
+        pageParams: (string | undefined)[];
+      }>(sessionKeys.infinite(), (old) => {
+        if (!old) {
+          return {
+            pages: [{ sessions: [newSession], nextCursor: null, hasMore: false }],
+            pageParams: [undefined],
+          };
         }
-      );
+        return {
+          ...old,
+          pages: old.pages.map((page, i) =>
+            i === 0
+              ? { ...page, sessions: [newSession, ...page.sessions] }
+              : page
+          ),
+        };
+      });
     },
   });
 }
@@ -192,16 +221,20 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: sessionApi.delete,
     onSuccess: (_, deletedId) => {
-      // 乐观更新：从列表中移除
-      queryClient.setQueryData<{ sessions: Session[] }>(
-        sessionKeys.list(),
-        (old) => {
-          if (!old) return { sessions: [] };
-          return {
-            sessions: old.sessions.filter((s) => s.id !== deletedId),
-          };
-        }
-      );
+      // 乐观更新：从无限列表中移除
+      queryClient.setQueryData<{
+        pages: SessionsPage[];
+        pageParams: (string | undefined)[];
+      }>(sessionKeys.infinite(), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            sessions: page.sessions.filter((s) => s.id !== deletedId),
+          })),
+        };
+      });
       // 清除该会话的消息缓存
       queryClient.removeQueries({
         queryKey: sessionKeys.messages(deletedId),

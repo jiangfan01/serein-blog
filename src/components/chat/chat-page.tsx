@@ -22,7 +22,7 @@ import { ChatInput } from "./chat-input";
 import { MobileSidebarDrawer, MobileMenuButton } from "./mobile-sidebar-drawer";
 import { useChat } from "@/hooks/use-chat";
 import { useAuth } from "@/hooks/use-auth";
-import { useSessions, useSessionMessages, useCreateSession } from "@/hooks/use-sessions";
+import { useInfiniteSessions, useSessionMessages, useCreateSession } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { toast } from "@/components/ui/toast";
 
@@ -32,9 +32,12 @@ export function ChatPage() {
   const urlSessionId = searchParams.get("session");
 
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const { data: sessions, isLoading: sessionsLoading } = useSessions();
+  const { data: sessionsData, isLoading: sessionsLoading, isFetched } = useInfiniteSessions();
   const createSession = useCreateSession();
   const { activeSessionId, setActiveSession } = useSessionStore();
+
+  // 扁平化所有页的会话
+  const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
 
   const { messages, loading, sendMessage, loadHistory, clearMessages } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -42,7 +45,8 @@ export function ChatPage() {
   // 获取当前会话的历史消息
   const { data: historyMessages } = useSessionMessages(activeSessionId);
 
-  // 初始化标记
+  // 初始化标记 - 用 ref 避免 Strict Mode 重复执行
+  const initRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
 
   /**
@@ -52,13 +56,15 @@ export function ChatPage() {
    * 3. 如果没有会话，创建新会话
    */
   useEffect(() => {
-    if (!isAuthenticated || sessionsLoading || initialized) return;
+    // 防止重复执行
+    if (initRef.current || !isAuthenticated || !isFetched || initialized) return;
+    initRef.current = true;
 
     const initSession = async () => {
       // URL 有 session 参数
       if (urlSessionId) {
         // 验证这个 session 是否存在于列表中
-        const exists = sessions?.some((s) => s.id === urlSessionId);
+        const exists = sessions.some((s) => s.id === urlSessionId);
         if (exists) {
           setActiveSession(urlSessionId);
           setInitialized(true);
@@ -70,7 +76,7 @@ export function ChatPage() {
       }
 
       // 使用列表第一个会话
-      if (sessions && sessions.length > 0) {
+      if (sessions.length > 0) {
         const firstSession = sessions[0];
         setActiveSession(firstSession.id);
         router.replace(`/chat?session=${firstSession.id}`);
@@ -92,7 +98,8 @@ export function ChatPage() {
     };
 
     initSession();
-  }, [isAuthenticated, sessionsLoading, sessions, urlSessionId, initialized, setActiveSession, router, createSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isFetched]);
 
   /**
    * 加载历史消息
@@ -143,7 +150,7 @@ export function ChatPage() {
   }
 
   // 会话加载中
-  if (sessionsLoading || !initialized) {
+  if (!isFetched || !initialized) {
     return <LoadingScreen />;
   }
 

@@ -6,12 +6,17 @@
  * - 精细的边框和阴影
  * - 流畅的微交互动画
  * - 等宽字体点缀，增加技术感
+ * - 无限滚动加载更多
  */
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Plus, Trash2, MessageSquare, Loader2, Sparkles } from "lucide-react";
-import { useSessions, useCreateSession, useDeleteSession } from "@/hooks/use-sessions";
+import {
+  useInfiniteSessions,
+  useCreateSession,
+  useDeleteSession,
+} from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { formatRelativeTime } from "@/lib/utils/format-time";
 import { toast } from "@/components/ui/toast";
@@ -22,13 +27,54 @@ interface SessionSidebarProps {
 }
 
 export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
-  const { data: sessions, isLoading, isError } = useSessions();
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteSessions();
+
   const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
   const { activeSessionId, setActiveSession, setSidebarOpen } = useSessionStore();
 
   // 删除确认状态
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // 滚动容器 ref
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 扁平化所有页的会话
+  const sessions = useMemo(() => {
+    if (!data?.pages) return [];
+    return data.pages.flatMap((page) => page.sessions);
+  }, [data]);
+
+  // 总数（第一页返回的 hasMore 可以推断是否有更多）
+  const totalCount = sessions.length;
+
+  /**
+   * 无限滚动：滚动到底部时加载更多
+   */
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // 距离底部 100px 时触发加载
+      if (scrollHeight - scrollTop - clientHeight < 100) {
+        if (hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   /**
    * 创建新会话
@@ -64,7 +110,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       setDeleteConfirmId(null);
 
       if (sessionId === activeSessionId) {
-        const remaining = sessions?.filter((s) => s.id !== sessionId) || [];
+        const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
           setActiveSession(remaining[0].id);
           onSessionChange?.(remaining[0].id);
@@ -108,9 +154,8 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
           disabled={createSession.isPending}
           className="group relative w-full flex items-center justify-center gap-2 h-10 rounded-lg border border-dashed border-[var(--border-default)] bg-transparent text-[13px] font-medium text-[var(--text-secondary)] transition-all duration-[var(--duration-base)] ease-[var(--ease-soft)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
         >
-          {/* 悬停时的背景动画 */}
           <span className="absolute inset-0 bg-gradient-to-r from-[var(--accent-soft)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          
+
           <span className="relative flex items-center gap-2">
             {createSession.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -123,25 +168,30 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       </div>
 
       {/* 会话列表 */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 flex flex-col">
         {/* 列表标题 */}
-        <div className="px-4 py-3 flex items-center justify-between">
+        <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between">
           <span className="text-[10px] font-mono text-[var(--text-quaternary)] uppercase tracking-widest">
             对话历史
           </span>
-          {sessions && sessions.length > 0 && (
+          {totalCount > 0 && (
             <span className="text-[10px] font-mono text-[var(--text-quaternary)] tabular-nums">
-              {sessions.length}
+              {totalCount}
+              {hasNextPage && "+"}
             </span>
           )}
         </div>
 
-        <div className="px-2 pb-4">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-2 pb-4"
+          data-lenis-prevent
+        >
           {isLoading ? (
             <SessionListSkeleton />
           ) : isError ? (
             <ErrorState />
-          ) : !sessions || sessions.length === 0 ? (
+          ) : sessions.length === 0 ? (
             <EmptyState />
           ) : (
             <div className="space-y-1">
@@ -152,7 +202,9 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
                   title={session.title}
                   updatedAt={session.updatedAt}
                   isActive={session.id === activeSessionId}
-                  isDeleting={deleteSession.isPending && deleteConfirmId === session.id}
+                  isDeleting={
+                    deleteSession.isPending && deleteConfirmId === session.id
+                  }
                   showDeleteConfirm={deleteConfirmId === session.id}
                   index={index}
                   onSelect={() => handleSelectSession(session.id)}
@@ -161,6 +213,13 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
                   onDeleteCancel={() => setDeleteConfirmId(null)}
                 />
               ))}
+
+              {/* 加载更多指示器 */}
+              {isFetchingNextPage && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--text-quaternary)]" />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -214,12 +273,9 @@ function SessionItem({
   // 删除确认状态
   if (showDeleteConfirm) {
     return (
-      <div 
-        className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/5 p-3 animate-in fade-in slide-in-from-left-2 duration-200"
-        style={{ animationDelay: `${index * 30}ms` }}
-      >
+      <div className="rounded-lg bg-[var(--surface-secondary)] p-3 animate-in fade-in slide-in-from-left-2 duration-200">
         <p className="text-[12px] text-[var(--text-secondary)] mb-3">
-          确定删除这个对话吗？此操作不可撤销。
+          确定删除这个对话吗？
         </p>
         <div className="flex gap-2">
           <button
@@ -233,13 +289,13 @@ function SessionItem({
                 <span>删除中</span>
               </>
             ) : (
-              <span>确认删除</span>
+              <span>删除</span>
             )}
           </button>
           <button
             onClick={onDeleteCancel}
             disabled={isDeleting}
-            className="flex-1 h-8 rounded-md text-[12px] font-medium border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--text-strong)] hover:text-[var(--text-strong)] transition-colors"
+            className="flex-1 h-8 rounded-md text-[12px] font-medium bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-strong)] transition-colors"
           >
             取消
           </button>
@@ -248,19 +304,23 @@ function SessionItem({
     );
   }
 
+  // 只对前 10 个做入场动画，避免大量列表卡顿
+  const shouldAnimate = index < 10;
+
   return (
     <div
       onClick={onSelect}
       className={`
         group relative flex items-start gap-3 rounded-lg px-3 py-2.5 cursor-pointer
         transition-all duration-[var(--duration-fast)] ease-[var(--ease-soft)]
-        animate-in fade-in slide-in-from-left-2
-        ${isActive
-          ? "bg-[var(--surface)] shadow-[var(--shadow-soft)] border border-[var(--border-default)]"
-          : "hover:bg-[var(--surface-secondary)] border border-transparent"
+        ${shouldAnimate ? "animate-in fade-in slide-in-from-left-2" : ""}
+        ${
+          isActive
+            ? "bg-[var(--surface)] shadow-[var(--shadow-soft)]"
+            : "hover:bg-[var(--surface-secondary)]"
         }
       `}
-      style={{ animationDelay: `${index * 30}ms` }}
+      style={shouldAnimate ? { animationDelay: `${index * 30}ms` } : undefined}
     >
       {/* 活跃指示器 */}
       {isActive && (
@@ -272,15 +332,18 @@ function SessionItem({
         className={`
           relative w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
           transition-colors duration-[var(--duration-fast)]
-          ${isActive
-            ? "bg-[var(--accent-soft)]"
-            : "bg-[var(--surface-secondary)] group-hover:bg-[var(--surface-tertiary)]"
+          ${
+            isActive
+              ? "bg-[var(--accent-soft)]"
+              : "bg-[var(--surface-secondary)] group-hover:bg-[var(--surface-tertiary)]"
           }
         `}
       >
         <MessageSquare
           className={`w-4 h-4 transition-colors duration-[var(--duration-fast)] ${
-            isActive ? "text-[var(--accent)]" : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"
+            isActive
+              ? "text-[var(--accent)]"
+              : "text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]"
           }`}
           strokeWidth={1.5}
         />
@@ -290,7 +353,9 @@ function SessionItem({
       <div className="flex-1 min-w-0 py-0.5">
         <p
           className={`text-[13px] font-medium truncate leading-tight transition-colors duration-[var(--duration-fast)] ${
-            isActive ? "text-[var(--text-strong)]" : "text-[var(--text-secondary)] group-hover:text-[var(--text-strong)]"
+            isActive
+              ? "text-[var(--text-strong)]"
+              : "text-[var(--text-secondary)] group-hover:text-[var(--text-strong)]"
           }`}
         >
           {displayTitle}
@@ -345,7 +410,10 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <div className="w-14 h-14 rounded-2xl bg-[var(--surface-secondary)] flex items-center justify-center mb-4">
-        <MessageSquare className="w-6 h-6 text-[var(--text-quaternary)]" strokeWidth={1.5} />
+        <MessageSquare
+          className="w-6 h-6 text-[var(--text-quaternary)]"
+          strokeWidth={1.5}
+        />
       </div>
       <p className="text-[13px] font-medium text-[var(--text-secondary)] mb-1">
         暂无对话
