@@ -1,16 +1,16 @@
 /**
  * 会话侧边栏组件
  *
- * 设计原则：Absolute Sharpness + Monospace Hierarchy
- * - 极简终端风格，等宽字体层级
- * - Hash 符号代替聊天气泡（工程笔记语义）
- * - 左侧激活指示线
- * - 行内编辑/删除状态
+ * 参考 ChatGPT 侧边栏设计
+ * - 简洁干净，无多余装饰
+ * - 新聊天按钮置顶
+ * - 会话列表紧凑排列
+ * - hover 显示操作按钮
  */
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Plus, Trash2, Loader2, Check, X, PenLine, Hash } from "lucide-react";
+import { SquarePen, Trash2, Loader2, Check, X, Pencil, MessageSquare } from "lucide-react";
 import {
   useInfiniteSessions,
   useCreateSession,
@@ -18,7 +18,6 @@ import {
   useUpdateSession,
 } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
-import { formatRelativeTime } from "@/lib/utils/format-time";
 import { toast } from "@/components/ui/toast";
 
 interface SessionSidebarProps {
@@ -49,6 +48,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     return data.pages.flatMap((page) => page.sessions);
   }, [data]);
 
+  // 无限滚动
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -71,7 +71,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       onSessionChange?.(newSession.id);
       setSidebarOpen(false);
     } catch {
-      toast.error("创建会话失败");
+      toast.error("创建失败");
     }
   };
 
@@ -80,7 +80,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
     setActiveSession(sessionId);
     onSessionChange?.(sessionId);
     setSidebarOpen(false);
-    // 切换会话时，重置所有状态
     setEditingId(null);
     setDeleteConfirmId(null);
   };
@@ -116,53 +115,42 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[var(--surface-secondary)] border-r border-[var(--border-subtle)] font-sans selection:bg-[var(--text-strong)] selection:text-[var(--app-bg)]">
-      
-      {/* 极简头部 & 新建按钮 */}
-      <div className="flex-shrink-0 p-4 border-b border-[var(--border-subtle)]">
+    <div className="h-full flex flex-col bg-[var(--surface-secondary)]">
+      {/* 新聊天按钮 */}
+      <div className="flex-shrink-0 p-2">
         <button
           onClick={handleCreateSession}
           disabled={createSession.isPending}
-          className="group w-full flex items-center justify-between h-10 px-4 rounded-md bg-[var(--surface)] border border-[var(--border-default)] hover:border-[var(--text-strong)] transition-colors disabled:opacity-50 shadow-sm hover:shadow-none"
+          className="w-full flex items-center gap-2 h-10 px-3 rounded-lg hover:bg-[var(--surface)] transition-colors disabled:opacity-50"
         >
-          <span className="text-[12px] font-semibold text-[var(--text-secondary)] group-hover:text-[var(--text-strong)] tracking-wide uppercase">
-            New Thread
-          </span>
           {createSession.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-tertiary)]" />
+            <Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" />
           ) : (
-            <Plus className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--text-strong)] transition-colors" />
+            <SquarePen className="w-5 h-5 text-[var(--text-secondary)]" strokeWidth={1.5} />
           )}
+          <span className="text-[14px] text-[var(--text-secondary)]">新聊天</span>
         </button>
       </div>
 
-      {/* 列表标签 (仿终端风格) */}
-      <div className="px-5 py-3 flex items-center gap-2">
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-quaternary)]" />
-        <span className="text-[10px] font-mono text-[var(--text-tertiary)] uppercase tracking-[0.2em]">
-          Session History
-        </span>
-      </div>
-
-      {/* 列表滚动区 */}
+      {/* 会话列表 */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-2 pb-4"
+        className="flex-1 overflow-y-auto px-2 pb-2"
         data-lenis-prevent
       >
         {isLoading ? (
-          <div className="space-y-1">
+          <div className="space-y-1 px-1">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 rounded-md bg-[var(--surface)] animate-pulse mx-2" />
+              <div key={i} className="h-10 rounded-lg bg-[var(--surface)] animate-pulse" />
             ))}
           </div>
         ) : isError ? (
-          <div className="py-10 text-center font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
-            Failed to load
+          <div className="py-8 text-center text-[13px] text-[var(--text-tertiary)]">
+            加载失败
           </div>
         ) : sessions.length === 0 ? (
-          <div className="py-10 text-center font-mono text-[11px] text-[var(--text-tertiary)] uppercase">
-            No history found
+          <div className="py-8 text-center text-[13px] text-[var(--text-tertiary)]">
+            暂无聊天记录
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -171,7 +159,6 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
                 key={session.id}
                 id={session.id}
                 title={session.title}
-                updatedAt={session.updatedAt}
                 isActive={session.id === activeSessionId}
                 isDeleting={deleteSession.isPending && deleteConfirmId === session.id}
                 isUpdating={updateSession.isPending && editingId === session.id}
@@ -187,8 +174,8 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
               />
             ))}
             {isFetchingNextPage && (
-              <div className="py-4 flex justify-center">
-                <Loader2 className="w-4 h-4 animate-spin text-[var(--text-quaternary)]" />
+              <div className="py-3 flex justify-center">
+                <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
               </div>
             )}
           </div>
@@ -199,13 +186,12 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 }
 
 // ==========================================
-// Session Item 组件
+// Session Item
 // ==========================================
 
 interface SessionItemProps {
   id: string;
   title: string | null;
-  updatedAt: string;
   isActive: boolean;
   isDeleting: boolean;
   isUpdating: boolean;
@@ -222,7 +208,6 @@ interface SessionItemProps {
 
 function SessionItem({
   title,
-  updatedAt,
   isActive,
   isDeleting,
   isUpdating,
@@ -236,7 +221,7 @@ function SessionItem({
   onEditConfirm,
   onEditCancel,
 }: SessionItemProps) {
-  const displayTitle = title || "Untitled Session";
+  const displayTitle = title || "新对话";
   const [editValue, setEditValue] = useState(displayTitle);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -260,116 +245,95 @@ function SessionItem({
     }
   };
 
-  // --- 状态 1: 确认删除 ---
+  // 删除确认
   if (showDeleteConfirm) {
     return (
-      <div className="flex flex-col gap-2 p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mx-1 my-1">
-        <p className="text-[11px] font-mono text-red-600 dark:text-red-400 uppercase tracking-wide">
-          Confirm Deletion?
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={onDeleteConfirm}
-            disabled={isDeleting}
-            className="flex-1 h-7 rounded bg-red-600 text-white text-[11px] font-semibold tracking-wide hover:bg-red-700 transition-colors disabled:opacity-50"
-          >
-            {isDeleting ? "..." : "YES"}
-          </button>
-          <button
-            onClick={onDeleteCancel}
-            className="flex-1 h-7 rounded bg-[var(--surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-[11px] font-semibold tracking-wide hover:bg-[var(--surface-secondary)] transition-colors"
-          >
-            NO
-          </button>
-        </div>
+      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)]">
+        <span className="flex-1 text-[13px] text-[var(--text-secondary)] truncate">删除此对话？</span>
+        <button
+          onClick={onDeleteConfirm}
+          disabled={isDeleting}
+          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors disabled:opacity-50"
+        >
+          {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={onDeleteCancel}
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     );
   }
 
-  // --- 状态 2: 编辑模式 ---
+  // 编辑模式
   if (isEditing) {
     return (
-      <div className="flex flex-col gap-2 p-3 rounded-md bg-[var(--surface)] border border-[var(--text-strong)] shadow-sm mx-1 my-1">
+      <div className="flex items-center gap-1 h-10 px-3 rounded-lg bg-[var(--surface)]">
         <input
           ref={inputRef}
           type="text"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full text-[13px] font-medium text-[var(--text-strong)] bg-transparent border-b border-[var(--border-default)] pb-1 outline-none focus:border-[var(--text-strong)] transition-colors"
-          maxLength={60}
-          placeholder="Session name..."
+          className="flex-1 min-w-0 text-[13px] text-[var(--text-strong)] bg-transparent outline-none"
+          maxLength={50}
         />
-        <div className="flex justify-end gap-1 mt-1">
-          <button
-            onClick={onEditCancel}
-            className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => editValue.trim() && onEditConfirm(editValue.trim())}
-            disabled={isUpdating || !editValue.trim()}
-            className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-strong)] transition-colors disabled:opacity-50"
-          >
-            {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-          </button>
-        </div>
+        <button
+          onClick={() => editValue.trim() && onEditConfirm(editValue.trim())}
+          disabled={isUpdating || !editValue.trim()}
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-strong)] transition-colors disabled:opacity-50"
+        >
+          {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={onEditCancel}
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     );
   }
 
-  // --- 状态 3: 默认展示模式 ---
+  // 默认状态
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex items-start gap-3 p-3 mx-1 my-0.5 rounded-md cursor-pointer transition-all duration-200 ${
+      className={`group relative flex items-center gap-2 h-10 px-3 rounded-lg cursor-pointer transition-colors ${
         isActive
-          ? "bg-[var(--surface)] shadow-[0_2px_10px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.2)]"
+          ? "bg-[var(--surface)]"
           : "hover:bg-[var(--surface)]"
       }`}
     >
-      {/* 极简左侧激活线 */}
-      {isActive && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-3/5 bg-[var(--text-strong)] rounded-r-full" />
-      )}
-
-      {/* 采用 Hash (#) 符号代替气泡，更符合工程笔记/终端语义 */}
-      <Hash
-        className={`w-4 h-4 flex-shrink-0 mt-[2px] transition-colors ${
-          isActive ? "text-[var(--text-strong)]" : "text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)]"
-        }`}
-        strokeWidth={2}
+      <MessageSquare 
+        className="w-4 h-4 flex-shrink-0 text-[var(--text-tertiary)]" 
+        strokeWidth={1.5} 
       />
+      <span className={`flex-1 text-[13px] truncate ${
+        isActive ? "text-[var(--text-strong)]" : "text-[var(--text-secondary)]"
+      }`}>
+        {displayTitle}
+      </span>
       
-      <div className="flex-1 min-w-0 pr-8">
-        <p className={`text-[13px] leading-snug truncate transition-colors ${
-          isActive ? "text-[var(--text-strong)] font-semibold" : "text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-strong)]"
-        }`}>
-          {displayTitle}
-        </p>
-        <p className="font-mono text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">
-          {formatRelativeTime(updatedAt)}
-        </p>
-      </div>
-
-      {/* 悬浮操作按钮组 (绝对定位以防文字挤压) */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* hover 操作按钮 */}
+      <div className={`flex items-center gap-0.5 ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onEditClick();
           }}
-          className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-strong)] hover:bg-[var(--surface-secondary)] transition-all"
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
         >
-          <PenLine className="w-3.5 h-3.5" />
+          <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDeleteClick();
           }}
-          className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
+          className="p-1.5 rounded hover:bg-[var(--surface-secondary)] text-[var(--text-tertiary)] hover:text-red-500 transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
