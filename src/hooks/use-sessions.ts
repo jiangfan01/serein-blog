@@ -28,8 +28,8 @@ import { useTokenStore } from "./use-auth";
 export interface Session {
   id: string;
   title: string | null;
-  createdAt: string;
   updatedAt: string;
+  replyStatus: "idle" | "running" | "completed" | "failed" | "cancelled";
 }
 
 export interface SessionsPage {

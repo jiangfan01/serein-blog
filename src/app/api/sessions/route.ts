@@ -40,6 +40,11 @@ export async function GET(req: NextRequest) {
         id: true,
         title: true,
         updatedAt: true,
+        executions: {
+          select: { status: true },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: {
         updatedAt: "desc",
@@ -57,7 +62,12 @@ export async function GET(req: NextRequest) {
     const nextCursor = hasMore ? items[items.length - 1]?.id : null;
 
     return Response.json({
-      sessions: items,
+      sessions: items.map((s) => ({
+        id: s.id,
+        title: s.title,
+        updatedAt: s.updatedAt,
+        replyStatus: s.executions[0]?.status ?? "idle",
+      })),
       nextCursor,
       hasMore,
     });

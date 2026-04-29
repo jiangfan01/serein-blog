@@ -154,6 +154,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
                 key={session.id}
                 id={session.id}
                 title={session.title}
+                replyStatus={session.replyStatus}
                 isActive={session.id === activeSessionId}
                 isDeleting={deleteSession.isPending && deleteConfirmId === session.id}
                 isUpdating={updateSession.isPending && editingId === session.id}
@@ -187,6 +188,7 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
 interface SessionItemProps {
   id: string;
   title: string | null;
+  replyStatus: string;
   isActive: boolean;
   isDeleting: boolean;
   isUpdating: boolean;
@@ -203,6 +205,7 @@ interface SessionItemProps {
 
 function SessionItem({
   title,
+  replyStatus,
   isActive,
   isDeleting,
   isUpdating,
@@ -293,6 +296,8 @@ function SessionItem({
   }
 
   // 默认状态
+  const isRunning = replyStatus === "running";
+
   return (
     <div
       onClick={onSelect}
@@ -302,10 +307,17 @@ function SessionItem({
           : "hover:bg-[var(--surface)]"
       }`}
     >
-      <MessageSquare 
-        className="w-4 h-4 flex-shrink-0 text-[var(--text-tertiary)]" 
-        strokeWidth={1.5} 
-      />
+      {/* 图标：running 时显示动画，否则显示 MessageSquare */}
+      {isRunning ? (
+        <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+          <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+        </span>
+      ) : (
+        <MessageSquare 
+          className="w-4 h-4 flex-shrink-0 text-[var(--text-tertiary)]" 
+          strokeWidth={1.5} 
+        />
+      )}
       <span className={`flex-1 text-[13px] truncate ${
         isActive ? "text-[var(--text-strong)]" : "text-[var(--text-secondary)]"
       }`}>
