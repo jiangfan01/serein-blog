@@ -9,7 +9,7 @@
  * - 左侧会话列表侧边栏
  * - 会话切换、新建、删除
  * - URL query parameter 同步 (?session=xxx)
- * - 首次访问自动创建会话
+ * - 发送首条消息时自动创建会话（懒创建）
  */
 "use client";
 
@@ -32,13 +32,14 @@ export function ChatPage() {
   const urlSessionId = searchParams.get("session");
 
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const { data: sessionsData, isLoading: sessionsLoading, isFetched } = useInfiniteSessions();
+  const { data: sessionsData, isFetched } = useInfiniteSessions();
   const createSession = useCreateSession();
   const optimisticUpdateTitle = useOptimisticUpdateTitle();
   const { activeSessionId, setActiveSession } = useSessionStore();
 
   // 扁平化所有页的会话
   const sessions = sessionsData?.pages.flatMap((page) => page.sessions) ?? [];
+  const hasNoSessions = isFetched && sessions.length === 0;
 
   const { messages, loading, sendMessage, loadHistory, clearMessages } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -54,51 +55,39 @@ export function ChatPage() {
    * 初始化会话
    * 1. 如果 URL 有 session 参数，使用它
    * 2. 如果没有，使用会话列表的第一个
-   * 3. 如果没有会话，创建新会话
+   * 3. 如果没有会话，不创建，等用户发送消息时再创建
    */
   useEffect(() => {
     // 防止重复执行
     if (initRef.current || !isAuthenticated || !isFetched || initialized) return;
     initRef.current = true;
 
-    const initSession = async () => {
-      // URL 有 session 参数
-      if (urlSessionId) {
-        // 验证这个 session 是否存在于列表中
-        const exists = sessions.some((s) => s.id === urlSessionId);
-        if (exists) {
-          setActiveSession(urlSessionId);
-          setInitialized(true);
-          return;
-        } else {
-          // 会话不存在，提示用户
-          toast.error("会话不存在或已被删除");
-        }
-      }
-
-      // 使用列表第一个会话
-      if (sessions.length > 0) {
-        const firstSession = sessions[0];
-        setActiveSession(firstSession.id);
-        router.replace(`/chat?session=${firstSession.id}`);
+    // URL 有 session 参数
+    if (urlSessionId) {
+      // 验证这个 session 是否存在于列表中
+      const exists = sessions.some((s) => s.id === urlSessionId);
+      if (exists) {
+        setActiveSession(urlSessionId);
         setInitialized(true);
         return;
+      } else {
+        // 会话不存在，清除 URL 参数
+        router.replace("/chat");
       }
+    }
 
-      // 没有会话，创建新会话
-      try {
-        const newSession = await createSession.mutateAsync();
-        setActiveSession(newSession.id);
-        router.replace(`/chat?session=${newSession.id}`);
-        setInitialized(true);
-      } catch (error) {
-        console.error("创建会话失败:", error);
-        toast.error("创建会话失败，请刷新页面重试");
-        setInitialized(true);
-      }
-    };
+    // 使用列表第一个会话
+    if (sessions.length > 0) {
+      const firstSession = sessions[0];
+      setActiveSession(firstSession.id);
+      router.replace(`/chat?session=${firstSession.id}`);
+      setInitialized(true);
+      return;
+    }
 
-    initSession();
+    // 没有会话，不创建，显示欢迎页
+    setActiveSession(null);
+    setInitialized(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isFetched]);
 
@@ -117,29 +106,53 @@ export function ChatPage() {
   const handleSessionChange = useCallback(
     (sessionId: string) => {
       clearMessages();
-      router.push(`/chat?session=${sessionId}`);
+      if (sessionId) {
+        router.push(`/chat?session=${sessionId}`);
+      } else {
+        // 没有会话了，清除 URL 参数
+        router.replace("/chat");
+      }
     },
     [clearMessages, router]
   );
 
   /**
-   * 发送消息（包装 sessionId）
+   * 发送消息
+   * 如果没有会话，先创建会话再发送
    * 如果当前会话没有标题，乐观更新侧边栏
    */
   const handleSendMessage = useCallback(
-    (question: string) => {
-      if (!activeSessionId) return;
+    async (question: string) => {
+      let sessionId = activeSessionId;
 
-      // 检查当前会话是否有标题，没有则乐观更新
-      const currentSession = sessions.find((s) => s.id === activeSessionId);
-      if (currentSession && !currentSession.title) {
-        const newTitle = question.trim().slice(0, 50) + (question.trim().length > 50 ? "..." : "");
-        optimisticUpdateTitle(activeSessionId, newTitle);
+      // 没有会话，先创建
+      if (!sessionId) {
+        try {
+          const newSession = await createSession.mutateAsync();
+          sessionId = newSession.id;
+          setActiveSession(sessionId);
+          router.replace(`/chat?session=${sessionId}`);
+          
+          // 新会话，乐观更新标题
+          const newTitle = question.trim().slice(0, 50) + (question.trim().length > 50 ? "..." : "");
+          optimisticUpdateTitle(sessionId, newTitle);
+        } catch (error) {
+          console.error("创建会话失败:", error);
+          toast.error("创建会话失败");
+          return;
+        }
+      } else {
+        // 检查当前会话是否有标题，没有则乐观更新
+        const currentSession = sessions.find((s) => s.id === sessionId);
+        if (currentSession && !currentSession.title) {
+          const newTitle = question.trim().slice(0, 50) + (question.trim().length > 50 ? "..." : "");
+          optimisticUpdateTitle(sessionId, newTitle);
+        }
       }
 
-      sendMessage(question, activeSessionId);
+      sendMessage(question, sessionId);
     },
-    [activeSessionId, sessions, optimisticUpdateTitle, sendMessage]
+    [activeSessionId, sessions, createSession, setActiveSession, router, optimisticUpdateTitle, sendMessage]
   );
 
   // 滚动到底部
@@ -225,7 +238,7 @@ export function ChatPage() {
         {/* 底部输入区 */}
         <div className="flex-shrink-0 border-t border-[var(--border-subtle)]">
           <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-4">
-            <ChatInput onSend={handleSendMessage} disabled={loading || !activeSessionId} autoFocus />
+            <ChatInput onSend={handleSendMessage} disabled={loading || createSession.isPending} autoFocus />
             <div className="flex items-center justify-center gap-2 mt-3 text-[11px] font-medium text-[var(--text-tertiary)] tracking-wide uppercase">
               <span>知识库检索</span>
               <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />

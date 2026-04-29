@@ -87,10 +87,13 @@ export function SessionSidebar({ onSessionChange }: SessionSidebarProps) {
       if (sessionId === activeSessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
+          // 切换到第一个剩余会话
           setActiveSession(remaining[0].id);
           onSessionChange?.(remaining[0].id);
         } else {
-          handleCreateSession();
+          // 没有剩余会话，清空 activeSession
+          setActiveSession(null);
+          onSessionChange?.("");
         }
       }
       toast.success("已删除");
