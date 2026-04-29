@@ -93,12 +93,16 @@ export function ChatPage() {
 
   /**
    * 加载历史消息
+   * 注意：如果正在流式输出，不要覆盖当前消息
    */
   useEffect(() => {
+    // 如果正在流式输出，不加载历史（避免覆盖正在生成的消息）
+    if (loading) return;
+    
     if (historyMessages) {
       loadHistory(historyMessages);
     }
-  }, [historyMessages, loadHistory]);
+  }, [historyMessages, loading, loadHistory]);
 
   /**
    * 会话切换处理
