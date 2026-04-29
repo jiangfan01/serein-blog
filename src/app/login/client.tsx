@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Loader2, Ticket } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 type Mode = "login" | "register";
@@ -16,6 +16,7 @@ export function LoginClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -28,7 +29,7 @@ export function LoginClient() {
       if (mode === "login") {
         await login(email, password);
       } else {
-        await register(email, password, name);
+        await register(email, password, name, inviteCode);
       }
       router.push("/chat");
     } catch (err) {
@@ -54,23 +55,37 @@ export function LoginClient() {
           <p className="mt-2 text-sm text-[var(--text-tertiary)]">
             {mode === "login"
               ? "登录以使用 AI 助手功能"
-              : "注册一个新账号开始使用"}
+              : "需要邀请码才能注册"}
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "register" && (
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-quaternary)]" />
-              <input
-                type="text"
-                placeholder="昵称（可选）"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full h-12 pl-11 pr-4 bg-[var(--surface)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
-              />
-            </div>
+            <>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-quaternary)]" />
+                <input
+                  type="text"
+                  placeholder="昵称（可选）"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full h-12 pl-11 pr-4 bg-[var(--surface)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+                />
+              </div>
+
+              <div className="relative">
+                <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-quaternary)]" />
+                <input
+                  type="text"
+                  placeholder="邀请码"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  required
+                  className="w-full h-12 pl-11 pr-4 bg-[var(--surface)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:outline-none focus:border-[var(--accent)] transition-colors font-mono tracking-wider"
+                />
+              </div>
+            </>
           )}
 
           <div className="relative">

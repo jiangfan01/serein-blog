@@ -58,6 +58,14 @@ model User {
   emailVerified Boolean   @default(false)
   enabled       Boolean   @default(true)
   
+  /// 聊天权限
+  canUseChat    Boolean   @default(false) /// 是否能使用聊天功能
+  dailyLimit    Int       @default(50)    /// 每日调用次数限制
+  
+  /// 邀请码关联
+  inviteCodeId  String?   @unique
+  inviteCode    InviteCode? @relation(fields: [inviteCodeId], references: [id])
+  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lastLoginAt   DateTime?
@@ -67,6 +75,30 @@ model User {
   refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+/// 邀请码表
+model InviteCode {
+  id          String    @id @default(cuid())
+  code        String    @unique /// 邀请码
+  
+  /// 创建信息
+  note        String?   /// 备注（给谁用的）
+  
+  /// 使用限制
+  maxUses     Int       @default(1)  /// 最大使用次数
+  usedCount   Int       @default(0)  /// 已使用次数
+  expiresAt   DateTime? /// 过期时间（null = 永不过期）
+  
+  /// 状态
+  enabled     Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  
+  /// 关联
+  usedBy      User?     /// 使用该邀请码的用户
+
+  @@map("invite_codes")
 }
 
 /// Refresh Token 表（用于 JWT 刷新）

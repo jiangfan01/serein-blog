@@ -64,11 +64,11 @@ export const authApi = {
     return res.json();
   },
   
-  async register(email: string, password: string, name?: string) {
+  async register(email: string, password: string, name?: string, inviteCode?: string) {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, inviteCode }),
     });
     
     if (!res.ok) {
@@ -118,8 +118,8 @@ export function useAuth() {
     return data;
   };
   
-  const register = async (email: string, password: string, name?: string) => {
-    const data = await authApi.register(email, password, name);
+  const register = async (email: string, password: string, name?: string, inviteCode?: string) => {
+    const data = await authApi.register(email, password, name, inviteCode);
     setAuth(data.user, data.accessToken);
     return data;
   };
