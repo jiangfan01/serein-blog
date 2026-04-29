@@ -284,7 +284,7 @@ function LoginRequiredScreen() {
           <div className="flex flex-col gap-3">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center h-11 px-6 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-[14px] font-medium hover:opacity-90 transition-opacity"
+              className="inline-flex items-center justify-center h-11 px-6 rounded-lg bg-neutral-900 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900 text-[14px] font-medium hover:opacity-90 transition-opacity"
             >
               登录 / 注册
             </Link>
