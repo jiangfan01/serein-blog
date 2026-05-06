@@ -1,8 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { StaggeredMenu } from "@/components/navigation/staggered-menu";
 import { SiteFooter } from "@/components/site/site-footer";
+import { RouteProgress } from "./route-progress";
 
 const menuItems = [
   { label: '首页', ariaLabel: '返回首页', link: '/' },
@@ -25,16 +27,33 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
 
   // Notes 页面使用 Nextra 自己的布局，不需要我们的导航和 Footer
   if (isNotesPage) {
-    return <>{children}</>;
+    return (
+      <>
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
+        {children}
+      </>
+    );
   }
 
   // Chat 页面使用独立的全屏布局
   if (isChatPage) {
-    return <>{children}</>;
+    return (
+      <>
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
+        {children}
+      </>
+    );
   }
 
   return (
     <>
+      <Suspense fallback={null}>
+        <RouteProgress />
+      </Suspense>
       <StaggeredMenu
         position="right"
         items={menuItems}

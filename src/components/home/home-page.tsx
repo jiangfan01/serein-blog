@@ -17,26 +17,26 @@ import { EditorialButton } from "@/components/home/editorial-button";
 const focusAreas = [
   {
     id: "01",
-    title: "Agent 编排",
-    description: "ReAct 循环、工具调用、SSE 状态流、多轮观察与最终回答。",
+    title: "Agent 折腾记录",
+    description: "ReAct、工具调用、SSE 状态流，还有一些模型偶尔不听话的现场。",
     href: "/notes/agent",
   },
   {
     id: "02",
-    title: "前端架构",
-    description: "组件边界、状态分层、渲染性能、复杂交互的工程化落地。",
+    title: "前端日常修行",
+    description: "组件怎么拆、状态放哪、页面卡了先怪谁，都会慢慢记下来。",
     href: "/notes/react",
   },
   {
     id: "03",
-    title: "实时体验",
-    description: "ReadableStream、打字机、消息合并、长文本 Markdown 渲染。",
+    title: "流式体验小剧场",
+    description: "ReadableStream、打字机、消息合并，以及长文本 Markdown 的耐心测试。",
     href: "/notes/interview/long-text-rendering",
   },
   {
     id: "04",
-    title: "全栈实践",
-    description: "Next.js、Prisma、数据库、部署、工具型产品的完整闭环。",
+    title: "全栈踩坑备忘",
+    description: "Next.js、Prisma、数据库、部署，能跑起来只是第一集。",
     href: "/projects",
   },
 ];
@@ -44,22 +44,22 @@ const focusAreas = [
 const noteTracks = [
   {
     title: "React / 渲染机制",
-    meta: "Fiber、Hooks、状态管理、渲染优化",
+    meta: "Fiber、Hooks、状态管理、渲染优化，偶尔和 rerender 和解",
     href: "/notes/react",
   },
   {
     title: "AI 应用开发",
-    meta: "Agent、RAG、Workflow、工具调用",
+    meta: "Agent、RAG、Workflow、工具调用，先让它别胡说八道",
     href: "/notes/agent",
   },
   {
     title: "面试与系统设计",
-    meta: "SSE 架构、长文本、数据表格、工程复盘",
+    meta: "SSE 架构、长文本、数据表格、工程复盘和临场补课",
     href: "/notes/interview",
   },
   {
     title: "Web 基础",
-    meta: "HTTP、缓存、浏览器、Node.js、算法",
+    meta: "HTTP、缓存、浏览器、Node.js、算法，基础不牢就多翻两遍",
     href: "/notes/web",
   },
 ];
@@ -70,7 +70,7 @@ const projects = [
     type: "AI 工作平台",
     title: "多会话流式对话与工作流画布",
     description:
-      "重构 SSE 架构，负责多会话状态、工作流画布、多维表格和富文本编辑等核心模块。",
+      "重构 SSE 架构，和多会话状态、工作流画布、多维表格、富文本编辑一起长期相处。",
     href: "https://100.city/cityChat",
     tags: ["React", "SSE", "React Flow", "Zustand"],
   },
@@ -79,7 +79,7 @@ const projects = [
     type: "全栈平台",
     title: "贴牌代理站与多库数据隔离",
     description:
-      "参与 0 到 1 建设，完成主站与子站双模式运行、后台配置和多实例数据隔离。",
+      "参与 0 到 1 建设，把主站、子站、后台配置和多实例数据隔离都拉到一张桌上。",
     tags: ["React", "Golang", "Gin", "MySQL"],
   },
   {
@@ -87,7 +87,7 @@ const projects = [
     type: "AI 工作流",
     title: "从文案到多媒体的生成链路",
     description:
-      "基于 React Flow 编排多模型能力，串联对话、图片、视频和数字人能力。",
+      "基于 React Flow 串起对话、图片、视频和数字人能力，目标是少点玄学，多点可控。",
     tags: ["Next.js", "Prisma", "PostgreSQL", "AI"],
   },
 ];
@@ -172,18 +172,18 @@ function HeroSection() {
       <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-1.5 shadow-[var(--shadow-soft)]">
         <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
         <span className="text-[11px] font-medium uppercase tracking-normal text-[var(--text-secondary)]">
-          Serein AI Engineering Notebook
+          Serein 的个人技术小站
         </span>
       </div>
 
       <h1 className="text-balance max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-[var(--text-strong)] sm:text-5xl lg:text-6xl">
-        把 AI 开发的混乱，
+        写点代码，记点坑，
         <br />
-        整理成<span className="text-[var(--accent)]">可复用</span>的工程笔记。
+        顺手把<span className="text-[var(--accent)]">思路</span>晾一晾。
       </h1>
 
       <p className="mt-8 max-w-2xl text-base leading-8 text-[var(--text-secondary)] sm:text-lg">
-        这里记录 Agent、RAG、SSE、前端架构和全栈产品实践。不是资料仓库，而是一套持续进化的个人工程工作台。
+        这里主要放 Agent、RAG、SSE、前端架构和全栈项目里的碎碎念。严肃的时候讲工程，松弛的时候承认自己也会被一个小 bug 卡半天。
       </p>
 
       <div className="mt-10 flex w-full flex-col items-center justify-center gap-3 sm:w-auto sm:flex-row">
@@ -194,7 +194,7 @@ function HeroSection() {
           tone="accent"
           className="w-full sm:w-auto"
         >
-          阅读笔记
+          翻翻笔记
         </EditorialButton>
         <EditorialButton
           href="/chat"
@@ -202,7 +202,7 @@ function HeroSection() {
           fillDirection="bottom"
           className="w-full sm:w-auto"
         >
-          打开 Serein AI
+          找 AI 聊聊
         </EditorialButton>
       </div>
 
@@ -213,7 +213,7 @@ function HeroSection() {
 function FocusSection() {
   return (
     <section className="home-scroll-reveal" data-home-reveal>
-      <SectionHeader title="当前关注" subtitle="围绕真实产品问题沉淀方法" />
+      <SectionHeader title="最近在看" subtitle="不一定高深，但基本都是真问题" />
 
       <div className="mt-12 border-y border-[var(--border-subtle)]">
         {focusAreas.map((item, index) => (
@@ -236,7 +236,7 @@ function FocusSection() {
               </span>
             </span>
             <span className="inline-flex items-center gap-2 text-sm font-medium text-[var(--text-tertiary)] transition-colors duration-300 group-hover:text-[var(--accent)] md:justify-end">
-              查看路径
+              去看看
               <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
             </span>
           </Link>
@@ -249,7 +249,7 @@ function FocusSection() {
 function NotesSection() {
   return (
     <section className="home-scroll-reveal" data-home-reveal>
-      <SectionHeader title="笔记索引" subtitle="以主题聚合的工程知识图谱" />
+      <SectionHeader title="笔记入口" subtitle="按主题放好，方便以后回来救自己" />
 
       <div className="mt-12 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">
         {noteTracks.map((track, index) => (
@@ -283,8 +283,8 @@ function ProjectsSection() {
   return (
     <section className="home-scroll-reveal" data-home-reveal>
       <SectionHeader
-        title="项目复盘"
-        subtitle="项目不是作品展示，而是系统能力的证据"
+        title="做过什么"
+        subtitle="不是精装修展厅，更像一些工作现场回放"
       />
 
       <div className="mt-12 space-y-14">
@@ -328,7 +328,7 @@ function ProjectsSection() {
                     size="compact"
                     className="ml-auto"
                   >
-                    查看案例
+                    看现场
                   </EditorialButton>
                 )}
               </div>
@@ -343,7 +343,7 @@ function ProjectsSection() {
 function StackSection() {
   return (
     <section className="home-scroll-reveal" data-home-reveal>
-      <SectionHeader title="技术栈" subtitle="工具选型服务于交付速度与长期维护" />
+      <SectionHeader title="常用工具" subtitle="顺手最重要，能少加班更重要" />
 
       <div className="mt-12 grid gap-5 sm:grid-cols-3">
         {stackGroups.map((group, index) => {
@@ -392,7 +392,7 @@ function ClosingSection() {
       data-home-reveal
     >
       <h2 className="mx-auto max-w-3xl text-3xl font-semibold leading-tight text-[var(--text-strong)] sm:text-4xl">
-        下一步会把 AI Chat、笔记系统和项目复盘收敛成一套完整的工作台体验。
+        接下来继续把 AI Chat、笔记和项目复盘缝到一起，争取让这个小站越来越像我自己的工作台。
       </h2>
       <EditorialButton
         href="/about"
@@ -400,7 +400,7 @@ function ClosingSection() {
         fillDirection="top"
         className="mt-8"
       >
-        关于我
+        看看本人
       </EditorialButton>
     </section>
   );
