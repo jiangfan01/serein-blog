@@ -22,10 +22,13 @@ const socialItems = [
 
 export function RootLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  
+  // 判断特殊页面
   const isNotesPage = pathname?.startsWith('/notes');
   const isChatPage = pathname?.startsWith('/chat');
+  const isLoginPage = pathname?.startsWith('/login');
 
-  // Notes 页面使用 Nextra 自己的布局，不需要我们的导航和 Footer
+  // Notes 页面使用 Nextra 自己的布局
   if (isNotesPage) {
     return (
       <>
@@ -37,8 +40,8 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Chat 页面使用独立的全屏布局
-  if (isChatPage) {
+  // Chat 和 Login 页面使用独立布局（无导航和 Footer）
+  if (isChatPage || isLoginPage) {
     return (
       <>
         <Suspense fallback={null}>
@@ -49,6 +52,7 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // 普通页面：导航 + 内容 + Footer
   return (
     <>
       <Suspense fallback={null}>
@@ -68,7 +72,7 @@ export function RootLayoutClient({ children }: { children: React.ReactNode }) {
         isFixed={true}
         closeOnClickAway={true}
       />
-      <div className="relative flex min-h-screen flex-col">
+      <div key={pathname} className="relative flex min-h-screen flex-col">
         <main className="flex-1">{children}</main>
         <SiteFooter />
       </div>
