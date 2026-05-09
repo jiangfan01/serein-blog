@@ -8,6 +8,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   User,
   LogOut,
@@ -22,7 +23,6 @@ import {
   Baby,
   Scale,
   Target,
-  Terminal,
 } from "lucide-react";
 import { useUserPreferences, useUpdatePreferences } from "@/hooks/use-user-preferences";
 import { useAuth } from "@/hooks/use-auth";
@@ -57,8 +57,21 @@ const styleIcons: Record<string, React.ElementType> = {
   beginner: Baby,
   critical: Scale,
   actionable: Target,
-  coding: Terminal,
+  // doubao 使用自定义 SVG，在渲染时特殊处理
 };
+
+// 豆包图标组件
+function DoubaoIcon({ className }: { className?: string }) {
+  return (
+    <Image
+      src="/svg/doubao.svg"
+      alt="傻豆包"
+      width={16}
+      height={16}
+      className={className}
+    />
+  );
+}
 
 export function UserMenu() {
   const [isStyleDialogOpen, setIsStyleDialogOpen] = useState(false);
@@ -151,6 +164,7 @@ export function UserMenu() {
             {styleOptions.map((style) => {
               const isSelected = currentStyleKey === style.key;
               const Icon = styleIcons[style.key] || Sparkles;
+              const isDoubao = style.key === "doubao";
 
               return (
                 <button
@@ -179,7 +193,11 @@ export function UserMenu() {
                     }
                   `}
                   >
-                    <Icon className="w-4 h-4" />
+                    {isDoubao ? (
+                      <DoubaoIcon className="w-4 h-4" />
+                    ) : (
+                      <Icon className="w-4 h-4" />
+                    )}
                   </div>
 
                   {/* 右侧文本 */}
