@@ -23,7 +23,6 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyAuth, authError } from "@/lib/auth/middleware";
 import { runAgent } from "@/lib/agent/agent";
-import { getStylePrompt } from "@/lib/response-styles";
 import type { SSEEvent } from "@/lib/agent/types";
 
 /**
@@ -129,9 +128,6 @@ export async function POST(req: NextRequest) {
       return Response.json({ error }, { status: status || 403 });
     }
 
-    // 获取风格提示词
-    const stylePrompt = getStylePrompt(responseStyle || "default");
-
     const userId = auth.userId;
     const { question, sessionId } = await req.json();
 
@@ -196,7 +192,11 @@ export async function POST(req: NextRequest) {
             executionId: execution.id 
           } as SSEEvent));
 
-          for await (const event of runAgent(question, sessionId, { stylePrompt })) {
+          for await (const event of runAgent(question, sessionId, { 
+            userId,
+            responseStyle: responseStyle || "default",
+            loadHistory: false, // 暂时保持单轮
+          })) {
             controller.enqueue(encodeSSE(event));
 
             // 收集响应内容

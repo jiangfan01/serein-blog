@@ -7,6 +7,7 @@
  * 3. 智能意图分类 - 规则匹配 + 小模型分类
  * 4. 自动降级 - 主模型失败切备用
  * 5. 完整监控 - 记录 token、延迟、成本
+ * 6. XML 结构化上下文工程
  *
  * 图结构：
  *   START → agent → should_continue? → tools → agent → ... → END
@@ -16,53 +17,14 @@
 import { Annotation, StateGraph, END, START } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
-import {
-  HumanMessage,
-  SystemMessage,
-  BaseMessage,
-  AIMessage,
-} from "@langchain/core/messages";
+import { BaseMessage, AIMessage } from "@langchain/core/messages";
 import { allTools } from "./tools";
 import { getIntentClassifier } from "./router/intent-classifier";
 import { getModelRouter } from "./router/model-router";
 import { getCallLogger } from "./router/call-logger";
+import { buildContext, buildSimpleContext } from "./context";
 import type { SSEEvent } from "./types";
 import type { RouteResult, IntentType } from "./router/types";
-
-// ============ 系统提示词 ============
-
-const SYSTEM_PROMPT = String.raw`你是 Serein Blog 的 AI 助手，一个面向开发者的技术知识库工作台。你的目标不是单纯聊天，而是根据用户意图，在「直接回答」「检索博客知识库」「联网搜索」之间做出正确决策，并给出清晰、可靠、可验证的中文回答。
-
-## 可用工具
-
-### 1. rag_search
-用于在 Serein Blog 的技术笔记知识库中进行语义检索。
-
-### 2. web_search
-用于联网搜索公开网页信息。
-
-## 决策规则
-
-1. 用户明确要求联网或搜索时，必须调用 web_search
-2. 用户明确要求博客或笔记内容时，必须优先调用 rag_search
-3. 简单闲聊、通用编程概念可以直接回答
-4. 不确定时，优先判断问题是否会随时间变化；会变化就 web_search
-
-## 回答规范
-
-- 始终使用中文回答，技术术语可以保留英文
-- 回答要结构清晰，不要堆长段落
-- 代码示例使用 markdown 代码块
-- 不要编造工具没有返回的信息
-
-## 工具调用限制
-
-- 每个问题最多调用 1 次 rag_search，如果一次检索结果不够，基于已有结果回答
-- web_search 可以根据需要多次调用，但要避免重复搜索相同内容
-
-## 风格要求
-
-清晰、直接、工程化、有判断、少废话、不绕弯。`;
 
 // ============ 状态定义 ============
 
@@ -207,19 +169,34 @@ function createAgentGraph() {
 // ============ 主函数 ============
 
 /**
+ * Agent 运行选项
+ */
+export interface RunAgentOptions {
+  /** 用户 ID */
+  userId?: string;
+  /** 用户邮箱 */
+  userEmail?: string;
+  /** 用户名 */
+  userName?: string;
+  /** 回答风格 key */
+  responseStyle?: string;
+  /** 是否加载历史消息（默认 false，暂时保持单轮） */
+  loadHistory?: boolean;
+}
+
+/**
  * Agent 主函数
  *
- * 整合：LangGraph + 动态路由 + 监控
+ * 整合：LangGraph + 动态路由 + 上下文工程 + 监控
  * 
  * @param question 用户问题
  * @param sessionId 会话 ID
  * @param options 可选参数
- * @param options.stylePrompt 回答风格提示词
  */
 export async function* runAgent(
   question: string,
   sessionId?: string,
-  options?: { stylePrompt?: string }
+  options?: RunAgentOptions
 ): AsyncGenerator<SSEEvent, void, unknown> {
   const startTime = Date.now();
   const classifier = getIntentClassifier();
@@ -252,18 +229,43 @@ export async function* runAgent(
     // 通知前端：开始思考
     yield { type: "thinking" };
 
-    // ===== 3. 构建初始状态 =====
-    // 如果有风格提示词，追加到系统提示词末尾
-    const finalSystemPrompt = options?.stylePrompt 
-      ? `${SYSTEM_PROMPT}\n\n## 用户偏好的回答风格\n\n${options.stylePrompt}`
-      : SYSTEM_PROMPT;
+    // ===== 3. 使用上下文工程构建消息 =====
+    let builtContext;
+    
+    if (options?.loadHistory && sessionId) {
+      // 完整构建（带历史消息）
+      builtContext = await buildContext({
+        user: {
+          userId: options.userId || "anonymous",
+          email: options.userEmail,
+          name: options.userName,
+          responseStyle: options.responseStyle,
+        },
+        session: {
+          sessionId,
+          isFirstTurn: false, // 会在 buildContext 内部判断
+          historyCount: 0,    // 会在 buildContext 内部计算
+        },
+        currentInput: question,
+        maxHistoryMessages: 20,
+      });
+    } else {
+      // 简化构建（单轮对话）
+      builtContext = buildSimpleContext(question, {
+        userId: options?.userId,
+        responseStyle: options?.responseStyle,
+      });
+    }
 
-    const initialMessages = [
-      new SystemMessage(finalSystemPrompt),
-      new HumanMessage(question),
-    ];
+    const initialMessages = builtContext.messages;
+    inputTokens = builtContext.metadata.totalTokensEstimate;
 
-    inputTokens = estimateTokens(finalSystemPrompt + question);
+    // 调试日志
+    console.log("[Agent] 上下文构建完成", {
+      isFirstTurn: builtContext.metadata.isFirstTurn,
+      historyCount: builtContext.metadata.historyCount,
+      estimatedTokens: inputTokens,
+    });
 
     // ===== 4. 创建并执行图 =====
     const graph = createAgentGraph();
