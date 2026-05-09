@@ -7,9 +7,8 @@
  */
 "use client";
 
-import { useRef, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, LogOut } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { MobileSidebarDrawer, MobileMenuButton, DesktopExpandButton } from "@/components/chat/mobile-sidebar-drawer";
 import { useAuth } from "@/hooks/use-auth";
@@ -21,7 +20,7 @@ export default function ChatLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
 
   /**
    * 会话切换 = 路由跳转
@@ -75,8 +74,8 @@ export default function ChatLayout({
               </span>
             </div>
 
-            {/* 右侧：用户菜单 */}
-            <UserMenu user={user} onLogout={logout} />
+            {/* 右侧：占位（用户菜单已移到侧边栏底部） */}
+            <div className="w-8" />
           </div>
         </header>
 
@@ -99,79 +98,6 @@ function LoadingScreen() {
         <div className="w-2 h-2 rounded-full bg-[var(--text-tertiary)] animate-pulse" />
         <span className="text-[14px] text-[var(--text-secondary)]">加载中...</span>
       </div>
-    </div>
-  );
-}
-
-/**
- * 用户菜单
- */
-function UserMenu({
-  user,
-  onLogout,
-}: {
-  user: { name: string | null; email: string; avatar: string | null } | null;
-  onLogout: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const displayName = user?.name || user?.email?.split("@")[0] || "用户";
-  const initials = displayName.slice(0, 1).toUpperCase();
-
-  return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-      >
-        {user?.avatar ? (
-          <img
-            src={user.avatar}
-            alt={displayName}
-            className="w-8 h-8 rounded-full object-cover"
-          />
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center">
-            <span className="text-[12px] font-medium text-[var(--text-secondary)]">
-              {initials}
-            </span>
-          </div>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-48 py-1 bg-[var(--surface)] border border-[var(--border-default)] rounded-lg shadow-lg z-50">
-          <div className="px-3 py-2 border-b border-[var(--border-subtle)]">
-            <p className="text-[13px] font-medium text-[var(--text-strong)] truncate">
-              {displayName}
-            </p>
-            <p className="text-[11px] text-[var(--text-tertiary)] truncate">
-              {user?.email}
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setOpen(false);
-              onLogout();
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--border-subtle)] hover:text-[var(--text-strong)] transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>退出登录</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,48 +1,77 @@
 /**
  * 用户菜单组件
- * 
- * 显示用户头像，点击弹出菜单
- * 包含回答风格设置等功能
+ *
+ * 使用 shadcn DropdownMenu + Dialog
+ * - 下拉菜单：账号信息、偏好设置、退出登录
+ * - 弹窗：风格选择（2列网格布局）
  */
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { User, Check, ChevronRight, LogOut, Settings } from "lucide-react";
+import { useState } from "react";
+import {
+  User,
+  LogOut,
+  Settings,
+  Check,
+  Sparkles,
+  Zap,
+  BookOpen,
+  Heart,
+  Briefcase,
+  Code2,
+  Baby,
+  Scale,
+  Target,
+  Terminal,
+} from "lucide-react";
 import { useUserPreferences, useUpdatePreferences } from "@/hooks/use-user-preferences";
 import { useAuth } from "@/hooks/use-auth";
 import { getStyleOptions, type ResponseStyleKey } from "@/lib/response-styles";
 import { toast } from "@/components/ui/toast";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+// 为不同的风格映射对应的图标
+const styleIcons: Record<string, React.ElementType> = {
+  default: Sparkles,
+  concise: Zap,
+  detailed: BookOpen,
+  friendly: Heart,
+  professional: Briefcase,
+  technical: Code2,
+  beginner: Baby,
+  critical: Scale,
+  actionable: Target,
+  coding: Terminal,
+};
+
 export function UserMenu() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showStyleMenu, setShowStyleMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  
-  const { data: preferences, isLoading } = useUserPreferences();
+  const [isStyleDialogOpen, setIsStyleDialogOpen] = useState(false);
+
+  const { data: preferences } = useUserPreferences();
   const updatePreferences = useUpdatePreferences();
   const { logout } = useAuth();
-
-  // 点击外部关闭
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setShowStyleMenu(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
 
   const handleStyleChange = async (styleKey: ResponseStyleKey) => {
     try {
       await updatePreferences.mutateAsync({ responseStyle: styleKey });
       toast.success("已更新回答风格");
-      setShowStyleMenu(false);
-      setIsOpen(false);
+      setIsStyleDialogOpen(false);
     } catch {
       toast.error("更新失败");
     }
@@ -50,99 +79,131 @@ export function UserMenu() {
 
   const handleLogout = async () => {
     await logout();
-    setIsOpen(false);
     window.location.href = "/";
   };
 
   const styleOptions = getStyleOptions();
-  const currentStyle = styleOptions.find((s) => s.key === preferences?.responseStyle) || styleOptions[0];
+  const currentStyleKey = preferences?.responseStyle || "default";
+  const displayName = preferences?.name || preferences?.email?.split("@")[0] || "用户";
 
   return (
-    <div ref={menuRef} className="relative">
-      {/* 头像按钮 */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-8 h-8 rounded-full bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center hover:border-[var(--border-strong)] transition-colors"
-      >
-        {preferences?.avatar ? (
-          <img
-            src={preferences.avatar}
-            alt="avatar"
-            className="w-full h-full rounded-full object-cover"
-          />
-        ) : (
-          <User className="w-4 h-4 text-[var(--text-tertiary)]" />
-        )}
-      </button>
-
+    <>
       {/* 下拉菜单 */}
-      {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-56 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] shadow-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-          {/* 用户信息 */}
-          <div className="px-3 py-3 border-b border-[var(--border-subtle)]">
-            <div className="text-[13px] font-medium text-[var(--text-strong)] truncate">
-              {preferences?.name || preferences?.email?.split("@")[0] || "用户"}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="rounded-full outline-none ring-offset-background transition-colors focus-visible:ring-2 focus-visible:ring-ring">
+            <Avatar className="h-8 w-8 border border-[var(--border-default)] hover:border-[var(--border-strong)] transition-colors">
+              <AvatarImage src={preferences?.avatar || undefined} alt={displayName} />
+              <AvatarFallback className="bg-[var(--surface)] text-[var(--text-tertiary)]">
+                <User className="h-4 w-4" />
+              </AvatarFallback>
+            </Avatar>
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="start" className="w-56" sideOffset={8}>
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none truncate">{displayName}</p>
+              <p className="text-xs text-[var(--text-tertiary)] truncate">
+                {preferences?.email}
+              </p>
             </div>
-            <div className="text-[11px] text-[var(--text-tertiary)] truncate mt-0.5">
-              {preferences?.email}
-            </div>
+          </DropdownMenuLabel>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            className="cursor-pointer gap-2"
+            onSelect={() => setIsStyleDialogOpen(true)}
+          >
+            <Settings className="h-4 w-4 text-[var(--text-tertiary)]" />
+            <div className="flex-1">回答风格</div>
+            <span className="text-xs text-[var(--text-tertiary)]">
+              {styleOptions.find((s) => s.key === currentStyleKey)?.label}
+            </span>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            className="cursor-pointer gap-2 text-red-600 focus:text-red-600 focus:bg-red-100 dark:focus:bg-red-950/50"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+            <span>退出登录</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* 风格选择弹窗 */}
+      <Dialog open={isStyleDialogOpen} onOpenChange={setIsStyleDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>选择回答风格</DialogTitle>
+            <DialogDescription>
+              选择 AI 助手的默认回复语气和详细程度，这会应用到你的所有新对话中。
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* 2 列网格布局 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 py-2 max-h-[60vh] overflow-y-auto px-1 pr-2">
+            {styleOptions.map((style) => {
+              const isSelected = currentStyleKey === style.key;
+              const Icon = styleIcons[style.key] || Sparkles;
+
+              return (
+                <button
+                  key={style.key}
+                  onClick={() => handleStyleChange(style.key)}
+                  disabled={updatePreferences.isPending}
+                  className={`
+                    relative flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-200
+                    hover:bg-[var(--surface-secondary)] hover:border-[var(--border-strong)]
+                    ${
+                      isSelected
+                        ? "border-[var(--accent)] bg-[var(--accent)]/5 shadow-sm ring-1 ring-[var(--accent)]/20"
+                        : "border-[var(--border-default)] bg-[var(--surface)]"
+                    }
+                    ${updatePreferences.isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+                  `}
+                >
+                  {/* 左侧图标 */}
+                  <div
+                    className={`
+                    p-2 rounded-lg shrink-0
+                    ${
+                      isSelected
+                        ? "bg-[var(--accent)] text-white"
+                        : "bg-[var(--surface-secondary)] text-[var(--text-tertiary)]"
+                    }
+                  `}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </div>
+
+                  {/* 右侧文本 */}
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-sm font-medium ${
+                          isSelected ? "text-[var(--accent)]" : "text-[var(--text-strong)]"
+                        }`}
+                      >
+                        {style.label}
+                      </span>
+                      {isSelected && <Check className="w-4 h-4 text-[var(--accent)]" />}
+                    </div>
+                    <p className="text-xs text-[var(--text-tertiary)] line-clamp-2">
+                      {style.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-
-          {/* 菜单项 */}
-          <div className="py-1.5">
-            {/* 回答风格 */}
-            <div className="relative">
-              <button
-                onClick={() => setShowStyleMenu(!showStyleMenu)}
-                className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--surface-secondary)] transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Settings className="w-4 h-4 text-[var(--text-tertiary)]" />
-                  <span>回答风格</span>
-                </div>
-                <div className="flex items-center gap-1 text-[var(--text-tertiary)]">
-                  <span className="text-[11px]">{currentStyle.label}</span>
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showStyleMenu ? "rotate-90" : ""}`} />
-                </div>
-              </button>
-
-              {/* 风格子菜单 */}
-              {showStyleMenu && (
-                <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-secondary)]">
-                  {styleOptions.map((style) => (
-                    <button
-                      key={style.key}
-                      onClick={() => handleStyleChange(style.key)}
-                      disabled={updatePreferences.isPending}
-                      className="w-full flex items-center justify-between px-3 py-2 text-[12px] hover:bg-[var(--surface)] transition-colors disabled:opacity-50"
-                    >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span className="text-[var(--text-secondary)]">{style.label}</span>
-                        <span className="text-[10px] text-[var(--text-quaternary)]">{style.description}</span>
-                      </div>
-                      {preferences?.responseStyle === style.key && (
-                        <Check className="w-3.5 h-3.5 text-[var(--accent)]" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 分隔线 */}
-            <div className="my-1.5 border-t border-[var(--border-subtle)]" />
-
-            {/* 退出登录 */}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>退出登录</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
