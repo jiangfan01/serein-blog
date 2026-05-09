@@ -1,20 +1,26 @@
 /**
  * 聊天状态管理 Hook
  *
- * 职责：消息列表管理 + 发送逻辑 + 打字机效果
+ * 职责：消息列表管理 + 发送逻辑 + 打字机效果 + 断线重连
  *
  * 多会话支持：
  * - sessionId: 当前会话 ID（必须）
  * - loadHistory: 加载历史消息
  * - clearMessages: 清空消息（切换会话时用）
  *
+ * 断线重连：
+ * - executionId: 当前执行 ID（用于断线重连）
+ * - recoverExecution: 恢复执行状态
+ * - 页面可见性变化时自动检查并恢复
+ *
  * 打字机效果：buffer 收集 + RAF 批量刷新
  * - SSE chunk 到达时只往 buffer 追加，不触发渲染
  * - RAF 每帧从 buffer 取字符刷到 state
  * - 这样 React 每帧最多渲染一次，避免高频 setState 卡顿
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useSSEParser } from "./use-sse-parser";
+import { useTokenStore } from "./use-auth";
 import type { SessionMessage } from "./use-sessions";
 
 export interface ChatMessage {
@@ -96,6 +102,11 @@ export function useChat() {
   const firstBufferedAtRef = useRef(0);
   const lastFlushAtRef = useRef(0);
 
+  // 断线重连相关
+  const executionIdRef = useRef<string | null>(null);
+  const isRecoveringRef = useRef(false);
+  const getAccessToken = () => useTokenStore.getState().accessToken;
+
   /**
    * 加载历史消息
    */
@@ -115,6 +126,9 @@ export function useChat() {
     bufferRef.current = "";
     displayedRef.current = "";
     cancelAnimationFrame(rafIdRef.current);
+    // 重置断线重连状态
+    executionIdRef.current = null;
+    isRecoveringRef.current = false;
   }, []);
 
   /**
@@ -216,6 +230,11 @@ export function useChat() {
           });
         },
 
+        onExecutionStart: (executionId) => {
+          // 保存 executionId 用于断线重连
+          executionIdRef.current = executionId;
+        },
+
         onTextDelta: (content) => {
           // 只往 buffer 追加，不直接 setState
           // RAF 循环会自动把 buffer 内容刷到 UI
@@ -276,12 +295,118 @@ export function useChat() {
           setTimeout(() => {
             stopTypewriter();
             setLoading(false);
+            // 清除 executionId，执行已完成
+            executionIdRef.current = null;
           }, 100);
         },
       });
     },
     [loading, streamChat, startTypewriter, stopTypewriter]
   );
+
+  /**
+   * 断线重连：恢复执行状态
+   * 轮询 /api/chat/execution/{id} 获取进度
+   */
+  const recoverExecution = useCallback(async () => {
+    const executionId = executionIdRef.current;
+    if (!executionId || isRecoveringRef.current) return;
+
+    isRecoveringRef.current = true;
+    const accessToken = getAccessToken();
+
+    try {
+      const res = await fetch(`/api/chat/execution/${executionId}`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+
+      if (!res.ok) {
+        // 执行记录不存在或无权访问，清除状态
+        executionIdRef.current = null;
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.status === "running") {
+        // 还在执行中，恢复显示已有内容
+        const progress = data.progress;
+        if (progress?.partialContent) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                content: progress.partialContent,
+                model: progress.metadata?.model,
+                intent: progress.metadata?.intent,
+                toolCalls: progress.toolCalls?.map((tc: { tool: string; args: Record<string, unknown>; result: string }) => ({
+                  ...tc,
+                  status: tc.result ? "done" : "running",
+                })),
+              };
+            }
+            return updated;
+          });
+        }
+
+        // 继续轮询
+        setTimeout(() => {
+          isRecoveringRef.current = false;
+          recoverExecution();
+        }, 500);
+      } else if (data.status === "completed") {
+        // 执行完成，显示最终结果
+        const result = data.result;
+        if (result?.content) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                content: result.content,
+                model: result.metadata?.model,
+                intent: result.metadata?.intent,
+                toolCalls: result.toolCalls?.map((tc: { tool: string; args: Record<string, unknown>; result: string }) => ({
+                  ...tc,
+                  status: "done",
+                })),
+              };
+            }
+            return updated;
+          });
+        }
+        executionIdRef.current = null;
+        setLoading(false);
+      } else {
+        // failed 或其他状态
+        executionIdRef.current = null;
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("[useChat] 恢复执行失败:", err);
+    } finally {
+      isRecoveringRef.current = false;
+    }
+  }, []);
+
+  /**
+   * 监听页面可见性变化，断线后自动恢复
+   */
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && executionIdRef.current && loading) {
+        // 页面重新可见，且有正在执行的任务，尝试恢复
+        recoverExecution();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [loading, recoverExecution]);
 
   return {
     messages,
@@ -290,5 +415,6 @@ export function useChat() {
     loadHistory,
     clearMessages,
     cancel,
+    recoverExecution,
   };
 }

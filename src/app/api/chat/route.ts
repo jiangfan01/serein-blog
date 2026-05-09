@@ -173,16 +173,44 @@ export async function POST(req: NextRequest) {
     let fullContent = "";
     let toolCalls: Array<{ tool: string; args: Record<string, unknown>; result: string }> = [];
     let metadata: { model?: string; intent?: string } = {};
+    
+    // 断线重连：定期更新进度到数据库
+    let lastProgressUpdate = Date.now();
+    const PROGRESS_UPDATE_INTERVAL = 500; // 每 500ms 更新一次
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          // 先发送 executionId，前端用于断线重连
+          controller.enqueue(encodeSSE({ 
+            type: "execution_start", 
+            executionId: execution.id 
+          } as SSEEvent));
+
           for await (const event of runAgent(question, sessionId)) {
             controller.enqueue(encodeSSE(event));
 
             // 收集响应内容
             if (event.type === "text_delta") {
               fullContent += event.content;
+              
+              // 定期更新进度到数据库（断线重连用）
+              const now = Date.now();
+              if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
+                lastProgressUpdate = now;
+                // 异步更新，不阻塞流
+                prisma.chatExecution.update({
+                  where: { id: execution.id },
+                  data: {
+                    progress: JSON.parse(JSON.stringify({
+                      phase: "generating",
+                      partialContent: fullContent,
+                      toolCalls,
+                      metadata,
+                    })),
+                  },
+                }).catch(console.error);
+              }
             } else if (event.type === "model_select") {
               metadata = { model: event.model, intent: event.intent };
             } else if (event.type === "tool_end") {
@@ -193,6 +221,18 @@ export async function POST(req: NextRequest) {
               if (existingCall) {
                 existingCall.result = event.result;
               }
+              // 工具完成时也更新进度
+              prisma.chatExecution.update({
+                where: { id: execution.id },
+                data: {
+                  progress: JSON.parse(JSON.stringify({
+                    phase: "tool_calling",
+                    partialContent: fullContent,
+                    toolCalls,
+                    metadata,
+                  })),
+                },
+              }).catch(console.error);
             } else if (event.type === "tool_start") {
               toolCalls.push({
                 tool: event.tool,
@@ -203,7 +243,7 @@ export async function POST(req: NextRequest) {
           }
 
           // 保存 AI 消息
-          await prisma.chatMessage.create({
+          const assistantMessage = await prisma.chatMessage.create({
             data: {
               sessionId,
               role: "assistant",
@@ -213,12 +253,19 @@ export async function POST(req: NextRequest) {
             },
           });
 
-          // 更新执行记录为完成
+          // 更新执行记录为完成，保存最终结果
           await prisma.chatExecution.update({
             where: { id: execution.id },
             data: {
               status: "completed",
               completedAt: new Date(),
+              progress: undefined, // 清空进度
+              result: JSON.parse(JSON.stringify({
+                messageId: assistantMessage.id,
+                content: fullContent,
+                toolCalls,
+                metadata,
+              })),
             },
           });
 

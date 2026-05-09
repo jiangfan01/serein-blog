@@ -22,6 +22,7 @@ interface SSEHandlers {
   onToolStart: (tool: string, args: Record<string, unknown>) => void;
   onToolEnd: (tool: string, result: string) => void;
   onModelSelect: (model: string, intent: string) => void;
+  onExecutionStart: (executionId: string) => void;
   onError: (message: string) => void;
   onDone: () => void;
 }
@@ -115,6 +116,9 @@ export function useSSEParser() {
               break;
             case "model_select":
               handlers.onModelSelect(event.model, event.intent);
+              break;
+            case "execution_start":
+              handlers.onExecutionStart(event.executionId);
               break;
             case "text_delta":
               handlers.onTextDelta(event.content);

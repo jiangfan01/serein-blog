@@ -52,6 +52,12 @@ export interface DoneEvent {
   type: "done";
 }
 
+// 执行开始事件 — 返回 executionId 用于断线重连
+export interface ExecutionStartEvent {
+  type: "execution_start";
+  executionId: string;
+}
+
 // 联合类型 — 所有可能的 SSE 事件
 export type SSEEvent =
   | TextDeltaEvent
@@ -60,4 +66,5 @@ export type SSEEvent =
   | ThinkingEvent
   | ModelSelectEvent
   | ErrorEvent
-  | DoneEvent;
+  | DoneEvent
+  | ExecutionStartEvent;

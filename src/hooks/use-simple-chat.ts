@@ -191,6 +191,10 @@ export function useSimpleChat() {
           });
         },
 
+        onExecutionStart: () => {
+          // simple-chat 不需要断线重连
+        },
+
         onTextDelta: (content) => {
           if (!firstBufferedAtRef.current) {
             firstBufferedAtRef.current = performance.now();
