@@ -82,7 +82,7 @@ export function ChatInput({ onSend, onPause, disabled, autoFocus = false }: Chat
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-start gap-2">
         <textarea
           ref={textareaRef}
           value={input}
@@ -91,8 +91,8 @@ export function ChatInput({ onSend, onPause, disabled, autoFocus = false }: Chat
           placeholder={disabled ? "AI 正在处理当前问题..." : "输入你的问题..."}
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-sm text-[var(--text-strong)] placeholder:text-[var(--text-tertiary)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70 leading-6"
-          style={{ minHeight: "24px" }}
+          className="flex-1 resize-none bg-transparent text-sm text-[var(--text-strong)] placeholder:text-[var(--text-tertiary)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70 py-1"
+          style={{ minHeight: "32px", lineHeight: "24px" }}
         />
         {disabled && onPause ? (
           <button
