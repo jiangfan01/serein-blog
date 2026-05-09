@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect } from "react";
 import { User, Check, ChevronRight, LogOut, Settings } from "lucide-react";
 import { useUserPreferences, useUpdatePreferences } from "@/hooks/use-user-preferences";
-import { useTokenStore } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
 import { getStyleOptions, type ResponseStyleKey } from "@/lib/response-styles";
 import { toast } from "@/components/ui/toast";
 
@@ -20,7 +20,7 @@ export function UserMenu() {
   
   const { data: preferences, isLoading } = useUserPreferences();
   const updatePreferences = useUpdatePreferences();
-  const logout = useTokenStore((s) => s.logout);
+  const { logout } = useAuth();
 
   // 点击外部关闭
   useEffect(() => {
@@ -48,8 +48,8 @@ export function UserMenu() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setIsOpen(false);
     window.location.href = "/";
   };
