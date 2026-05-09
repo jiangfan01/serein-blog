@@ -9,7 +9,7 @@ import {
   HumanMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { getStylePrompt, RESPONSE_STYLES, type ResponseStyleKey } from "@/lib/response-styles";
+import {  RESPONSE_STYLES, type ResponseStyleKey } from "@/lib/response-styles";
 import {
   buildSystemPrompt,
   wrapUserQuery,
