@@ -229,11 +229,17 @@ export function createChatContext(
 export function runChatAgent(
   question: string,
   sessionId: string,
-  options: { userId: string; responseStyle?: string }
+  options: { 
+    userId: string; 
+    responseStyle?: string;
+    /** 当前 trigger message 的 ID，用于避免历史重复 */
+    excludeMessageId?: string;
+  }
 ) {
   return runAgent(question, sessionId, {
     userId: options.userId,
     responseStyle: options.responseStyle || "default",
-    loadHistory: false, // 暂时保持单轮
+    loadHistory: true, // 启用多轮对话
+    excludeMessageId: options.excludeMessageId,
   });
 }

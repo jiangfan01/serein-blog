@@ -74,6 +74,7 @@ export class ModelRouter {
       extraParams: rule.model.extraParams as Record<string, unknown> | null,
       inputPrice: Number(rule.model.inputPrice),
       outputPrice: Number(rule.model.outputPrice),
+      contextLength: rule.model.contextLength,
     };
 
     // 添加降级模型
@@ -89,6 +90,7 @@ export class ModelRouter {
           string,
           unknown
         > | null,
+        contextLength: rule.fallbackModel.contextLength,
       };
     }
 
@@ -126,6 +128,7 @@ export class ModelRouter {
       extraParams: model.extraParams as Record<string, unknown> | null,
       inputPrice: Number(model.inputPrice),
       outputPrice: Number(model.outputPrice),
+      contextLength: model.contextLength,
     };
   }
 

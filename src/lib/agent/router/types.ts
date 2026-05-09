@@ -48,10 +48,13 @@ export interface RouteResult {
     baseUrl: string;
     apiKeyEnv: string;
     extraParams: Record<string, unknown> | null;
+    contextLength?: number;
   };
   // 价格信息（用于成本计算）
   inputPrice: number;
   outputPrice: number;
+  // 模型上下文长度（用于动态计算 token 预算）
+  contextLength: number;
 }
 
 /**

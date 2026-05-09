@@ -180,8 +180,10 @@ export interface RunAgentOptions {
   userName?: string;
   /** 回答风格 key */
   responseStyle?: string;
-  /** 是否加载历史消息（默认 false，暂时保持单轮） */
+  /** 是否加载历史消息 */
   loadHistory?: boolean;
+  /** 排除的消息 ID（避免当前 trigger message 重复） */
+  excludeMessageId?: string;
 }
 
 /**
@@ -234,6 +236,7 @@ export async function* runAgent(
     
     if (options?.loadHistory && sessionId) {
       // 完整构建（带历史消息）
+      // 使用模型的 contextLength 动态计算 token 预算
       builtContext = await buildContext({
         user: {
           userId: options.userId || "anonymous",
@@ -247,7 +250,10 @@ export async function* runAgent(
           historyCount: 0,    // 会在 buildContext 内部计算
         },
         currentInput: question,
-        maxHistoryMessages: 20,
+        // 排除当前 trigger message，避免重复
+        excludeMessageId: options.excludeMessageId,
+        // 根据模型上下文长度动态计算 token 预算
+        modelContextLength: currentRoute.contextLength,
       });
     } else {
       // 简化构建（单轮对话）
@@ -258,7 +264,7 @@ export async function* runAgent(
     }
 
     const initialMessages = builtContext.messages;
-    inputTokens = builtContext.metadata.totalTokensEstimate;
+    inputTokens = builtContext.metadata.tokenEstimates.total;
 
     // 调试日志
     console.log("[Agent] 上下文构建完成", {

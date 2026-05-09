@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. 初始化聊天（创建消息和执行记录）
-    const { executionId } = await initializeChat(
+    const { userMessageId, executionId } = await initializeChat(
       sessionId,
       question,
       session.title
@@ -81,10 +81,11 @@ export async function POST(req: NextRequest) {
             } as SSEEvent)
           );
 
-          // 运行 Agent
+          // 运行 Agent（传递 userMessageId 避免历史重复）
           for await (const event of runChatAgent(question, sessionId, {
             userId: auth.userId,
             responseStyle: accessResult.user?.responseStyle,
+            excludeMessageId: userMessageId,
           })) {
             controller.enqueue(encodeSSE(event));
             handleSSEEvent(event, ctx);
