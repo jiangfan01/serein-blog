@@ -29,7 +29,7 @@ export interface Session {
   id: string;
   title: string | null;
   updatedAt: string;
-  replyStatus: "idle" | "running" | "completed" | "failed" | "cancelled";
+  replyStatus: "idle" | "running" | "interrupted" | "completed" | "failed" | "cancelled";
 }
 
 export interface SessionsPage {
