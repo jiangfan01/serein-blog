@@ -13,10 +13,15 @@
  * 1. 发送前创建用户消息记录
  * 2. 完成后创建 AI 消息记录
  * 3. 首条消息时自动生成会话标题
+ *
+ * 断线重连：
+ * - 每次 chunk 到达时更新 progress 到数据库
+ * - 使用 heartbeat 机制检测连接状态
+ * - 连接断开时自动标记为 interrupted
  */
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyToken, extractToken } from "@/lib/auth";
+import { verifyAuth, authError } from "@/lib/auth/middleware";
 import { runAgent } from "@/lib/agent/agent";
 import type { SSEEvent } from "@/lib/agent/types";
 
@@ -42,25 +47,13 @@ function generateTitle(content: string): string {
 /**
  * 验证用户权限和配额
  */
-async function verifyUserAccess(req: NextRequest): Promise<{
+async function verifyUserAccess(userId: string): Promise<{
   error?: string;
   status?: number;
-  userId?: string;
 }> {
-  // 1. 验证 Token
-  const token = extractToken(req.headers.get("Authorization"));
-  if (!token) {
-    return { error: "请先登录", status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload) {
-    return { error: "登录已过期，请重新登录", status: 401 };
-  }
-
-  // 2. 查询用户
+  // 查询用户
   const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
+    where: { id: userId },
     select: {
       id: true,
       enabled: true,
@@ -77,7 +70,7 @@ async function verifyUserAccess(req: NextRequest): Promise<{
     return { error: "您没有使用聊天功能的权限", status: 403 };
   }
 
-  // 3. 检查每日配额
+  // 检查每日配额
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -95,7 +88,7 @@ async function verifyUserAccess(req: NextRequest): Promise<{
     };
   }
 
-  return { userId: user.id };
+  return {};
 }
 
 /**
@@ -121,12 +114,19 @@ async function verifySessionOwnership(
 
 export async function POST(req: NextRequest) {
   try {
-    // 验证权限
-    const { error, status, userId } = await verifyUserAccess(req);
-    if (error || !userId) {
-      return Response.json({ error: error || "认证失败" }, { status: status || 401 });
+    // 使用统一的 verifyAuth 中间件
+    const auth = await verifyAuth(req);
+    if (!auth.success) {
+      return authError(auth);
     }
 
+    // 验证用户权限和配额
+    const { error, status } = await verifyUserAccess(auth.userId);
+    if (error) {
+      return Response.json({ error }, { status: status || 403 });
+    }
+
+    const userId = auth.userId;
     const { question, sessionId } = await req.json();
 
     if (!question || typeof question !== "string") {
@@ -176,7 +176,10 @@ export async function POST(req: NextRequest) {
     
     // 断线重连：定期更新进度到数据库
     let lastProgressUpdate = Date.now();
-    const PROGRESS_UPDATE_INTERVAL = 500; // 每 500ms 更新一次
+    const PROGRESS_UPDATE_INTERVAL = 300; // 每 300ms 更新一次（更频繁以减少数据丢失）
+    
+    // 标记是否正常完成
+    let isCompleted = false;
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -242,6 +245,9 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // 标记正常完成
+          isCompleted = true;
+
           // 保存 AI 消息
           const assistantMessage = await prisma.chatMessage.create({
             data: {
@@ -297,6 +303,51 @@ export async function POST(req: NextRequest) {
           );
           controller.enqueue(encodeSSE({ type: "done" }));
           controller.close();
+        }
+      },
+      
+      // 当客户端断开连接时（刷新页面、关闭标签页等）
+      cancel: async () => {
+        console.log("[Chat Route] Client disconnected, execution:", execution.id);
+        
+        // 如果还没正常完成，标记为中断
+        if (!isCompleted) {
+          try {
+            // 保存已生成的内容为中断状态
+            await prisma.chatExecution.update({
+              where: { id: execution.id },
+              data: {
+                status: "interrupted",
+                pausedAt: new Date(),
+                progress: JSON.parse(JSON.stringify({
+                  phase: "interrupted",
+                  partialContent: fullContent,
+                  toolCalls,
+                  metadata,
+                })),
+              },
+            });
+            
+            // 如果有内容，也保存一条不完整的 assistant 消息
+            if (fullContent.trim()) {
+              await prisma.chatMessage.create({
+                data: {
+                  sessionId,
+                  role: "assistant",
+                  content: fullContent,
+                  toolCalls: toolCalls.length > 0 ? JSON.parse(JSON.stringify(toolCalls)) : undefined,
+                  metadata: {
+                    ...metadata,
+                    interrupted: true, // 标记为中断的消息
+                  },
+                },
+              });
+            }
+            
+            console.log("[Chat Route] Execution marked as interrupted with content length:", fullContent.length);
+          } catch (err) {
+            console.error("[Chat Route] Failed to mark execution as interrupted:", err);
+          }
         }
       },
     });

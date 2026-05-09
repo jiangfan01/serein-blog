@@ -62,12 +62,22 @@ export async function GET(req: NextRequest) {
     const nextCursor = hasMore ? items[items.length - 1]?.id : null;
 
     return Response.json({
-      sessions: items.map((s) => ({
-        id: s.id,
-        title: s.title,
-        updatedAt: s.updatedAt,
-        replyStatus: s.executions[0]?.status ?? "idle",
-      })),
+      sessions: items.map((s) => {
+        // 获取最新执行状态
+        const latestStatus = s.executions[0]?.status;
+        // running 和 interrupted 都需要前端处理
+        // completed/failed/paused 都视为 idle
+        const replyStatus = (latestStatus === "running" || latestStatus === "interrupted") 
+          ? latestStatus 
+          : "idle";
+        
+        return {
+          id: s.id,
+          title: s.title,
+          updatedAt: s.updatedAt,
+          replyStatus,
+        };
+      }),
       nextCursor,
       hasMore,
     });

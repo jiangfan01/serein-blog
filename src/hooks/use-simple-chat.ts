@@ -195,6 +195,10 @@ export function useSimpleChat() {
           // simple-chat 不需要断线重连
         },
 
+        onPaused: () => {
+          // simple-chat 不需要暂停
+        },
+
         onTextDelta: (content) => {
           if (!firstBufferedAtRef.current) {
             firstBufferedAtRef.current = performance.now();

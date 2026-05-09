@@ -58,6 +58,11 @@ export interface ExecutionStartEvent {
   executionId: string;
 }
 
+// 暂停事件 — 用户主动暂停
+export interface PausedEvent {
+  type: "paused";
+}
+
 // 联合类型 — 所有可能的 SSE 事件
 export type SSEEvent =
   | TextDeltaEvent
@@ -67,4 +72,5 @@ export type SSEEvent =
   | ModelSelectEvent
   | ErrorEvent
   | DoneEvent
-  | ExecutionStartEvent;
+  | ExecutionStartEvent
+  | PausedEvent;

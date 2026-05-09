@@ -9,7 +9,7 @@
 
 import { useRef, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Pause } from "lucide-react";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useChat } from "@/hooks/use-chat";
@@ -21,7 +21,7 @@ export default function SessionPage() {
   const sessionId = params.sessionId as string;
   const initialQuestion = searchParams.get("q");
 
-  const { messages, loading, sendMessage, loadHistory, checkAndRecover } = useChat();
+  const { messages, loading, paused, sendMessage, loadHistory, checkAndRecover, pauseExecution } = useChat();
   const { data: historyMessages, isLoading: messagesLoading } = useSessionMessages(sessionId);
   const { data: sessionsData } = useInfiniteSessions();
   const optimisticUpdateTitle = useOptimisticUpdateTitle();
@@ -43,7 +43,7 @@ export default function SessionPage() {
 
   /**
    * 检查断线重连
-   * 历史加载完成后，检查当前会话是否有 running 状态的执行
+   * 历史加载完成后，检查当前会话是否有 running 或 interrupted 状态的执行
    */
   useEffect(() => {
     if (recoveryCheckedRef.current || messagesLoading || !sessionId) return;
@@ -56,8 +56,9 @@ export default function SessionPage() {
       .flatMap((page) => page.sessions)
       .find((s) => s.id === sessionId);
 
-    if (currentSession?.replyStatus === "running") {
-      console.log("[SessionPage] 检测到 running 状态，尝试恢复");
+    // running 或 interrupted 状态都需要恢复
+    if (currentSession?.replyStatus === "running" || currentSession?.replyStatus === "interrupted") {
+      console.log("[SessionPage] 检测到需要恢复的状态:", currentSession.replyStatus);
       checkAndRecover(sessionId, currentSession.replyStatus);
     }
   }, [sessionId, messagesLoading, initialQuestion, sessionsData, checkAndRecover]);
@@ -118,6 +119,15 @@ export default function SessionPage() {
               isFullscreen
               hideEmptyState
             />
+            {/* 暂停/中断状态提示 */}
+            {paused && (
+              <div className="flex items-center justify-center gap-2 mt-4 py-3 px-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <Pause className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-[13px] text-amber-700 dark:text-amber-300">
+                  对话已中断，发送新消息继续
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -125,7 +135,12 @@ export default function SessionPage() {
       {/* 底部输入区 */}
       <div className="flex-shrink-0 border-t border-[var(--border-subtle)]">
         <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-4">
-          <ChatInput onSend={handleSend} disabled={loading} autoFocus />
+          <ChatInput 
+            onSend={handleSend} 
+            onPause={pauseExecution}
+            disabled={loading} 
+            autoFocus 
+          />
           <div className="flex items-center justify-center gap-2 mt-3 text-[11px] font-medium text-[var(--text-tertiary)] tracking-wide uppercase">
             <span>知识库检索</span>
             <span className="w-1 h-1 rounded-full bg-[var(--border-strong)]" />

@@ -12,7 +12,7 @@
  */
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyToken, extractToken } from "@/lib/auth";
+import { verifyAuth, authError } from "@/lib/auth/middleware";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,15 +20,9 @@ interface RouteParams {
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    // 验证 Token
-    const token = extractToken(req.headers.get("Authorization"));
-    if (!token) {
-      return Response.json({ error: "请先登录" }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return Response.json({ error: "登录已过期" }, { status: 401 });
+    const auth = await verifyAuth(req);
+    if (!auth.success) {
+      return authError(auth);
     }
 
     const { id } = await params;
@@ -48,7 +42,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     // 验证归属
-    if (execution.session.userId !== payload.userId) {
+    if (execution.session.userId !== auth.userId) {
       return Response.json({ error: "无权访问" }, { status: 403 });
     }
 
@@ -59,6 +53,17 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           status: "running",
           progress: execution.progress || {
             phase: "thinking",
+            partialContent: "",
+            toolCalls: [],
+            metadata: {},
+          },
+        });
+
+      case "paused":
+        return Response.json({
+          status: "paused",
+          progress: execution.progress || {
+            phase: "paused",
             partialContent: "",
             toolCalls: [],
             metadata: {},

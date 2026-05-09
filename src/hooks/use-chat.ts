@@ -100,6 +100,7 @@ function convertToUIMessage(msg: SessionMessage): ChatMessage | null {
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [paused, setPaused] = useState(false); // 暂停状态
   const { streamChat, cancel } = useSSEParser();
 
   // 打字机相关 ref
@@ -129,6 +130,7 @@ export function useChat() {
    */
   const clearMessages = useCallback(() => {
     setMessages([]);
+    setPaused(false);
     // 重置打字机状态
     bufferRef.current = "";
     displayedRef.current = "";
@@ -210,6 +212,9 @@ export function useChat() {
     async (question: string, sessionId: string) => {
       if (!question.trim() || loading || !sessionId) return;
 
+      // 清除暂停状态（新对话开始）
+      setPaused(false);
+
       // 添加用户消息 + 空的 assistant 消息（占位）
       setMessages((prev) => [
         ...prev,
@@ -238,7 +243,7 @@ export function useChat() {
         },
 
         onExecutionStart: (executionId) => {
-          // 保存 executionId 用于断线重连
+          // 保存 executionId 用于断线重连和暂停
           executionIdRef.current = executionId;
         },
 
@@ -292,6 +297,14 @@ export function useChat() {
           });
         },
 
+        onPaused: () => {
+          // 收到暂停事件
+          stopTypewriter();
+          setLoading(false);
+          setPaused(true);
+          executionIdRef.current = null;
+        },
+
         onError: (message) => {
           if (!bufferRef.current) {
             bufferRef.current = message;
@@ -310,6 +323,34 @@ export function useChat() {
     },
     [loading, streamChat, startTypewriter, stopTypewriter]
   );
+
+  /**
+   * 暂停当前执行
+   */
+  const pauseExecution = useCallback(async () => {
+    const executionId = executionIdRef.current;
+    if (!executionId || !loading) return;
+
+    const accessToken = getAccessToken();
+
+    try {
+      const res = await fetch(`/api/chat/execution/${executionId}/pause`, {
+        method: "POST",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+
+      if (res.ok) {
+        // 暂停成功，取消 SSE 连接
+        cancel();
+        stopTypewriter();
+        setLoading(false);
+        setPaused(true);
+        executionIdRef.current = null;
+      }
+    } catch (err) {
+      console.error("[useChat] 暂停失败:", err);
+    }
+  }, [loading, cancel, stopTypewriter]);
 
   /**
    * 断线重连：根据 executionId 恢复执行状态
@@ -398,6 +439,28 @@ export function useChat() {
           executionIdRef.current = null;
           setLoading(false);
           isRecoveringRef.current = false;
+        } else if (data.status === "paused") {
+          // 已暂停
+          const progress = data.progress as ExecutionProgress | undefined;
+          if (progress?.partialContent) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.role === "assistant") {
+                updated[updated.length - 1] = {
+                  ...last,
+                  content: progress.partialContent,
+                  model: progress.metadata?.model,
+                  intent: progress.metadata?.intent,
+                };
+              }
+              return updated;
+            });
+          }
+          executionIdRef.current = null;
+          setLoading(false);
+          setPaused(true);
+          isRecoveringRef.current = false;
         } else {
           // failed 或其他状态
           executionIdRef.current = null;
@@ -416,19 +479,28 @@ export function useChat() {
   }, []);
 
   /**
-   * 检查会话状态，如果有 running 的执行就恢复
+   * 检查会话状态，如果有中断的执行就恢复显示已有内容
+   * 
+   * Serverless 环境下，刷新页面后后端已经停止执行了
+   * 这里恢复显示已生成的内容，并标记为中断状态
+   * 
    * @param sessionId 会话 ID
    * @param replyStatus 会话的回复状态（从 sessions 列表获取）
    */
   const checkAndRecover = useCallback(async (sessionId: string, replyStatus?: string) => {
-    // 如果已经在 loading（正常对话中）或者状态不是 running，不需要恢复
-    if (loading || isRecoveringRef.current || replyStatus !== "running") {
+    // 如果已经在 loading（正常对话中）或者正在恢复中，不需要处理
+    if (loading || isRecoveringRef.current) {
+      return;
+    }
+
+    // 只处理 running 或 interrupted 状态
+    if (replyStatus !== "running" && replyStatus !== "interrupted") {
       return;
     }
 
     const accessToken = getAccessToken();
 
-    // 查询该会话最新的 running 执行
+    // 查询该会话最新的执行状态
     try {
       const res = await fetch(`/api/sessions/${sessionId}/execution`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
@@ -437,14 +509,51 @@ export function useChat() {
       if (!res.ok) return;
 
       const data = await res.json();
-      if (data.executionId && data.status === "running") {
-        console.log("[useChat] 检测到断线，开始恢复执行:", data.executionId);
-        recoverFromExecution(data.executionId);
+      
+      // 检查是否有中断的执行（有进度数据）
+      if (data.executionId && data.progress?.partialContent) {
+        console.log("[useChat] 检测到中断的执行，恢复显示已有内容");
+        
+        const progress = data.progress as ExecutionProgress;
+        
+        // 恢复显示已有内容
+        setMessages((prev) => {
+          // 检查最后一条是否已经是 assistant 消息且内容相同
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && last.content === progress.partialContent) {
+            // 内容相同，只需要标记暂停状态
+            return prev;
+          }
+          
+          const newMessage: ChatMessage = {
+            role: "assistant",
+            content: progress.partialContent,
+            model: progress.metadata?.model,
+            intent: progress.metadata?.intent,
+            toolCalls: progress.toolCalls?.map((tc) => ({
+              ...tc,
+              status: tc.result ? ("done" as const) : ("running" as const),
+            })),
+          };
+          
+          if (last?.role === "assistant") {
+            // 更新已有的 assistant 消息
+            const updated = [...prev];
+            updated[updated.length - 1] = newMessage;
+            return updated;
+          } else {
+            // 添加新的 assistant 消息
+            return [...prev, newMessage];
+          }
+        });
+        
+        // 标记为暂停状态
+        setPaused(true);
       }
     } catch (err) {
       console.error("[useChat] 检查执行状态失败:", err);
     }
-  }, [loading, recoverFromExecution]);
+  }, [loading]);
 
   /**
    * 监听页面可见性变化，断线后自动恢复
@@ -464,10 +573,12 @@ export function useChat() {
   return {
     messages,
     loading,
+    paused,
     sendMessage,
     loadHistory,
     clearMessages,
     cancel,
+    pauseExecution,
     checkAndRecover,
   };
 }

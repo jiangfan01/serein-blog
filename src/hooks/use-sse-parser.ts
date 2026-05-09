@@ -23,6 +23,7 @@ interface SSEHandlers {
   onToolEnd: (tool: string, result: string) => void;
   onModelSelect: (model: string, intent: string) => void;
   onExecutionStart: (executionId: string) => void;
+  onPaused: () => void;
   onError: (message: string) => void;
   onDone: () => void;
 }
@@ -128,6 +129,9 @@ export function useSSEParser() {
               break;
             case "tool_end":
               handlers.onToolEnd(event.tool, event.result);
+              break;
+            case "paused":
+              handlers.onPaused();
               break;
             case "error":
               handlers.onError(event.message);

@@ -7,7 +7,7 @@
  */
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyToken, extractToken } from "@/lib/auth";
+import { verifyAuth, authError } from "@/lib/auth/middleware";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,15 +15,9 @@ interface RouteParams {
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    // 验证 Token
-    const token = extractToken(req.headers.get("Authorization"));
-    if (!token) {
-      return Response.json({ error: "请先登录" }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return Response.json({ error: "登录已过期" }, { status: 401 });
+    const auth = await verifyAuth(req);
+    if (!auth.success) {
+      return authError(auth);
     }
 
     const { id: sessionId } = await params;
@@ -32,7 +26,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const session = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: payload.userId,
+        userId: auth.userId,
       },
       select: { id: true },
     });
@@ -48,6 +42,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       select: {
         id: true,
         status: true,
+        progress: true,
       },
     });
 
@@ -58,6 +53,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     return Response.json({
       executionId: execution.id,
       status: execution.status,
+      progress: execution.progress,
     });
   } catch (err) {
     console.error("[Session Execution API] Error:", err);
