@@ -64,7 +64,7 @@ const styleIcons: Record<string, React.ElementType> = {
 function DoubaoIcon({ className }: { className?: string }) {
   return (
     <Image
-      src="/svg/doubao.svg"
+      src="/svg/doubao.png"
       alt="傻豆包"
       width={16}
       height={16}
