@@ -1,13 +1,13 @@
 ---
-title: React Fiber 架构深度解析
-description: 从源码到原理，全面剖析 React Fiber 架构的设计思想与实现细节
+title: React Fiber 架构笔记
+description: 从可中断渲染、优先级调度和双缓冲角度理解 Fiber
 ---
 
-# React Fiber 架构深度解析
+# React Fiber 架构笔记
 
-> 深入理解 React 16+ 的核心架构 Fiber，掌握可中断渲染、优先级调度、双缓冲机制的底层原理。
+> Fiber 这块我不会一次就背下来。更适合的方式是先抓住几个问题：为什么 React 要从递归改成 Fiber，为什么渲染可以被打断，为什么 commit 阶段又不能打断。
 
-## 📋 目录
+## 目录
 
 1. [为什么需要 Fiber](#为什么需要-fiber)
 2. [Fiber 是什么](#fiber-是什么)
@@ -19,11 +19,11 @@ description: 从源码到原理，全面剖析 React Fiber 架构的设计思想
 8. [Reconciliation 协调过程](#reconciliation-协调过程)
 9. [Commit 提交阶段](#commit-提交阶段)
 10. [Hooks 与 Fiber](#hooks-与-fiber)
-11. [实战案例](#实战案例)
+11. [项目里怎么用这些理解](#项目里怎么用这些理解)
 
 ---
 
-## 🤔 为什么需要 Fiber
+## 为什么需要 Fiber
 
 ### React 15 的问题
 
@@ -37,7 +37,7 @@ function updateComponent(component) {
   
   // 2. 递归更新所有子组件
   newChildren.forEach(child => {
-    updateComponent(child);  // ⚠️ 递归调用，无法中断
+    updateComponent(child);  // 递归调用，无法中断
   });
   
   // 3. 更新 DOM
@@ -45,7 +45,7 @@ function updateComponent(component) {
 }
 ```
 
-**核心问题**：
+主要问题是：
 
 1. **无法中断** - 递归一旦开始，必须执行完整个组件树
 2. **长时间占用主线程** - 大型应用更新可能需要 100ms+
@@ -67,9 +67,9 @@ function updateComponent(component) {
 
 如果 JavaScript 执行超过 16.6ms，就会导致**掉帧**，用户感知到卡顿。
 
-### Fiber 的解决方案
+### Fiber 想解决什么
 
-Fiber 架构的核心思想：
+我现在对 Fiber 的理解是：
 
 1. **将递归改为循环** - 可以随时中断和恢复
 2. **时间切片 (Time Slicing)** - 将长任务拆分成多个小任务
@@ -100,7 +100,7 @@ requestIdleCallback(workLoop);
 
 ---
 
-## 🧬 Fiber 是什么
+## Fiber 是什么
 
 ### 三重含义
 
@@ -151,7 +151,7 @@ type Fiber = {
 
 ---
 
-## 🌳 Fiber 节点结构
+## Fiber 节点结构
 
 ### 节点类型 (WorkTag)
 
@@ -247,7 +247,7 @@ button (HostComponent, stateNode: <button>)
 
 ---
 
-## 🏗️ Fiber 树的构建
+## Fiber 树的构建
 
 ### 首次渲染流程
 
@@ -358,7 +358,7 @@ function performUnitOfWork(unitOfWork) {
 
 ---
 
-## 🔄 双缓冲机制
+## 双缓冲机制
 
 ### 什么是双缓冲
 
@@ -419,7 +419,7 @@ currentRootFiber.alternate = workInProgressRootFiber;
 workLoop();
 
 // 4. 提交阶段：切换指针
-FiberRoot.current = workInProgressRootFiber;  // ⭐ 切换！
+FiberRoot.current = workInProgressRootFiber;  // 切换 current 指针
 
 // 5. 下次更新：wip 变成 current，current 变成 wip
 ```
@@ -461,7 +461,7 @@ p (current, alternate → old wip)
 
 ---
 
-## ⚙️ 工作循环与可中断渲染
+## 工作循环与可中断渲染
 
 ### Scheduler 调度器
 
@@ -596,7 +596,7 @@ function render() {
 
 ---
 
-## 🎯 优先级调度
+## 优先级调度
 
 ### Lane 模型
 
@@ -774,7 +774,7 @@ function markStarvedLanesAsExpired(root, currentTime) {
 
 ---
 
-## 🔍 Reconciliation 协调过程
+## Reconciliation 协调过程
 
 ### beginWork 阶段
 
@@ -1207,7 +1207,7 @@ function markRef(workInProgress) {
 
 ---
 
-## 📤 Commit 提交阶段
+## Commit 提交阶段
 
 Commit 阶段是**同步执行**的，不可中断，分为三个子阶段：
 
@@ -1628,7 +1628,7 @@ Layout 阶段（DOM 变更后）
 
 ---
 
-## 🪝 Hooks 与 Fiber
+## Hooks 与 Fiber
 
 ### Hooks 的存储结构
 
@@ -1893,7 +1893,7 @@ function App() {
   const [count, setCount] = useState(0);
   
   if (count > 0) {
-    const [name, setName] = useState('');  // ⚠️ 顺序不稳定
+    const [name, setName] = useState('');  // 顺序不稳定
   }
   
   const [age, setAge] = useState(18);
@@ -1913,7 +1913,7 @@ Hook 链表:
 ```
 Hook 链表:
   hook1 (useState: count)
-  hook2 (useState: name)  // ⚠️ 错位！
+  hook2 (useState: name)  // 错位
   hook3 (useState: age)
 ```
 
@@ -1936,7 +1936,7 @@ function App() {
 
 ---
 
-## 🎬 实战案例
+## 项目里怎么用这些理解
 
 ### 案例 1：大列表渲染优化
 
@@ -2352,9 +2352,9 @@ function DataProcessor() {
 
 ---
 
-## 📚 总结
+## 回头总结一下
 
-### Fiber 架构的核心特性
+### Fiber 主要解决的事
 
 1. **可中断渲染**
    - 将递归改为循环
@@ -2376,7 +2376,7 @@ function DataProcessor() {
    - 每帧执行一部分工作
    - 保持 60fps 的流畅度
 
-### Fiber 节点的关键字段
+### Fiber 节点里我会重点看的字段
 
 ```typescript
 type Fiber = {
@@ -2446,7 +2446,7 @@ Commit 阶段（同步，不可中断）
 异步执行 useEffect
 ```
 
-### 性能优化建议
+### 写业务时能带走的优化思路
 
 1. **使用 key** - 帮助 React 识别节点，提高 Diff 效率
 2. **使用 React.memo** - 避免不必要的渲染
@@ -2459,7 +2459,7 @@ Commit 阶段（同步，不可中断）
 
 ---
 
-## 🔗 参考资源
+## 参考资源
 
 - [React Fiber Architecture](https://github.com/acdlite/react-fiber-architecture)
 - [React 源码解析](https://react.iamkasong.com/)

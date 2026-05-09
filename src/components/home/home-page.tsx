@@ -3,11 +3,15 @@
 import { useEffect, type CSSProperties } from "react";
 import Link from "next/link";
 import {
+  Activity,
   ArrowRight,
   ArrowUpRight,
   Bot,
   ChevronRight,
+  CircleDot,
   Code2,
+  GitBranch,
+  Search,
   Sparkles,
   TerminalSquare,
 } from "lucide-react";
@@ -92,6 +96,42 @@ const projects = [
   },
 ];
 
+const agentProgress = [
+  {
+    status: "已跑通",
+    title: "单 Agent ReAct 循环",
+    description:
+      "LangGraph 里已经是 START → agent → tools → agent 的循环，模型会自己判断要不要查笔记或联网。现在它不只是聊天，已经开始有点“会找东西”的样子了。",
+  },
+  {
+    status: "已落地",
+    title: "RAG 知识库检索",
+    description:
+      "MDX 笔记会被切片、embedding 后塞进 pgvector，提问时再按相似度捞上下文。简单说：以前笔记是给我看的，现在也要给 AI 打工。",
+  },
+  {
+    status: "已接入",
+    title: "SSE 与工具状态",
+    description:
+      "后端把 thinking、model_select、tool_start、tool_end、text_delta 推给前端，页面能看到它正在查什么、查完了什么，再一点点把答案打出来。",
+  },
+  {
+    status: "继续补",
+    title: "路由、监控和多 Agent",
+    description:
+      "意图分类、模型路由、调用日志已经有骨架；下一步要把降级重试、工具耗时、多 Agent 协作做实。也就是少写一点“企业级”，多让它真的扛事。",
+  },
+];
+
+const agentPipeline = [
+  "用户提问",
+  "意图分类",
+  "模型路由",
+  "LangGraph 决策",
+  "RAG / Web 工具",
+  "SSE 流式返回",
+];
+
 const stackGroups = [
   {
     title: "前端",
@@ -118,11 +158,12 @@ export function HomePage() {
   useHomeReveal();
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-300">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[linear-gradient(to_bottom,var(--surface),transparent)] opacity-70" />
-      <main className="relative z-10 mx-auto max-w-5xl px-6 pb-32 pt-24 sm:px-10 lg:px-16">
+    <div className="home-shell min-h-screen overflow-hidden bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-300">
+      <div className="home-atmosphere" />
+      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-32 pt-20 sm:px-10 lg:px-16">
         <div className="space-y-32">
           <HeroSection />
+          <AgentStatusSection />
           <FocusSection />
           <NotesSection />
           <ProjectsSection />
@@ -166,17 +207,17 @@ function useHomeReveal() {
 function HeroSection() {
   return (
     <section
-      className="home-scroll-reveal flex flex-col items-center pb-8 pt-10 text-center"
+      className="home-scroll-reveal home-hero flex flex-col items-center pb-10 pt-12 text-center"
       data-home-reveal
     >
-      <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-1.5 shadow-[var(--shadow-soft)]">
+      <div className="home-kicker mb-8 inline-flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
-        <span className="text-[11px] font-medium uppercase tracking-normal text-[var(--text-secondary)]">
+        <span className="font-mono text-[11px] font-medium uppercase tracking-normal text-[var(--text-secondary)]">
           Serein 的个人技术小站
         </span>
       </div>
 
-      <h1 className="text-balance max-w-4xl text-4xl font-semibold leading-[1.08] tracking-normal text-[var(--text-strong)] sm:text-5xl lg:text-6xl">
+      <h1 className="home-hero-title text-balance max-w-5xl text-4xl font-semibold leading-[1.08] tracking-normal text-[var(--text-strong)] sm:text-5xl lg:text-6xl">
         写点代码，记点坑，
         <br />
         顺手把<span className="text-[var(--accent)]">思路</span>晾一晾。
@@ -206,6 +247,110 @@ function HeroSection() {
         </EditorialButton>
       </div>
 
+    </section>
+  );
+}
+
+function AgentStatusSection() {
+  return (
+    <section className="home-scroll-reveal home-agent-panel" data-home-reveal>
+      <div className="home-agent-grid">
+        <div className="home-agent-copy space-y-5">
+          <div className="home-kicker inline-flex items-center gap-2">
+            <Activity className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span className="font-mono text-[11px] uppercase tracking-normal text-[var(--text-secondary)]">
+              Agent 近况 · 2026.05
+            </span>
+          </div>
+
+          <div>
+            <h2 className="max-w-xl text-3xl font-semibold leading-tight text-[var(--text-strong)] sm:text-4xl">
+              最近主要在把博客 AI 从“会回答”改成“会自己找资料”。
+            </h2>
+            <p className="mt-5 text-base leading-8 text-[var(--text-secondary)]">
+              进度大概到单 Agent 可用版：能分类问题、选模型、调 RAG 或联网搜索，再用 SSE 把思考和工具状态推到前端。还没到科幻片水平，但已经不是只会嗯嗯啊啊的聊天框了。
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <EditorialButton
+              href="/notes/agent/langgraph-agent"
+              icon={GitBranch}
+              fillDirection="left"
+              tone="accent"
+              className="w-full sm:w-auto"
+            >
+              看 LangGraph 笔记
+            </EditorialButton>
+            <EditorialButton
+              href="/chat"
+              icon={Bot}
+              fillDirection="bottom"
+              className="w-full sm:w-auto"
+            >
+              试试这个半成品
+            </EditorialButton>
+          </div>
+        </div>
+
+        <div className="home-agent-console">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-3 flex items-center gap-1.5">
+                <span className="h-1.5 w-5 rounded-full bg-[var(--accent)]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--border-strong)]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--border-default)]" />
+              </div>
+              <h3 className="font-mono text-sm font-semibold uppercase tracking-normal text-[var(--text-strong)]">
+                agent runtime
+              </h3>
+              <p className="mt-1 text-sm text-[var(--text-tertiary)]">
+                不是魔法，主要是一串能被 debug 的工程管线。
+              </p>
+            </div>
+            <Search className="h-5 w-5 text-[var(--accent)]" />
+          </div>
+
+          <div className="home-agent-pipeline">
+            {agentPipeline.map((step, index) => (
+              <div
+                key={step}
+                className="home-agent-step"
+                style={{ "--home-reveal-delay": `${index * 45}ms` } as CSSProperties}
+              >
+                <span className="font-mono text-[10px] text-[var(--accent)]">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="text-sm font-medium leading-5 text-[var(--text-strong)]">
+                  {step}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="home-agent-track mt-12">
+        {agentProgress.map((item, index) => (
+          <article
+            key={item.title}
+            className="home-scroll-reveal home-agent-row"
+            data-home-reveal
+            style={{ "--home-reveal-delay": `${index * 70}ms` } as CSSProperties}
+          >
+            <span className="home-agent-status">
+              <CircleDot className="h-3 w-3 text-[var(--accent)]" />
+              {item.status}
+            </span>
+            <h3 className="text-lg font-semibold text-[var(--text-strong)]">
+              {item.title}
+            </h3>
+            <p className="max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+              {item.description}
+            </p>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

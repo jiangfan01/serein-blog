@@ -5,9 +5,9 @@ description: 如何在 SSE 流式输出 5000+ 字时保持 60fps 不卡顿
 
 # React 长文本流式渲染性能优化
 
-> 面试高频题：大模型生成 5000+ 字的超长 Markdown，如何保证页面不卡顿？
+> 这是我在做 AI 对话流式输出时遇到的一个真实问题：模型一直吐 Markdown，前端不能跟着一起卡。
 
-## 🎯 问题场景
+## 问题场景
 
 ### 性能瓶颈
 
@@ -37,7 +37,7 @@ function ChatMessage({ content }: { content: string }) {
 
 ---
 
-## 💡 架构为什么不卡顿？
+## 为什么这套渲染方式不卡顿？
 
 ### 核心策略：事件合并 + 增量更新
 
@@ -462,11 +462,11 @@ function MarkdownRenderer({ content }: { content: string }) {
 
 ---
 
-## 🎓 面试话术
+## 如果要讲给别人听
 
 ### 问题：5000+ 字的 Markdown 如何保证不卡顿？
 
-> "我的架构采用了**三层优化策略**：
+> "我这里主要分三层处理：
 >
 > **第一层：事件级别的批量处理**。每收到一个 SSE chunk，不是立即更新 React 状态，而是先 push 到 Buffer。然后用 RAF 在每一帧 flush Buffer 中的所有事件。这样 100 个 chunk 只会触发 6 次 React 更新（60fps）。
 >
@@ -474,7 +474,7 @@ function MarkdownRenderer({ content }: { content: string }) {
 >
 > **第三层：组件级别的优化**。MarkdownRenderer 使用 React.memo 和自定义比较函数，只有 content 变化才重新渲染。同时使用 useMemo 缓存解析结果。
 >
-> 这三层优化叠加，即使是 5000+ 字的长文本，也能保持 60fps 的流畅渲染。"
+> 这三层叠起来，5000+ 字的长文本也不会每个 chunk 都逼 React 重算。"
 
 ### 问题：如果文本超过 10000 字呢？
 
@@ -542,23 +542,23 @@ function MarkdownRenderer({ content }: { content: string }) {
 
 ---
 
-## 📚 总结
+## 回头看这套方案
 
-### 你的架构的核心优势
+### 这套做法解决了什么
 
 1. **事件批量处理（RAF）** - 减少 94% 的渲染次数
 2. **消息合并** - 100 个组件变成 1 个组件
 3. **React.memo** - 避免不必要的重渲染
 4. **单一数据源** - 累积的完整字符串，而不是增量片段
 
-### 为什么不卡顿？
+### 为什么会有效？
 
 - **减少了渲染次数**：100 次 → 6 次
 - **减少了组件数量**：100 个 → 1 个
 - **减少了 Diff 成本**：对比 100 个组件 → 对比 1 个组件
 - **减少了 DOM 操作**：更新 100 个节点 → 更新 1 个节点
 
-### 进一步优化方向
+### 后面还能继续优化的地方
 
 - 虚拟滚动（超长文本）
 - Web Worker（后台解析）
@@ -567,7 +567,7 @@ function MarkdownRenderer({ content }: { content: string }) {
 
 ---
 
-## 🔗 相关资源
+## 相关资源
 
 - [React Profiler API](https://react.dev/reference/react/Profiler)
 - [React.memo](https://react.dev/reference/react/memo)

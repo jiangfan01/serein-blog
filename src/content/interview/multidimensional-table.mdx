@@ -1,10 +1,10 @@
-# 多维表格模块开发指南
+# 多维表格模块梳理
 
-> 本文档帮助你快速理解多维表格（MDT）模块的架构、数据流和各组件职责。
+这篇是我对多维表格模块的一次整理。它更像工作笔记：先把目录、数据流、组件职责放清楚，后面再回头看某个细节时不至于重新翻代码。
 
-## 一、模块概览
+## 一、先看模块长什么样
 
-多维表格是一个类似飞书多维表格的功能模块，基于 AG-Grid 实现，支持多种字段类型、单元格编辑、异步任务状态等功能。
+这个模块有点像飞书多维表格，底层基于 AG-Grid，实现了字段类型、单元格编辑、异步任务状态这些能力。
 
 ### 目录结构
 
@@ -12,7 +12,7 @@
 apps/web/src/pages/MultiDimensionTable/
 ├── index.tsx                 # 路由入口（重定向到 TablePage）
 ├── pages/
-│   └── TablePage.tsx         # 主页面组件（核心！）
+│   └── TablePage.tsx         # 主页面组件
 ├── components/
 │   ├── TableView/            # AG-Grid 表格视图
 │   │   ├── index.tsx         # 表格主组件
@@ -36,7 +36,7 @@ apps/web/src/pages/MultiDimensionTable/
 
 ---
 
-## 二、核心概念
+## 二、几个概念先对齐
 
 ### 2.1 数据模型
 
@@ -363,7 +363,7 @@ export function SocialLinkCard({ value, fieldConfig, recordId }) {
 
 ---
 
-## 十、调试技巧
+## 十、我常用的调试方式
 
 ### 10.1 查看 AG-Grid 状态
 
@@ -395,7 +395,7 @@ window.dispatchEvent(new CustomEvent('table-refresh'));
 
 ---
 
-## 十一、注意事项
+## 十一、容易忘的细节
 
 1. **数据命名**: 前端始终使用 camelCase，适配器负责转换
 2. **主题颜色**: 使用 CSS 变量（如 `var(--text-primary)`），不要硬编码颜色

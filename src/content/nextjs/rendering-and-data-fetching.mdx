@@ -5,18 +5,18 @@ description: SSR、SSG、ISR、CSR 渲染模式，Server/Client Components，API
 
 # Next.js 渲染模式与数据获取
 
-> Next.js 面试必考：渲染模式选择、组件类型区分、数据获取方式
+> Next.js 这块我最容易混的是“这个页面到底在哪渲染、数据在哪拿、哪些代码会进浏览器”。这篇先把这些选择放到一起看。
 
-## 📋 目录
+## 目录
 
 1. [四种渲染模式](#四种渲染模式)
 2. [Server Components vs Client Components](#server-components-vs-client-components)
 3. [API Routes vs Server Actions](#api-routes-vs-server-actions)
-4. [实战选型指南](#实战选型指南)
+4. [放到项目里怎么选](#放到项目里怎么选)
 
 ---
 
-## 🎨 四种渲染模式
+## 四种渲染模式
 
 ### 概览对比
 
@@ -132,7 +132,7 @@ async function ProductPage({ params }: { params: { id: string } }) {
   );
 }
 
-// ⭐ 关键：设置重新验证时间
+// 设置重新验证时间
 export const revalidate = 60; // 60 秒后重新生成
 
 export default ProductPage;
@@ -267,9 +267,9 @@ export default AdminPage;
 
 ---
 
-## 🧩 Server Components vs Client Components
+## Server Components vs Client Components
 
-### 核心区别
+### 先看区别
 
 | 特性 | Server Components | Client Components |
 |------|------------------|-------------------|
@@ -325,7 +325,7 @@ export default PostsPage;
 
 ```typescript
 // components/like-button.tsx
-'use client';  // ⭐ 必须声明
+'use client';  // 需要声明
 
 import { useState } from 'react';
 
@@ -365,7 +365,7 @@ export default LikeButton;
 
 ---
 
-### 组合使用（最佳实践）
+### 组合使用
 
 ```typescript
 // app/posts/[id]/page.tsx (Server Component)
@@ -432,7 +432,7 @@ async function PostsPage() {
 
 ---
 
-## 🔌 API Routes vs Server Actions
+## API Routes vs Server Actions
 
 ### API Routes
 
@@ -727,7 +727,7 @@ function CreatePostForm() {
 
 ---
 
-### 对比总结
+### 对比一下
 
 | 特性 | API Routes | Server Actions |
 |------|-----------|----------------|
@@ -740,7 +740,7 @@ function CreatePostForm() {
 
 ---
 
-### 选择指南
+### 我会怎么选
 
 **用 API Routes**：
 - 需要被外部系统调用（Webhook、第三方集成）
@@ -756,9 +756,9 @@ function CreatePostForm() {
 
 ---
 
-## 🎯 实战选型指南
+## 放到项目里怎么选
 
-### 你的 AI 平台项目
+### 我的 AI 平台项目
 
 ```typescript
 // 1. 聊天页面 - SSR（需要用户信息）
@@ -807,11 +807,11 @@ export async function toggleLike(postId: string) {
 
 ---
 
-## 🎓 面试话术
+## 如果要讲给别人听
 
 ### 问题：Next.js 有哪些渲染模式？
 
-> "Next.js 有四种渲染模式：
+> "Next.js 里我会先按数据新鲜度和交互复杂度来选：
 >
 > **SSG（静态生成）**：构建时生成 HTML，适合博客、文档等内容不常变的页面，性能最好。
 >
@@ -821,13 +821,13 @@ export async function toggleLike(postId: string) {
 >
 > **CSR（客户端渲染）**：浏览器端渲染，适合后台管理系统等不需要 SEO 的场景。
 >
-> 在我的项目中，博客用 ISR，聊天页面用 SSR，管理后台用 CSR。"
+> 放到我的项目里，博客内容适合 ISR，聊天页面需要用户信息和历史消息，更偏 SSR；管理后台交互密集，不太依赖 SEO，可以接受更多客户端渲染。"
 
 ### 问题：Server Components 和 Client Components 的区别？
 
 > "Server Components 在服务器渲染，不会发送 JavaScript 到客户端，可以直接访问数据库和文件系统。Client Components 在浏览器渲染，可以使用 useState、useEffect 和事件处理。
 >
-> 我的原则是：**尽量保持 Server Component，只在需要交互的地方用 Client Component**。比如文章详情页是 Server Component，但点赞按钮是 Client Component。这样可以减少客户端 JavaScript 体积，提升首屏性能。"
+> 我的原则是：**能留在 Server Component 就先留在服务端，只有需要交互、状态和浏览器 API 的地方再切 Client Component**。比如文章详情页可以是 Server Component，但点赞按钮是 Client Component。"
 
 ### 问题：API Routes 和 Server Actions 怎么选？
 
@@ -835,11 +835,11 @@ export async function toggleLike(postId: string) {
 >
 > Server Actions 是 Next.js 13.4+ 的新特性，可以直接在组件中调用服务端函数，配合 `revalidatePath` 自动更新缓存，适合表单提交和简单的 CRUD 操作。
 >
-> 在我的项目中，SSE 流式响应用 API Routes（因为需要返回 Stream），表单提交用 Server Actions（更简洁，类型安全）。"
+> 在我的项目中，SSE 流式响应用 API Routes，因为需要直接返回 Stream；表单提交这类站内操作更适合 Server Actions，写起来更贴近组件。"
 
 ---
 
-## 🔗 相关资源
+## 相关资源
 
 - [Next.js 官方文档 - Rendering](https://nextjs.org/docs/app/building-your-application/rendering)
 - [Next.js 官方文档 - Server Actions](https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations)

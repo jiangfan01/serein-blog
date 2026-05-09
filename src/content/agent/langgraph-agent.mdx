@@ -1,10 +1,10 @@
 # LangGraph Agent 实战
 
-## 从 Function Calling 到 Agent：缺了什么
+## 从 Function Calling 到 Agent，中间差了什么
 
-Function Calling 解决了"模型能调工具"的问题，但它是**单轮**的——调一次工具就结束了。
+Function Calling 解决的是“模型能不能调工具”。但只调一次工具还不太像 Agent，更像一次函数分发。
 
-现实中的任务往往需要多步：
+很多真实问题会需要好几步：
 
 ```
 用户: "帮我对比一下博客里 React 和 Vue 的更新机制"
@@ -18,11 +18,11 @@ Agent 多轮推理：
   → 第三步：两篇都读完了，综合对比生成回答
 ```
 
-Agent = Function Calling + **循环** + **状态管理**。LangGraph 就是帮你搭这个循环和状态的框架。
+所以我现在会把 Agent 简化成：Function Calling + **循环** + **状态管理**。LangGraph 做的事，就是把这个循环和状态管理整理成一张图。
 
-## LangGraph 核心概念
+## LangGraph 先看三个概念
 
-LangGraph 用**有向图**来编排 Agent 的工作流。三个核心概念：
+LangGraph 用**有向图**来编排 Agent。先抓住三个东西就够了：
 
 ```
 ┌─────────────────────────────────────┐
@@ -44,17 +44,17 @@ LangGraph 用**有向图**来编排 Agent 的工作流。三个核心概念：
 └─────────────────────────────────────┘
 ```
 
-类比前端：LangGraph 就像一个**状态机驱动的 React 应用**——State 是全局状态，Node 是页面组件，Edge 是路由规则。用户的每次交互（工具调用结果）驱动状态变化，状态变化触发下一个节点执行。
+如果用前端类比，LangGraph 有点像状态机驱动的应用：State 是共享状态，Node 是处理函数，Edge 决定下一步去哪。工具结果进来后，状态变了，图就继续往下跑。
 
-## 最简 Agent：ReAct 模式
+## 先写一个最小 ReAct
 
-ReAct（Reasoning + Acting）是最经典的 Agent 模式：
+ReAct（Reasoning + Acting）可以先理解成这个循环：
 
 ```
 思考 → 行动 → 观察 → 思考 → 行动 → 观察 → ... → 最终回答
 ```
 
-用 LangGraph 实现：
+用 LangGraph 写出来大概是这样：
 
 ```typescript
 import { StateGraph, MessagesAnnotation, END } from '@langchain/langgraph';
@@ -160,7 +160,7 @@ const graph = new StateGraph(MessagesAnnotation)
     └────────────────────────
 ```
 
-这就是一个循环：Agent 思考 → 需要工具就调 → 拿到结果再思考 → 直到不需要工具为止。
+这就是最小循环：Agent 先想一下，觉得需要工具就调工具，拿到结果后再回到 Agent，直到它觉得可以回答。
 
 ### 调用 Agent
 
@@ -177,7 +177,7 @@ const result = await graph.invoke({
 // [HumanMessage, AIMessage(tool_call), ToolMessage, AIMessage(tool_call), ToolMessage, AIMessage(最终回答)]
 ```
 
-## State：Agent 的记忆
+## State：别让 Agent 每一步都失忆
 
 `MessagesAnnotation` 是 LangGraph 内置的状态，只包含消息列表。实际项目中你可能需要自定义状态：
 
@@ -369,25 +369,25 @@ const tools = [
 ];
 ```
 
-## Agent 设计的常见坑
+## 写 Agent 时我会先防这些坑
 
 ### 1. 无限循环
-Agent 可能反复调用同一个工具。解决方案：
+Agent 可能反复调用同一个工具。我的第一反应是先加硬限制：
 - 加步骤计数器，超过阈值强制结束
 - 在状态里记录已调用的工具和参数，避免重复
 
 ### 2. 工具结果太长
-工具返回大量文本会撑爆 context window。解决方案：
+工具返回大量文本会撑爆 context window，所以工具层就要先做整理：
 - 工具内部做截断或摘要
 - 限制返回结果数量
 
-### 3. 模型"忘记"目标
-多步推理中，模型可能偏离原始问题。解决方案：
+### 3. 模型“忘记”目标
+多步推理里，模型有时会被中间结果带偏。这里可以这样处理：
 - 在 system prompt 里强调"始终围绕用户的原始问题"
 - 每次回到 Agent 节点时，把原始问题重新注入
 
 ### 4. 错误处理
-工具执行可能失败。解决方案：
+工具执行失败很正常，不要让整条链路直接炸掉：
 
 ```typescript
 const safeToolNode = async (state) => {
@@ -408,9 +408,9 @@ const safeToolNode = async (state) => {
 };
 ```
 
-## LangGraph vs 手写循环
+## LangGraph 和手写 while 怎么选
 
-你可能会想：这个循环我自己用 while 写不就行了？
+看到这里其实很自然会想：这个循环我自己用 `while` 写不就行了？
 
 ```typescript
 // 手写版
@@ -422,7 +422,7 @@ while (true) {
 }
 ```
 
-简单场景确实够用。LangGraph 的价值在于：
+简单场景确实够用。LangGraph 的价值主要在这些地方：
 
 | 能力 | 手写 | LangGraph |
 |---|---|---|
@@ -434,15 +434,15 @@ while (true) {
 | 流式输出 | 要自己拼 SSE | 内置 streamEvents |
 | 可视化调试 | 没有 | LangSmith 集成 |
 
-如果你只是做一个简单的 RAG + 工具调用，手写 while 循环就够了。如果要做复杂的多步推理、人工审核、并行任务，LangGraph 能省很多事。
+所以我的判断是：简单 RAG + 一两个工具，手写循环也可以；一旦要做多分支、持久化、人工介入、并行任务，LangGraph 会更省心。
 
 ## 下一步
 
-到这里你已经掌握了单 Agent 的完整能力：
+现在单 Agent 这条线基本能串起来了：
 
 - Transformer → 底层原理（知道为什么）
 - Function Calling → 工具调用（Agent 的手）
 - Prompt Engineering → 提示词设计（Agent 的脑）
 - LangGraph → 状态机编排（Agent 的骨架）
 
-接下来进入多 Agent 协作——当一个 Agent 搞不定时，让多个 Agent 分工合作。
+接下来再看多 Agent：一个 Agent 不够用的时候，怎么拆；以及什么时候其实不该拆。

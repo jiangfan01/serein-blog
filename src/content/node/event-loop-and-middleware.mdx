@@ -1,22 +1,22 @@
 ---
 title: Node.js 事件循环与中间件机制
-description: Node.js 事件循环、Express/Koa 中间件、洋葱模型、常见面试题
+description: Node.js 事件循环、Express/Koa 中间件、洋葱模型和 Stream 流处理
 ---
 
 # Node.js 事件循环与中间件机制
 
-> Node.js 面试必考：事件循环执行顺序、中间件洋葱模型、Stream 流处理
+> 这篇把 Node.js 里几个经常混在一起的问题放到一块：事件循环怎么排队，中间件为什么会有洋葱模型，Stream 什么时候真的有用。
 
-## 📋 目录
+## 目录
 
 1. [Node.js 事件循环](#nodejs-事件循环)
 2. [中间件机制](#中间件机制)
 3. [Stream 流处理](#stream-流处理)
-4. [常见面试题](#常见面试题)
+4. [几个常见问题](#几个常见问题)
 
 ---
 
-## 🔄 Node.js 事件循环
+## Node.js 事件循环
 
 ### 与浏览器事件循环的区别
 
@@ -113,7 +113,7 @@ fs.readFile('file.txt', () => {
 // setTimeout
 ```
 
-#### 3. 完整示例
+#### 3. 放到一个例子里看
 
 ```javascript
 console.log('1. start');
@@ -191,7 +191,7 @@ setTimeout(() => {
 
 ---
 
-## 🧅 中间件机制
+## 中间件机制
 
 ### Express 中间件
 
@@ -236,7 +236,7 @@ app.get('/', (req, res) => {
 app.use(async (req, res, next) => {
   console.log('开始');
   await someAsyncOperation();
-  next();  // ⚠️ next() 不会等待后续中间件完成
+  next();  // next() 不会等待后续中间件完成
   console.log('结束');  // 可能在后续中间件完成之前就执行了
 });
 ```
@@ -254,7 +254,7 @@ const app = new Koa();
 // 中间件 1
 app.use(async (ctx, next) => {
   console.log('1. 进入中间件 1');
-  await next();  // ⭐ await 等待后续中间件完成
+  await next();  // await 等待后续中间件完成
   console.log('6. 离开中间件 1');
 });
 
@@ -293,7 +293,7 @@ app.use(async (ctx, next) => {
         │  │  │  ┌─────────────────────┐  │  │ │
         │  │  │  │     中间件 3        │  │  │ │
         │  │  │  │                     │  │  │ │
-        └──┼──┼──┼──> 核心处理 ────────┼──┼──┼─┘
+        └──┼──┼──┼──> 业务处理 ────────┼──┼──┼─┘
            │  │  │                     │  │  │
            │  │  └─────────────────────┘  │  │
            │  └───────────────────────────┘  │
@@ -405,7 +405,7 @@ export const config = {
 
 ---
 
-### 中间件对比总结
+### 中间件对比
 
 | 框架 | 模型 | 异步处理 | 特点 |
 |------|------|---------|------|
@@ -415,7 +415,7 @@ export const config = {
 
 ---
 
-## 🌊 Stream 流处理
+## Stream 流处理
 
 ### 四种 Stream 类型
 
@@ -517,7 +517,7 @@ fs.createReadStream('input.txt')
 
 ---
 
-## ❓ 常见面试题
+## 几个常见问题
 
 ### 1. Node.js 是单线程吗？
 
@@ -564,7 +564,7 @@ process.on('unhandledRejection', (reason, promise) => {
   // Node.js 15+ 默认会退出进程
 });
 
-// 3. 最佳实践：使用 try-catch 和 .catch()
+// 3. 常规做法：使用 try-catch 和 .catch()
 async function main() {
   try {
     await riskyOperation();
@@ -672,7 +672,7 @@ export default { foo: 'bar' };
 
 ---
 
-## 🎓 面试话术
+## 如果要讲给别人听
 
 ### 问题：Node.js 事件循环和浏览器有什么区别？
 
@@ -694,7 +694,7 @@ export default { foo: 'bar' };
 >
 > Koa 使用 `await next()`，会等待后续中间件执行完成再继续，形成真正的**洋葱模型**。这样可以很方便地在中间件中做前置处理和后置处理，比如计算请求耗时、统一错误处理等。
 >
-> 在我的项目中，如果需要精确控制中间件执行顺序，我会选择 Koa。"
+> 如果需要精确控制中间件执行顺序，我会更偏向 Koa 这种 `await next()` 模型。"
 
 ### 问题：什么时候用 Stream？
 
@@ -706,7 +706,7 @@ export default { foo: 'bar' };
 
 ---
 
-## 🔗 相关资源
+## 相关资源
 
 - [Node.js 官方文档 - Event Loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick)
 - [Koa 中间件原理](https://github.com/koajs/compose)

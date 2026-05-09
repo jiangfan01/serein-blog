@@ -1,17 +1,17 @@
-# RAG 深入理解
+# RAG 再往下看一层
 
-## 你已经有的基础
+## 先看我现在做到哪了
 
-在"开发经历"里你已经写过一篇 RAG 架构文章，实现了完整的检索增强生成管线：
+博客里的 AI 助手已经有一条基础 RAG 管线：
 
 ```
 MDX 笔记 → 切片 → Embedding → pgvector 存储
 用户提问 → Embedding → 余弦相似度检索 → 拼接上下文 → LLM 生成
 ```
 
-这篇不重复基础，而是讲：**你现在的 RAG 有什么问题、怎么优化、业界在用什么高级策略。**
+这篇先不重复“RAG 是什么”，而是站在现在这个实现上看：哪里容易不准，后面可以怎么继续改。
 
-## 当前实现的瓶颈
+## 现在这版 RAG 的几个问题
 
 ### 问题 1：语义鸿沟
 
@@ -22,11 +22,11 @@ MDX 笔记 → 切片 → Embedding → pgvector 存储
 文档写: "React.memo 会对 props 进行浅比较，如果 props 没有变化则跳过渲染"
 ```
 
-用户用的是"避免不必要的渲染"，文档用的是"跳过渲染"。虽然语义相近，但 Embedding 向量的相似度可能不够高，导致检索不到最相关的内容。
+用户说的是“避免不必要的渲染”，文档写的是“跳过渲染”。人能看出来这俩有关，但向量检索不一定每次都能捞到最相关的那一段。
 
 ### 问题 2：检索精度 vs 召回率
 
-你现在 `topK = 3`，只取最相似的 3 个切片。问题是：
+我现在 `topK = 3`，只取最相似的 3 个切片。这里会有一个很现实的取舍：
 - 太少：可能漏掉相关内容
 - 太多：不相关的内容混进来，干扰 LLM 回答
 
@@ -38,11 +38,11 @@ MDX 笔记 → 切片 → Embedding → pgvector 存储
 
 你现在的架构是所有用户问题都做向量检索。但有些问题不需要检索（"你好"、"你是谁"），有些问题需要不同的检索策略（"对比 React 和 Vue"需要检索两个主题）。
 
-## 优化策略
+## 可以怎么慢慢优化
 
-### 策略 1：Query Rewriting（查询改写）
+### 方案 1：Query Rewriting（查询改写）
 
-在检索之前，先让 LLM 把用户的口语化问题改写成更适合检索的形式。
+检索前先让 LLM 把用户的口语问题改写一下，变成更适合向量检索的关键词。
 
 ```typescript
 import { ChatOpenAI } from '@langchain/openai';
@@ -77,11 +77,11 @@ const rewritten = await rewriteQuery(original);
 const results = await retrieveContext(rewritten);
 ```
 
-改写后的查询包含了更多相关术语，Embedding 匹配度会更高。
+改写后的查询会带上更多技术词，命中率通常会比直接拿用户原话去搜更稳。
 
-### 策略 2：HyDE（假设性文档嵌入）
+### 方案 2：HyDE（假设性文档嵌入）
 
-思路更激进：不是改写查询，而是让 LLM 先**假装回答**这个问题，然后用这个"假回答"去做检索。
+HyDE 更绕一点：不是改写问题，而是先让模型“假装回答”一次，再用这个“假回答”去检索。
 
 ```typescript
 async function hydeRetrieve(query: string): Promise<string> {
@@ -100,7 +100,7 @@ async function hydeRetrieve(query: string): Promise<string> {
 }
 ```
 
-为什么有效？因为 LLM 生成的"假回答"在表述方式上更接近文档的写法，Embedding 相似度更高。
+它有时有效，是因为模型生成的“假回答”更像一段技术文档，和真正笔记的表达会更接近。
 
 ```
 用户问: "React 怎么避免不必要的渲染"
@@ -114,7 +114,7 @@ async function hydeRetrieve(query: string): Promise<string> {
 
 代价是多了一次 LLM 调用，但用便宜的小模型（gpt-4o-mini）就够了。
 
-### 策略 3：Multi-Query（多查询检索）
+### 方案 3：Multi-Query（多查询检索）
 
 一个问题拆成多个角度去检索，合并结果：
 
@@ -158,9 +158,9 @@ React Vue 框架对比 设计理念差异`,
 }
 ```
 
-这对"对比类"问题特别有效——"对比 React 和 Vue"会被拆成分别检索 React 和 Vue 的内容。
+这种方式比较适合“对比类”问题。比如“React 和 Vue 区别”最好不要只搜一句话，而是分别把 React、Vue、对比维度都搜一遍。
 
-### 策略 4：Reranker（重排序）
+### 方案 4：Reranker（重排序）
 
 先粗检索（topK 较大），再用专门的 Reranker 模型精排：
 
@@ -202,13 +202,13 @@ async function rerank(query: string, documents: string[]): Promise<string[]> {
 }
 ```
 
-为什么 Reranker 比纯向量检索准？
+为什么 Reranker 往往比纯向量检索准一点？
 - Embedding 检索是**双编码器**：query 和 document 分别编码，只比较向量距离
 - Reranker 是**交叉编码器**：把 query 和 document 拼在一起输入模型，能捕捉更细粒度的语义关系
 
 代价是 Reranker 不能做大规模检索（太慢），所以用"粗检索 + 精排"的两阶段策略。
 
-### 策略 5：路由检索（结合 Agent）
+### 方案 5：路由检索（结合 Agent）
 
 不是所有问题都需要 RAG。用 Agent 的 Function Calling 能力做路由：
 
@@ -235,11 +235,11 @@ const tools = [
 ];
 ```
 
-这就是上一篇 LangGraph 讲的——让 Agent 自己判断该不该检索、怎么检索。
+这就接到 LangGraph 那篇了：让 Agent 先判断该不该检索、用哪个工具检索，而不是所有问题都走同一条管线。
 
-## 你的 RAG 可以怎么升级
+## 我会按什么顺序升级
 
-按投入产出比排序：
+如果按投入产出比排，我会先这样走：
 
 | 优先级 | 策略 | 改动量 | 效果 |
 |---|---|---|---|
@@ -249,11 +249,11 @@ const tools = [
 | ⭐⭐ | Multi-Query | 加一个函数 | 对比类问题效果好 |
 | ⭐ | HyDE | 加一个函数 | 效果好但多一次 LLM 调用 |
 
-最推荐先做 **Query Rewriting + Reranker**，改动小、效果明显、成本低（SiliconFlow 的 Reranker 免费）。
+我自己会优先做 **Query Rewriting + Reranker**。改动不算大，效果也容易通过测试问题看出来。
 
-## 进阶：Chunking 策略优化
+## 切片也要继续调
 
-你现在用的是固定大小切片（800 字符 + 200 重叠）。更好的方案：
+现在是固定大小切片（800 字符 + 200 重叠）。这能跑，但不是特别聪明。
 
 ### 语义切片
 
@@ -268,7 +268,7 @@ const basicSplitter = new RecursiveCharacterTextSplitter({
   chunkOverlap: 200,
 });
 
-// 更好的方式：按 markdown 结构切
+// 更适合笔记的方式：按 markdown 结构切
 const markdownSplitter = RecursiveCharacterTextSplitter.fromLanguage(
   'markdown',
   {
@@ -293,11 +293,11 @@ const markdownSplitter = RecursiveCharacterTextSplitter.fromLanguage(
 回答时：返回匹配到的小切片所属的大切片（完整）
 ```
 
-这解决了"切片太小丢上下文、切片太大检索不准"的矛盾。
+它是在折中“切片太小丢上下文”和“切片太大检索不准”这两个问题。
 
-## Evaluation：怎么知道 RAG 变好了
+## 怎么知道它真的变好了
 
-优化 RAG 最大的坑是**没有评估标准**，凭感觉调参。
+调 RAG 很容易变成凭感觉：今天觉得准，明天又觉得不准。所以最好留一组固定测试问题。
 
 ### 简单评估方法
 
@@ -334,20 +334,20 @@ async function evaluate() {
 }
 ```
 
-每次改完检索策略跑一遍，数据说话。
+每次改完检索策略跑一遍，至少能知道自己有没有把原来能搜到的内容改丢。
 
 ## 和 Agent 的关系
 
-RAG 是 Agent 最常用的工具之一。在 Agent 架构中：
+RAG 放到 Agent 里，更像一个常用工具，而不是整套系统本身：
 
 - **纯 RAG**：所有问题 → 检索 → 回答（你现在的方式）
 - **Agent + RAG**：Agent 判断是否需要检索、用什么策略检索、检索结果够不够（下一步）
 - **Agentic RAG**：Agent 可以多次检索、换关键词重试、结合多个来源综合回答
 
-从纯 RAG 到 Agentic RAG，就是从"固定管线"到"智能管线"的升级。这也是你新公司 AI Demo 可以讲的故事。
+从纯 RAG 到 Agentic RAG，本质上就是从“固定管线”变成“会根据问题调整策略的管线”。
 
 ## 下一步
 
-RAG 是 Agent 的"眼睛"（获取外部知识），Function Calling 是 Agent 的"手"（操作外部系统）。接下来：
+RAG 可以理解成 Agent 的“查资料能力”，Function Calling 是“动手能力”。下一步就是看多个 Agent 怎么分工。
 
-→ 你已经看过 LangGraph Agent 了，下一篇是**多 Agent 协作架构**——当一个 Agent 搞不定时，让多个 Agent 分工合作。
+→ 下一篇看 **多 Agent 协作架构**：什么时候一个 Agent 不够用，什么时候又没必要拆太多。

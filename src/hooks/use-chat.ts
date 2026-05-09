@@ -9,8 +9,7 @@
  * - clearMessages: 清空消息（切换会话时用）
  *
  * 断线重连：
- * - executionId: 当前执行 ID（用于断线重连）
- * - recoverExecution: 恢复执行状态
+ * - checkAndRecover: 检查会话状态，如果有 running 的执行就恢复
  * - 页面可见性变化时自动检查并恢复
  *
  * 打字机效果：buffer 收集 + RAF 批量刷新
@@ -22,6 +21,14 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useSSEParser } from "./use-sse-parser";
 import { useTokenStore } from "./use-auth";
 import type { SessionMessage } from "./use-sessions";
+
+// 执行进度类型
+interface ExecutionProgress {
+  phase: string;
+  partialContent: string;
+  toolCalls?: Array<{ tool: string; args: Record<string, unknown>; result: string }>;
+  metadata?: { model?: string; intent?: string };
+}
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -305,108 +312,154 @@ export function useChat() {
   );
 
   /**
-   * 断线重连：恢复执行状态
+   * 断线重连：根据 executionId 恢复执行状态
    * 轮询 /api/chat/execution/{id} 获取进度
    */
-  const recoverExecution = useCallback(async () => {
-    const executionId = executionIdRef.current;
-    if (!executionId || isRecoveringRef.current) return;
+  const recoverFromExecution = useCallback(async (executionId: string) => {
+    if (isRecoveringRef.current) return;
 
     isRecoveringRef.current = true;
+    executionIdRef.current = executionId;
+    setLoading(true);
+    
+    // 添加一个空的 assistant 消息占位
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role !== "assistant") {
+        return [...prev, { role: "assistant", content: "" }];
+      }
+      return prev;
+    });
+
     const accessToken = getAccessToken();
 
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/chat/execution/${executionId}`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+
+        if (!res.ok) {
+          executionIdRef.current = null;
+          setLoading(false);
+          isRecoveringRef.current = false;
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.status === "running") {
+          // 还在执行中，恢复显示已有内容
+          const progress = data.progress as ExecutionProgress | undefined;
+          if (progress?.partialContent) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.role === "assistant") {
+                updated[updated.length - 1] = {
+                  ...last,
+                  content: progress.partialContent,
+                  model: progress.metadata?.model,
+                  intent: progress.metadata?.intent,
+                  toolCalls: progress.toolCalls?.map((tc) => ({
+                    ...tc,
+                    status: tc.result ? ("done" as const) : ("running" as const),
+                  })),
+                };
+              }
+              return updated;
+            });
+          }
+
+          // 继续轮询
+          setTimeout(poll, 500);
+        } else if (data.status === "completed") {
+          // 执行完成，显示最终结果
+          const result = data.result as ExecutionProgress | undefined;
+          if (result?.partialContent || result?.metadata) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.role === "assistant") {
+                updated[updated.length - 1] = {
+                  ...last,
+                  content: (result as { content?: string }).content || result.partialContent || "",
+                  model: result.metadata?.model,
+                  intent: result.metadata?.intent,
+                  toolCalls: result.toolCalls?.map((tc) => ({
+                    ...tc,
+                    status: "done" as const,
+                  })),
+                };
+              }
+              return updated;
+            });
+          }
+          executionIdRef.current = null;
+          setLoading(false);
+          isRecoveringRef.current = false;
+        } else {
+          // failed 或其他状态
+          executionIdRef.current = null;
+          setLoading(false);
+          isRecoveringRef.current = false;
+        }
+      } catch (err) {
+        console.error("[useChat] 恢复执行失败:", err);
+        executionIdRef.current = null;
+        setLoading(false);
+        isRecoveringRef.current = false;
+      }
+    };
+
+    poll();
+  }, []);
+
+  /**
+   * 检查会话状态，如果有 running 的执行就恢复
+   * @param sessionId 会话 ID
+   * @param replyStatus 会话的回复状态（从 sessions 列表获取）
+   */
+  const checkAndRecover = useCallback(async (sessionId: string, replyStatus?: string) => {
+    // 如果已经在 loading（正常对话中）或者状态不是 running，不需要恢复
+    if (loading || isRecoveringRef.current || replyStatus !== "running") {
+      return;
+    }
+
+    const accessToken = getAccessToken();
+
+    // 查询该会话最新的 running 执行
     try {
-      const res = await fetch(`/api/chat/execution/${executionId}`, {
+      const res = await fetch(`/api/sessions/${sessionId}/execution`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       });
 
-      if (!res.ok) {
-        // 执行记录不存在或无权访问，清除状态
-        executionIdRef.current = null;
-        setLoading(false);
-        return;
-      }
+      if (!res.ok) return;
 
       const data = await res.json();
-
-      if (data.status === "running") {
-        // 还在执行中，恢复显示已有内容
-        const progress = data.progress;
-        if (progress?.partialContent) {
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last?.role === "assistant") {
-              updated[updated.length - 1] = {
-                ...last,
-                content: progress.partialContent,
-                model: progress.metadata?.model,
-                intent: progress.metadata?.intent,
-                toolCalls: progress.toolCalls?.map((tc: { tool: string; args: Record<string, unknown>; result: string }) => ({
-                  ...tc,
-                  status: tc.result ? "done" : "running",
-                })),
-              };
-            }
-            return updated;
-          });
-        }
-
-        // 继续轮询
-        setTimeout(() => {
-          isRecoveringRef.current = false;
-          recoverExecution();
-        }, 500);
-      } else if (data.status === "completed") {
-        // 执行完成，显示最终结果
-        const result = data.result;
-        if (result?.content) {
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last?.role === "assistant") {
-              updated[updated.length - 1] = {
-                ...last,
-                content: result.content,
-                model: result.metadata?.model,
-                intent: result.metadata?.intent,
-                toolCalls: result.toolCalls?.map((tc: { tool: string; args: Record<string, unknown>; result: string }) => ({
-                  ...tc,
-                  status: "done",
-                })),
-              };
-            }
-            return updated;
-          });
-        }
-        executionIdRef.current = null;
-        setLoading(false);
-      } else {
-        // failed 或其他状态
-        executionIdRef.current = null;
-        setLoading(false);
+      if (data.executionId && data.status === "running") {
+        console.log("[useChat] 检测到断线，开始恢复执行:", data.executionId);
+        recoverFromExecution(data.executionId);
       }
     } catch (err) {
-      console.error("[useChat] 恢复执行失败:", err);
-    } finally {
-      isRecoveringRef.current = false;
+      console.error("[useChat] 检查执行状态失败:", err);
     }
-  }, []);
+  }, [loading, recoverFromExecution]);
 
   /**
    * 监听页面可见性变化，断线后自动恢复
    */
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && executionIdRef.current && loading) {
-        // 页面重新可见，且有正在执行的任务，尝试恢复
-        recoverExecution();
+      if (document.visibilityState === "visible" && executionIdRef.current && !loading) {
+        // 页面重新可见，且有正在执行的任务但没有 loading，尝试恢复
+        recoverFromExecution(executionIdRef.current);
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [loading, recoverExecution]);
+  }, [loading, recoverFromExecution]);
 
   return {
     messages,
@@ -415,6 +468,6 @@ export function useChat() {
     loadHistory,
     clearMessages,
     cancel,
-    recoverExecution,
+    checkAndRecover,
   };
 }

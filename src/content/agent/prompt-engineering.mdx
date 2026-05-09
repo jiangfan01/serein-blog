@@ -1,10 +1,10 @@
 # Prompt Engineering
 
-## 本质：你在写"需求文档"
+## 我现在怎么理解 Prompt
 
-Prompt Engineering 不是什么玄学，本质就是**给 LLM 写需求文档**。你之前和后端对接写接口文档、写 PRD，其实就是同一件事——把你的意图精确传达给一个"不会主动问你"的执行者。
+Prompt Engineering 这个词听起来很大，但我现在会把它当成：**给 LLM 写一份足够清楚的需求说明**。
 
-区别在于：后端看不懂你的文档会来问你，LLM 看不懂你的 prompt 会自己瞎编。所以 prompt 要比接口文档写得更精确。
+区别在于，后端同事看不懂会来问你，模型看不懂大概率不会问，它会自己补剧情。所以 prompt 不是玄学，更多是把边界、输入、输出、兜底讲清楚。
 
 ## System Prompt：定义"这个 AI 是谁"
 
@@ -24,7 +24,7 @@ const messages = [
 ];
 ```
 
-### System Prompt 的关键要素
+### 我会在 System Prompt 里写清楚什么
 
 | 要素 | 作用 | 示例 |
 |---|---|---|
@@ -34,11 +34,11 @@ const messages = [
 | 兜底策略 | 不知道时怎么办 | "如果不确定，说明而不是编造" |
 | 语气风格 | 沟通方式 | "专业但不生硬，像同事聊天" |
 
-## 工具描述：决定 Agent 的智商
+## 工具描述会直接影响 Agent 的表现
 
-上一篇讲了 Function Calling，模型选工具完全靠 description。这里深入讲怎么写好它。
+上一篇看 Function Calling 的时候有个点很明显：模型选工具主要靠 description。description 写得含糊，模型就会乱选；写得像真实使用说明，它就稳定很多。
 
-### 差的描述 vs 好的描述
+### 模糊描述 vs 能用的描述
 
 ```typescript
 // ❌ 模型不知道什么时候该用
@@ -80,11 +80,11 @@ parameters: {
 }
 ```
 
-description 里写清楚"什么时候传、什么时候不传、传什么格式"，模型的参数准确率会大幅提升。
+description 里把“什么时候传、什么时候不传、传什么格式”写明白，工具调用会少很多莫名其妙的问题。
 
-## 核心技巧
+## 几个我会反复用的小技巧
 
-### 1. Few-shot：给例子比讲道理有效
+### 1. Few-shot：给例子比讲道理更稳
 
 ```typescript
 const systemPrompt = `你是一个代码审查助手。
@@ -109,9 +109,9 @@ function get(id) {
 请按照以上格式审查用户提供的代码。`;
 ```
 
-给一个输入-输出的例子，比写十行规则描述都管用。模型通过例子学习模式，比理解抽象规则更准确。
+很多时候，给一个输入-输出例子，比写十行抽象规则管用。模型很吃“模式”，你给它一个样板，它就更容易照着走。
 
-### 2. 结构化输出：用 JSON Schema 约束
+### 2. 结构化输出：能约束就别只靠嘴说
 
 当你需要模型返回结构化数据时，明确指定格式：
 
@@ -135,9 +135,9 @@ const response = await client.chat.completions.create({
 });
 ```
 
-`response_format: { type: 'json_object' }` 是 OpenAI 的硬约束，保证输出一定是合法 JSON。比在 prompt 里写"请返回 JSON"靠谱得多。
+`response_format: { type: 'json_object' }` 是更硬的约束，比在 prompt 里写“请返回 JSON”靠谱。能用接口约束的地方，就不要只靠一句自然语言。
 
-### 3. Chain of Thought：让模型"想一步说一步"
+### 3. 分步分析：别一上来就要最终答案
 
 ```typescript
 // ❌ 直接要答案，容易出错
@@ -153,9 +153,9 @@ const response = await client.chat.completions.create({
 一步一步来，每步都写出你的思考过程。`
 ```
 
-这不是玄学——模型是自回归生成的（上一篇讲过），前面生成的 token 会影响后面的 token。让它先"想"再"答"，相当于给它更多的中间 token 来推理，准确率自然更高。
+这不是玄学。模型是自回归生成的，前面生成的内容会影响后面。让它先拆问题，再给结论，通常比直接丢一句“这段代码有什么问题”更稳。
 
-### 4. 角色扮演：利用模型的训练数据
+### 4. 角色设定：别写得太戏剧化
 
 ```typescript
 // 通用问法
@@ -165,9 +165,9 @@ const response = await client.chat.completions.create({
 '你是一个有 10 年经验的 DBA，擅长 PostgreSQL 性能优化。请从索引、查询计划、数据量三个角度分析这个查询的性能瓶颈。'
 ```
 
-模型训练数据里有大量"专家回答"的模式，给它一个专家角色，它会倾向于输出更专业的内容。
+角色设定有用，但别写成中二设定。告诉它“你从什么角度看问题”就够了，比如 DBA 看 SQL、前端工程师看组件边界。
 
-### 5. 负面约束：告诉模型不要做什么
+### 5. 负面约束：明确哪些事不要做
 
 ```typescript
 const systemPrompt = `你是博客 AI 助手。
@@ -180,11 +180,11 @@ const systemPrompt = `你是博客 AI 助手。
 - 不要在回答开头说"好的"、"当然"等废话，直接给内容`;
 ```
 
-模型有"讨好用户"的倾向（训练时的 RLHF 导致的），明确告诉它不要做什么，比只说要做什么更有效。
+模型很容易为了让回答看起来完整而补东西，所以“不要编造”“上下文不足就说明”这种约束要写在前面。
 
-## 实战：优化你博客的 RAG Prompt
+## 放到博客 RAG 里怎么写
 
-你现在的 RAG 可能是这样的 prompt：
+最开始的 RAG prompt 可能会写得很短：
 
 ```typescript
 // 基础版
@@ -193,7 +193,7 @@ const prompt = `根据以下上下文回答问题：
 问题：${question}`;
 ```
 
-优化后：
+我会把它改成更明确的版本：
 
 ```typescript
 const prompt = `你是 Serein Blog 的技术问答助手，专注于前端开发领域。
@@ -214,13 +214,13 @@ ${context}
 ${question}`;
 ```
 
-区别在于：
+区别主要在这里：
 - 明确了知识边界（只用笔记内容）
 - 有兜底策略（不知道就说不知道）
 - 要求引用来源（增加可信度）
 - 约束了代码示例的来源（防止幻觉）
 
-## Prompt 调试心法
+## 调 prompt 的时候我会看这些问题
 
 | 问题 | 原因 | 解决 |
 |---|---|---|
@@ -231,18 +231,18 @@ ${question}`;
 | 输出格式不稳定 | 只用自然语言描述格式 | 用 JSON Schema 或 response_format 硬约束 |
 | 复杂问题回答质量差 | 模型跳步推理 | 加 Chain of Thought，要求分步思考 |
 
-## 和 Agent 开发的关系
+## 和 Agent 开发怎么接上
 
-在 Agent 系统中，Prompt Engineering 体现在三个层面：
+放到 Agent 系统里，prompt 大概会出现在三层：
 
 1. **System Prompt** → 定义 Agent 的角色、能力、行为边界
 2. **Tool Description** → 决定 Agent 什么时候用什么工具（上一篇的核心）
 3. **Orchestration Prompt** → 在多步推理中引导 Agent 的决策逻辑（下一篇 LangGraph 会讲）
 
-写好 prompt 是 Agent 开发的基本功，就像写好 CSS 是前端的基本功——不难，但做好了效果差距巨大。
+写 prompt 有点像写 CSS：语法不难，但边界、层级、默认值没想清楚，最后效果就会很飘。
 
 ## 下一步
 
-Prompt Engineering 是"软技能"，接下来进入"硬架构"：
+Prompt 这部分更像软约束。接下来要看硬一点的编排：
 
 → **LangGraph Agent 实战**：把 Function Calling + Prompt 组合成一个有状态的、能多步推理的 Agent

@@ -1,13 +1,13 @@
 ---
-title: HTTP 缓存机制详解
-description: 强缓存与协商缓存的区别、Content Hash 策略、Nginx 配置实战
+title: HTTP 缓存机制笔记
+description: 强缓存、协商缓存、Content Hash 和常见部署配置
 ---
 
-# HTTP 缓存机制详解
+# HTTP 缓存机制笔记
 
-> 面试高频题：如何优化 2MB 的 Logo 图片加载？如何保证 main.js 更新时不读旧缓存？
+> 缓存这块最容易背概念，但真正用的时候只关心两件事：什么资源该大胆缓存，什么资源必须及时更新。
 
-## 🎯 核心概念
+## 先分清两种缓存
 
 ### 强缓存 vs 协商缓存
 
@@ -20,7 +20,7 @@ HTTP 缓存分为两种机制：
 
 ---
 
-## 💪 强缓存（Strong Cache）
+## 强缓存（Strong Cache）
 
 ### 原理
 
@@ -115,7 +115,7 @@ location ~* \.(jpg|jpeg|png|gif|ico|svg)$ {
 
 ---
 
-## 🤝 协商缓存（Negotiation Cache）
+## 协商缓存（Negotiation Cache）
 
 ### 原理
 
@@ -208,7 +208,7 @@ location ~* \.html$ {
 
 ---
 
-## 🎯 完整的缓存策略
+## 一个更接近项目里的缓存策略
 
 ### 1. 静态资源（JS/CSS/图片）
 
@@ -316,13 +316,13 @@ fetch('/api/user', {
 
 ---
 
-## 🔥 必杀技：Content Hash 策略
+## Content Hash：解决更新不生效
 
-### 问题
+### 问题从哪来
 
 如果 `main.js` 使用强缓存，代码更新后用户还是读旧缓存怎么办？
 
-### 解决方案
+### 解决方式
 
 现代前端工程化（Webpack/Vite/Next.js）早就解决了这个问题：
 
@@ -358,7 +358,7 @@ module.exports = {
 <script src="/main.e5f6g7h8.js"></script>
 ```
 
-#### 4. 完整流程
+#### 4. 整体流程
 
 ```
 1. 用户访问网站
@@ -392,7 +392,7 @@ module.exports = {
 
 ---
 
-## 🛠️ Nginx 完整配置
+## Nginx 配置示例
 
 ```nginx
 server {
@@ -446,7 +446,7 @@ server {
 
 ---
 
-## 🎓 面试话术
+## 如果要讲给别人听
 
 ### 问题 1：什么是强缓存和协商缓存？
 
@@ -456,7 +456,7 @@ server {
 
 ### 问题 2：如何优化 2MB 的 Logo 图片加载？
 
-> 我会果断使用**强缓存**。在 Nginx 或 CDN 上配置：
+> 我会用**强缓存**。在 Nginx 或 CDN 上配置：
 >
 > ```nginx
 > Cache-Control: public, max-age=31536000, immutable
@@ -466,7 +466,7 @@ server {
 
 ### 问题 3：如何保证 main.js 更新时不读旧缓存？
 
-> 现代前端工程化（Webpack/Next.js）早就解决了这个问题。打包时，我会给 JS 文件名打上**内容哈希（Content Hash）**，比如 `main.a1b2c3.js`。
+> 现代前端工程化一般通过 Content Hash 解决。打包时给 JS 文件名加上内容哈希，比如 `main.a1b2c3.js`。
 >
 > 只要代码更新，哈希值就会变，生成一个新的文件名。这时候，承载引用的 `index.html`（我会设置为协商缓存或 no-cache）会去请求全新的 JS 文件，完美避开强缓存带来的代码不更新问题。
 
@@ -474,17 +474,17 @@ server {
 
 > `Expires` 是 HTTP/1.0 的产物，使用绝对时间，依赖客户端时间，如果客户端时间不准，缓存会失效。
 >
-> `Cache-Control` 是 HTTP/1.1 的标准，使用相对时间（max-age），更灵活，优先级更高。现代项目应该只用 `Cache-Control`。
+> `Cache-Control` 是 HTTP/1.1 的标准，使用相对时间（max-age），更灵活，优先级更高。现在项目里我会优先看 `Cache-Control`。
 
 ### 问题 5：ETag 和 Last-Modified 的区别？
 
 > `Last-Modified` 基于文件修改时间，精度只到秒，1 秒内多次修改无法识别。而且文件内容没变但修改时间变了，也会重新下载。
 >
-> `ETag` 基于文件内容的 Hash 值，更精确，优先级更高。现代项目应该优先使用 `ETag`。
+> `ETag` 基于文件内容的 Hash 值，更精确，优先级更高。对需要协商缓存的资源，我会优先考虑 `ETag`。
 
 ---
 
-## 🔍 调试技巧
+## 调试时怎么看
 
 ### 1. Chrome DevTools
 
@@ -520,7 +520,7 @@ Chrome:
 
 ---
 
-## 📊 缓存策略对比
+## 缓存策略对比
 
 | 资源类型 | 缓存策略 | Cache-Control | 原因 |
 |---------|---------|---------------|------|
@@ -533,9 +533,9 @@ Chrome:
 
 ---
 
-## 🔗 相关资源
+## 相关资源
 
 - [MDN - HTTP 缓存](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Caching)
-- [Google - HTTP 缓存最佳实践](https://web.dev/http-cache/)
+- [Google - HTTP 缓存指南](https://web.dev/http-cache/)
 - [Webpack - 缓存](https://webpack.js.org/guides/caching/)
 - [Next.js - 静态资源优化](https://nextjs.org/docs/basic-features/static-file-serving)

@@ -2,9 +2,9 @@
 
 ## 背景
 
-在 Serein Blog 中实现了一个基于 RAG（Retrieval-Augmented Generation）的 AI 问答助手，用户可以针对博客笔记内容提问，系统会检索相关内容后结合 LLM 生成回答。
+我在 Serein Blog 里做了一个基于 RAG（Retrieval-Augmented Generation）的 AI 问答助手。目标很简单：用户问博客笔记相关问题时，先从自己的笔记里找资料，再交给 LLM 组织回答。
 
-## 整体架构
+## 现在的整体链路
 
 ```
 用户提问
@@ -20,7 +20,7 @@ LLM 流式生成（Kimi API）
 SSE 流式输出 → 前端打字机渲染
 ```
 
-## 技术选型
+## 技术选型是这么定的
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
@@ -30,7 +30,7 @@ SSE 流式输出 → 前端打字机渲染
 | 编排 | LangChain.js | Prompt 模板 + Chain + 流式输出 |
 | 前端 | React + SSE | buffer 收集 + RAF 批量渲染 |
 
-## 核心实现
+## 关键实现点
 
 ### 1. 文档入库流程
 
@@ -93,14 +93,14 @@ const tick = () => {
 
 这样 React 每帧最多渲染一次，同时实现了打字机效果。
 
-## 为什么选 pgvector 而不是专用向量数据库
+## 为什么先用 pgvector
 
 - 项目已经用了 PostgreSQL，不需要额外引入 Pinecone/Milvus 等服务
 - 171 个切片的数据量，pgvector 的性能完全够用
 - 部署简单，一个数据库搞定关系数据 + 向量检索
-- 面试能讲清楚"在什么场景下选什么方案"
+- 对这个博客体量来说，少引一个服务比追求“更像大厂架构”更实际
 
-## 可扩展方向
+## 后面可以继续补的方向
 
 - 对话历史持久化（ChatSession + ChatMessage 表）
 - 多轮对话上下文（将历史消息拼入 prompt）

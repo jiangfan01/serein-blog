@@ -13,7 +13,7 @@ import { Loader2 } from "lucide-react";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useChat } from "@/hooks/use-chat";
-import { useSessionMessages, useOptimisticUpdateTitle } from "@/hooks/use-sessions";
+import { useSessionMessages, useOptimisticUpdateTitle, useInfiniteSessions } from "@/hooks/use-sessions";
 
 export default function SessionPage() {
   const params = useParams();
@@ -21,13 +21,16 @@ export default function SessionPage() {
   const sessionId = params.sessionId as string;
   const initialQuestion = searchParams.get("q");
 
-  const { messages, loading, sendMessage, loadHistory } = useChat();
+  const { messages, loading, sendMessage, loadHistory, checkAndRecover } = useChat();
   const { data: historyMessages, isLoading: messagesLoading } = useSessionMessages(sessionId);
+  const { data: sessionsData } = useInfiniteSessions();
   const optimisticUpdateTitle = useOptimisticUpdateTitle();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // 是否已处理初始消息
   const initialSentRef = useRef(false);
+  // 是否已检查断线重连
+  const recoveryCheckedRef = useRef(false);
 
   /**
    * 加载历史消息
@@ -37,6 +40,27 @@ export default function SessionPage() {
       loadHistory(historyMessages);
     }
   }, [historyMessages, loadHistory]);
+
+  /**
+   * 检查断线重连
+   * 历史加载完成后，检查当前会话是否有 running 状态的执行
+   */
+  useEffect(() => {
+    if (recoveryCheckedRef.current || messagesLoading || !sessionId) return;
+    if (initialQuestion) return; // 有初始消息时不检查，让它正常发送
+
+    recoveryCheckedRef.current = true;
+
+    // 从 sessions 列表中找到当前会话的 replyStatus
+    const currentSession = sessionsData?.pages
+      .flatMap((page) => page.sessions)
+      .find((s) => s.id === sessionId);
+
+    if (currentSession?.replyStatus === "running") {
+      console.log("[SessionPage] 检测到 running 状态，尝试恢复");
+      checkAndRecover(sessionId, currentSession.replyStatus);
+    }
+  }, [sessionId, messagesLoading, initialQuestion, sessionsData, checkAndRecover]);
 
   /**
    * 处理从欢迎页带过来的初始消息
