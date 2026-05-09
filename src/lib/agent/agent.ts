@@ -210,10 +210,16 @@ function createAgentGraph() {
  * Agent 主函数
  *
  * 整合：LangGraph + 动态路由 + 监控
+ * 
+ * @param question 用户问题
+ * @param sessionId 会话 ID
+ * @param options 可选参数
+ * @param options.stylePrompt 回答风格提示词
  */
 export async function* runAgent(
   question: string,
-  sessionId?: string
+  sessionId?: string,
+  options?: { stylePrompt?: string }
 ): AsyncGenerator<SSEEvent, void, unknown> {
   const startTime = Date.now();
   const classifier = getIntentClassifier();
@@ -247,12 +253,17 @@ export async function* runAgent(
     yield { type: "thinking" };
 
     // ===== 3. 构建初始状态 =====
+    // 如果有风格提示词，追加到系统提示词末尾
+    const finalSystemPrompt = options?.stylePrompt 
+      ? `${SYSTEM_PROMPT}\n\n## 用户偏好的回答风格\n\n${options.stylePrompt}`
+      : SYSTEM_PROMPT;
+
     const initialMessages = [
-      new SystemMessage(SYSTEM_PROMPT),
+      new SystemMessage(finalSystemPrompt),
       new HumanMessage(question),
     ];
 
-    inputTokens = estimateTokens(SYSTEM_PROMPT + question);
+    inputTokens = estimateTokens(finalSystemPrompt + question);
 
     // ===== 4. 创建并执行图 =====
     const graph = createAgentGraph();

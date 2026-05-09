@@ -23,6 +23,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyAuth, authError } from "@/lib/auth/middleware";
 import { runAgent } from "@/lib/agent/agent";
+import { getStylePrompt } from "@/lib/response-styles";
 import type { SSEEvent } from "@/lib/agent/types";
 
 /**
@@ -45,11 +46,12 @@ function generateTitle(content: string): string {
 }
 
 /**
- * 验证用户权限和配额
+ * 验证用户权限和配额，同时返回用户偏好
  */
 async function verifyUserAccess(userId: string): Promise<{
   error?: string;
   status?: number;
+  responseStyle?: string;
 }> {
   // 查询用户
   const user = await prisma.user.findUnique({
@@ -59,6 +61,7 @@ async function verifyUserAccess(userId: string): Promise<{
       enabled: true,
       canUseChat: true,
       dailyLimit: true,
+      responseStyle: true,
     },
   });
 
@@ -88,7 +91,7 @@ async function verifyUserAccess(userId: string): Promise<{
     };
   }
 
-  return {};
+  return { responseStyle: user.responseStyle };
 }
 
 /**
@@ -121,10 +124,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 验证用户权限和配额
-    const { error, status } = await verifyUserAccess(auth.userId);
+    const { error, status, responseStyle } = await verifyUserAccess(auth.userId);
     if (error) {
       return Response.json({ error }, { status: status || 403 });
     }
+
+    // 获取风格提示词
+    const stylePrompt = getStylePrompt(responseStyle || "default");
 
     const userId = auth.userId;
     const { question, sessionId } = await req.json();
@@ -190,7 +196,7 @@ export async function POST(req: NextRequest) {
             executionId: execution.id 
           } as SSEEvent));
 
-          for await (const event of runAgent(question, sessionId)) {
+          for await (const event of runAgent(question, sessionId, { stylePrompt })) {
             controller.enqueue(encodeSSE(event));
 
             // 收集响应内容

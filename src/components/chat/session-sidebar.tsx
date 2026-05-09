@@ -30,6 +30,7 @@ import {
 } from "@/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { toast } from "@/components/ui/toast";
+import { UserMenu } from "./user-menu";
 
 interface SessionSidebarProps {
   onSessionChange?: (sessionId: string) => void;
@@ -246,15 +247,18 @@ export function SessionSidebar({ onSessionChange, onCollapse }: SessionSidebarPr
         </div>
       </div>
 
-      {/* ========== 底部品牌信息 ========== */}
+      {/* ========== 底部品牌信息 + 用户菜单 ========== */}
       <div className="flex-shrink-0 px-4 py-4 border-t border-[var(--border-subtle)]">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-[var(--text-tertiary)]" strokeWidth={2} />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-[var(--surface)] border border-[var(--border-default)] flex items-center justify-center">
+              <Sparkles className="w-3 h-3 text-[var(--text-tertiary)]" strokeWidth={2} />
+            </div>
+            <span className="text-[11px] font-medium text-[var(--text-quaternary)]">
+              from Serein
+            </span>
           </div>
-          <span className="text-[11px] font-medium text-[var(--text-quaternary)]">
-            from Serein
-          </span>
+          <UserMenu />
         </div>
       </div>
     </div>

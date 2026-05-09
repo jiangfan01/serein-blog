@@ -62,6 +62,9 @@ model User {
   canUseChat    Boolean   @default(false) /// 是否能使用聊天功能
   dailyLimit    Int       @default(50)    /// 每日调用次数限制
   
+  /// 回答风格偏好
+  responseStyle String    @default("default") /// default, concise, detailed, friendly, professional
+  
   /// 邀请码关联
   inviteCodeId  String?   @unique
   inviteCode    InviteCode? @relation(fields: [inviteCodeId], references: [id])
