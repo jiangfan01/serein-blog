@@ -114,7 +114,7 @@ export function UserMenu() {
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
-            className="cursor-pointer gap-2"
+            className="cursor-pointer"
             onSelect={() => setIsStyleDialogOpen(true)}
           >
             <Settings className="h-4 w-4 text-[var(--text-tertiary)]" />
@@ -127,7 +127,7 @@ export function UserMenu() {
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
-            className="cursor-pointer gap-2 text-red-600 focus:text-red-600 focus:bg-red-100 dark:focus:bg-red-950/50"
+            className="cursor-pointer text-red-500"
             onClick={handleLogout}
           >
             <LogOut className="h-4 w-4" />
