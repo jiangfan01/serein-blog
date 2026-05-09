@@ -119,13 +119,15 @@ export default function SessionPage() {
               isFullscreen
               hideEmptyState
             />
-            {/* 暂停/中断状态提示 */}
+            {/* 暂停/中断状态提示 - 极简分割线风格 */}
             {paused && (
-              <div className="flex items-center justify-center gap-2 mt-4 py-3 px-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                <Pause className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                <span className="text-[13px] text-amber-700 dark:text-amber-300">
-                  对话已中断，发送新消息继续
-                </span>
+              <div className="flex items-center w-full my-6 opacity-80 animate-in fade-in duration-300">
+                <div className="flex-grow border-t border-[var(--border-subtle)]" />
+                <div className="mx-4 flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+                  <Pause className="w-3.5 h-3.5" />
+                  <span>对话已暂停，发送新消息即可继续</span>
+                </div>
+                <div className="flex-grow border-t border-[var(--border-subtle)]" />
               </div>
             )}
           </div>
