@@ -3,4 +3,5 @@ export default {
   'workflow-architecture': 'Workflow 工作流画布架构',
   'multidimensional-table': '多维表格开发实践',
   'rag-architecture': 'RAG 知识库检索架构',
+  'pdf-reading': 'PDF 点读阅读器开发实践',
 }

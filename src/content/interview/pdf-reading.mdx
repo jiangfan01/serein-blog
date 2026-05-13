@@ -1,0 +1,331 @@
+# PDF 点读阅读器开发实践
+
+这篇是我在教育产品中实现 PDF 点读功能的技术复盘。核心挑战是：在小程序 WebView 里打开一本 100MB+ 的 PDF 课本，用户点击任意句子就能听到 AI 语音朗读。
+
+听起来简单，实际要解决三个硬问题：大文件怎么秒开、文字怎么精准定位、语音怎么低延迟播放。
+
+## 目录
+
+1. [整体架构](#整体架构)
+2. [PDF 大文件加载优化](#pdf-大文件加载优化)
+3. [文字精准定位](#文字精准定位)
+4. [流式 TTS 实时播放](#流式-tts-实时播放)
+5. [关键设计决策](#关键设计决策)
+6. [性能指标](#性能指标)
+
+---
+
+## 整体架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    小程序 WebView                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐   ┌──────────────┐   ┌────────────────┐  │
+│  │  pdf.js     │   │ react-pageflip│   │ Web Audio API  │  │
+│  │  渲染 PDF   │   │  翻书动效     │   │  音频解码播放   │  │
+│  └──────┬──────┘   └──────┬───────┘   └───────┬────────┘  │
+│         │                  │                    │           │
+│         ↓                  ↓                    ↓           │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              bbox 覆盖层（点读热区）                  │   │
+│  │         pointer-events 穿透 + 精准定位               │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ↓                ↓                ↓
+┌──────────────────┐  ┌──────────────┐  ┌──────────────────┐
+│  Nginx 代理       │  │  后端 API    │  │  阿里云 CosyVoice │
+│  Range 请求透传   │  │  MinerU 解析  │  │  流式 TTS 合成    │
+│  OSS 跨域解决     │  │  bbox 坐标    │  │  WebSocket 推送   │
+└──────────────────┘  └──────────────┘  └──────────────────┘
+```
+
+---
+
+## PDF 大文件加载优化
+
+### 问题
+
+教材 PDF 通常 50-150MB。如果等整个文件下载完才渲染，首屏需要 30s+，用户早就走了。
+
+### 核心思路：HTTP Range 按需加载
+
+PDF 文件有一个关键特性——文件末尾存储了 xref 交叉引用表（相当于目录索引），记录了每一页数据在文件中的字节偏移量。
+
+pdf.js 利用这个特性实现按需加载：
+
+```
+1. 请求文件末尾 ~64KB → 拿到 xref 表（页面索引）
+2. 解析出第 1 页数据位于文件的第 X~Y 字节
+3. 只请求那几百 KB → 渲染第 1 页
+4. 翻到第 N 页时，再请求第 N 页对应的字节范围
+```
+
+实际的 HTTP 请求：
+
+```
+GET /oss/book.pdf
+Range: bytes=117440512-117506048    ← 只请求末尾 64KB（xref 表）
+
+GET /oss/book.pdf
+Range: bytes=2048000-2097152        ← 只请求第 1 页数据
+```
+
+### 前端配置
+
+```typescript
+const pdf = await pdfjsLib.getDocument({
+  url,
+  disableAutoFetch: true,   // 关闭自动预取整个文件
+  disableStream: false,     // 启用流式传输
+  rangeChunkSize: 65536,    // 每次 Range 请求 64KB
+}).promise;
+```
+
+关键是 `disableAutoFetch: true`，不加这个 pdf.js 会在后台偷偷下载整个文件。
+
+### Nginx 配置
+
+PDF 存在阿里云 OSS，前端页面在 `test.jilan.tech`，直接请求 OSS 会跨域。通过 Nginx 反向代理解决跨域，同时必须透传 Range 头：
+
+```nginx
+location /oss/ {
+    proxy_pass https://jilan.oss-cn-hangzhou.aliyuncs.com/;
+
+    # 透传 Range 请求头（让 pdf.js 按需加载生效）
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    proxy_pass_header Content-Range;
+    proxy_pass_header Accept-Ranges;
+}
+```
+
+如果不透传 Range 头，Nginx 会把整个文件下载下来再转发给前端，按需加载就失效了。
+
+### 效果
+
+| 指标 | 优化前 | 优化后 |
+|------|--------|--------|
+| 首屏加载（112MB PDF） | 30s+ | 2-3s |
+| 实际下载量（首屏） | 112MB | ~200KB |
+| 第二次打开 | 30s+ | &lt;1s（浏览器缓存） |
+
+---
+
+## 文字精准定位
+
+### 问题
+
+要实现"点哪读哪"，需要知道每个句子在页面上的精确位置。PDF 是绝对坐标排版，文字位置信息不像 HTML 那样可以直接获取。
+
+### 方案：后端解析 + 百分比 bbox 覆盖层
+
+**后端处理**：上传 PDF 后，调用 MinerU（PDF 智能解析服务）提取每个文本块的坐标：
+
+```json
+{
+  "id": "sentence_001",
+  "text": "金黄的梅子，飞舞的蝴蝶...",
+  "page_no": 3,
+  "bbox": [12.5, 8.3, 88.2, 15.6]
+}
+```
+
+`bbox` 格式是 `[left%, top%, right%, bottom%]`，百分比相对于页面宽高。
+
+**为什么用百分比而不是像素**：不管前端渲染的分辨率是多少（手机、平板、不同 DPR），定位都是准确的，不需要根据渲染尺寸重新计算。
+
+**前端覆盖层**：
+
+```tsx
+// bbox 覆盖层和 PDF 页面同尺寸、同位置
+<div className="hit-overlay" style={{ width: bookSize.width, height: bookSize.height }}>
+  {sentences.map((s) => {
+    const [left, top, right, bottom] = s.bbox;
+    return (
+      <div
+        key={s.id}
+        className="sentence-area"
+        style={{
+          position: 'absolute',
+          left: `${left}%`,
+          top: `${top}%`,
+          width: `${right - left}%`,
+          height: `${bottom - top}%`,
+        }}
+        onClick={() => playSentence(s)}
+      />
+    );
+  })}
+</div>
+```
+
+### pointer-events 穿透设计
+
+这里有个交互冲突：翻书需要滑动手势，点读需要点击。两者在同一个区域。
+
+解决方案：
+
+```css
+/* 覆盖层整体不拦截事件 */
+.hit-overlay {
+  pointer-events: none;
+}
+
+/* 只有 bbox 热区拦截点击 */
+.sentence-area {
+  pointer-events: auto;
+}
+```
+
+这样滑动手势穿透到下层的 `react-pageflip` 翻书组件，点击 bbox 区域触发点读。翻页和点读互不干扰。
+
+---
+
+## 流式 TTS 实时播放
+
+### 问题
+
+传统 TTS 流程：前端请求 → 后端调阿里云合成完整音频 → 写文件 → 返回 URL → 前端播放。一句话需要等 500ms-1s 才能开始播放，体验不好。
+
+### 方案：流式合成 + Web Audio API
+
+```
+用户点击句子
+  → fetch 流式接口
+  → 后端 WebSocket 连接阿里云 CosyVoice
+  → 阿里云边合成边推 MP3 chunk
+  → 后端 StreamingResponse 边收边推给前端
+  → 前端 AudioContext 解码播放
+```
+
+### 后端实现（FastAPI）
+
+```python
+# cosyvoice_client.py - 流式合成
+async def synthesize_stream(self, text, voice, model, speed):
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+    class StreamCallback(ResultCallback):
+        def on_data(self, data: bytes) -> None:
+            queue.put_nowait(data)       # 收到 chunk 立即入队
+
+        def on_complete(self) -> None:
+            queue.put_nowait(None)        # 结束信号
+
+    callback = StreamCallback()
+    synthesizer = SpeechSynthesizer(
+        model=model, voice=voice, callback=callback
+    )
+
+    # call() 有 callback 时是非阻塞的
+    loop.run_in_executor(None, synthesizer.call, text)
+
+    # 从 queue 逐个 yield chunk
+    while True:
+        chunk = await queue.get()
+        if chunk is None:
+            break
+        yield chunk
+```
+
+```python
+# reading.py - 流式接口
+@router.get("/sentences/{sentence_id}/audio/stream")
+async def stream_audio(sentence_id, db):
+    audio_stream = await reading_service.get_sentence_audio_stream(
+        db, sentence_id
+    )
+    return StreamingResponse(audio_stream, media_type="audio/mpeg")
+```
+
+### 前端实现
+
+```typescript
+const playSentence = async (sentence: Sentence) => {
+  // 初始化 AudioContext（需要用户手势触发）
+  const ctx = new AudioContext();
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  // 请求流式接口
+  const response = await fetch(
+    `/tts/api/v1/reading/sentences/${sentence.id}/audio/stream`
+  );
+  const arrayBuffer = await response.arrayBuffer();
+
+  // 解码 MP3 → PCM AudioBuffer
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+  // 播放
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.playbackRate.value = playbackSpeed; // 支持倍速
+  source.connect(ctx.destination);
+  source.start();
+};
+```
+
+### 缓存策略
+
+后端两层缓存：
+1. 首次请求：流式合成并返回
+2. 合成完成后：音频写入磁盘缓存
+3. 再次请求同一句子：直接读缓存文件（&lt;100ms）
+
+### 回退机制
+
+如果 Web Audio API 不可用（极端兼容性问题），自动回退到 `<audio>` 标签：
+
+```typescript
+try {
+  // Web Audio API 播放
+  await playWithAudioContext(sentence);
+} catch {
+  // 回退到 <audio> 标签 + 非流式接口
+  audioElement.src = buildAudioUrl(sentence.id);
+  audioElement.play();
+}
+```
+
+---
+
+## 关键设计决策
+
+| 决策 | 选择 | 原因 |
+|------|------|------|
+| 坐标格式 | 百分比 bbox | 适配任意分辨率，不需要重新计算 |
+| 覆盖层位置 | 独立于翻书组件 | react-pageflip 内部拦截触摸事件，放里面会冲突 |
+| PDF 加载 | Range 请求 | 保留矢量质量，不需要后端预处理成图片 |
+| 音频合成 | 按需流式 | 不需要预合成整本书，节省计算资源 |
+| 音频播放 | Web Audio API | 精确控制 playbackRate，不受自动播放策略限制 |
+
+---
+
+## 性能指标
+
+| 指标 | 数值 |
+|------|------|
+| PDF 首屏加载（112MB） | 2-3s |
+| PDF 二次加载 | &lt;1s |
+| TTS 首次合成延迟 | 300-500ms |
+| TTS 缓存命中延迟 | &lt;100ms |
+| 翻页动画帧率 | 60fps |
+
+---
+
+## 技术栈
+
+| 层 | 技术 | 用途 |
+|---|---|---|
+| PDF 渲染 | pdf.js | 解析渲染 PDF 页面 |
+| 翻书动效 | react-pageflip | 真实翻书体验 |
+| 文字定位 | MinerU + 百分比 bbox | 精准点读热区 |
+| 大文件加载 | HTTP Range + Nginx 代理 | 按需加载，秒开 |
+| 语音合成 | 阿里云 CosyVoice | 流式 TTS |
+| 音频播放 | Web Audio API | 低延迟解码播放 |
+| 后端框架 | FastAPI + StreamingResponse | 流式推送 |
+| 运行环境 | 微信小程序 WebView | iOS/Android 兼容 |
