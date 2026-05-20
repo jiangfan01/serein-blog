@@ -4,4 +4,6 @@ export default {
   'multidimensional-table': '多维表格开发实践',
   'rag-architecture': 'RAG 知识库检索架构',
   'pdf-reading': 'PDF 点读阅读器开发实践',
+  'reading-and-ai-qa': '点读与 AI 问答系统复盘',
+  'book-automation-resource-generation': '图书自动化资源生产复盘',
 }
