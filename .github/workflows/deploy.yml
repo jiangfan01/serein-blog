@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Prepare SSH
         shell: bash
         env:
@@ -34,36 +37,29 @@ jobs:
           port="${DEPLOY_PORT:-22}"
           ssh-keyscan -p "$port" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload environment file
+      - name: Pack source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='.env' \
+            --exclude='*.tsbuildinfo' \
+            -czf /tmp/serein-blog.tar.gz .
+
+      - name: Upload source
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
         run: |
           set -euo pipefail
-          test -n "$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 1)
-          test -n "$JWT_SECRET" || (echo "JWT_SECRET is required" && exit 1)
-
-          cat > .env.production <<EOF
-          DATABASE_URL=$DATABASE_URL
-          JWT_SECRET=$JWT_SECRET
-          DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
-          SILICONFLOW_API_KEY=$SILICONFLOW_API_KEY
-          TAVILY_API_KEY=$TAVILY_API_KEY
-          MOONSHOT_API_KEY=$MOONSHOT_API_KEY
-          NODE_ENV=production
-          EOF
-
           port="${DEPLOY_PORT:-22}"
           user="${DEPLOY_USER:-root}"
-          scp -i ~/.ssh/deploy_key -P "$port" .env.production "$user@$DEPLOY_HOST:/tmp/serein-blog.env"
+          scp -i ~/.ssh/deploy_key -P "$port" /tmp/serein-blog.tar.gz "$user@$DEPLOY_HOST:/tmp/serein-blog.tar.gz"
 
       - name: Deploy with PM2
         shell: bash
@@ -71,44 +67,39 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          APP_DIR: ${{ secrets.APP_DIR }}
-          APP_PORT: ${{ secrets.APP_PORT }}
-          REPO_URL: ${{ secrets.REPO_URL }}
         run: |
           set -euo pipefail
 
           port="${DEPLOY_PORT:-22}"
           user="${DEPLOY_USER:-root}"
-          app_dir="${APP_DIR:-/www/wwwroot/serein-blog}"
-          app_port="${APP_PORT:-3000}"
-          repo_url="${REPO_URL:-git@github.com:jiangfan01/serein-blog.git}"
 
-          ssh -i ~/.ssh/deploy_key -p "$port" "$user@$DEPLOY_HOST" \
-            "APP_DIR='$app_dir' APP_PORT='$app_port' REPO_URL='$repo_url' bash -s" <<'REMOTE'
+          ssh -i ~/.ssh/deploy_key -p "$port" "$user@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
 
-          if ! command -v git >/dev/null 2>&1; then
-            echo "git is not installed on the server"
-            exit 1
-          fi
+          APP_DIR="/www/wwwroot/serein-blog"
+          APP_PORT="3000"
 
           if ! command -v node >/dev/null 2>&1; then
-            echo "node is not installed on the server. Install Node.js 20+ in Baota first."
+            echo "node is not installed on the server. Install Node.js 20+ first."
             exit 1
           fi
 
-          mkdir -p "$(dirname "$APP_DIR")"
+          mkdir -p "$APP_DIR"
+          cd "$APP_DIR"
 
-          if [ ! -d "$APP_DIR/.git" ]; then
-            git clone "$REPO_URL" "$APP_DIR"
+          if [ ! -f "$APP_DIR/.env" ]; then
+            echo "$APP_DIR/.env is missing. Keep production env vars on the server."
+            exit 1
           fi
 
-          cd "$APP_DIR"
-          git fetch origin main
-          git reset --hard origin/main
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name node_modules \
+            ! -name .next \
+            ! -name .env \
+            -exec rm -rf {} +
 
-          mv /tmp/serein-blog.env "$APP_DIR/.env"
-          chmod 600 "$APP_DIR/.env"
+          tar -xzf /tmp/serein-blog.tar.gz -C "$APP_DIR"
+          find "$APP_DIR" -name '._*' -delete
 
           if ! command -v pnpm >/dev/null 2>&1; then
             npm install -g pnpm
