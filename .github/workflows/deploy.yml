@@ -1,0 +1,133 @@
+name: Deploy to Baota server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" || (echo "DEPLOY_HOST is required" && exit 1)
+          test -n "$DEPLOY_SSH_KEY" || (echo "DEPLOY_SSH_KEY is required" && exit 1)
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          port="${DEPLOY_PORT:-22}"
+          ssh-keyscan -p "$port" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload environment file
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 1)
+          test -n "$JWT_SECRET" || (echo "JWT_SECRET is required" && exit 1)
+
+          cat > .env.production <<EOF
+          DATABASE_URL=$DATABASE_URL
+          JWT_SECRET=$JWT_SECRET
+          DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
+          SILICONFLOW_API_KEY=$SILICONFLOW_API_KEY
+          TAVILY_API_KEY=$TAVILY_API_KEY
+          MOONSHOT_API_KEY=$MOONSHOT_API_KEY
+          NODE_ENV=production
+          EOF
+
+          port="${DEPLOY_PORT:-22}"
+          user="${DEPLOY_USER:-root}"
+          scp -i ~/.ssh/deploy_key -P "$port" .env.production "$user@$DEPLOY_HOST:/tmp/serein-blog.env"
+
+      - name: Deploy with PM2
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+          APP_PORT: ${{ secrets.APP_PORT }}
+          REPO_URL: ${{ secrets.REPO_URL }}
+        run: |
+          set -euo pipefail
+
+          port="${DEPLOY_PORT:-22}"
+          user="${DEPLOY_USER:-root}"
+          app_dir="${APP_DIR:-/www/wwwroot/serein-blog}"
+          app_port="${APP_PORT:-3000}"
+          repo_url="${REPO_URL:-git@github.com:jiangfan01/serein-blog.git}"
+
+          ssh -i ~/.ssh/deploy_key -p "$port" "$user@$DEPLOY_HOST" \
+            "APP_DIR='$app_dir' APP_PORT='$app_port' REPO_URL='$repo_url' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git is not installed on the server"
+            exit 1
+          fi
+
+          if ! command -v node >/dev/null 2>&1; then
+            echo "node is not installed on the server. Install Node.js 20+ in Baota first."
+            exit 1
+          fi
+
+          mkdir -p "$(dirname "$APP_DIR")"
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            git clone "$REPO_URL" "$APP_DIR"
+          fi
+
+          cd "$APP_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+
+          mv /tmp/serein-blog.env "$APP_DIR/.env"
+          chmod 600 "$APP_DIR/.env"
+
+          if ! command -v pnpm >/dev/null 2>&1; then
+            npm install -g pnpm
+          fi
+
+          if ! command -v pm2 >/dev/null 2>&1; then
+            npm install -g pm2
+          fi
+
+          pnpm install --frozen-lockfile
+          pnpm exec prisma generate
+          pnpm exec prisma db push
+          pnpm build
+
+          if pm2 describe serein-blog >/dev/null 2>&1; then
+            pm2 restart serein-blog --update-env
+          else
+            PORT="$APP_PORT" pm2 start pnpm --name serein-blog -- start
+          fi
+
+          pm2 save
+          REMOTE
