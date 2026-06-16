@@ -12,8 +12,14 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL 环境变量未设置");
   }
 
+  const databaseUrl = new URL(connectionString);
+  const isLocalDatabase =
+    databaseUrl.hostname === "localhost" || databaseUrl.hostname === "127.0.0.1";
+  const hasSslMode = databaseUrl.searchParams.has("sslmode");
+
   const pool = new pg.Pool({
     connectionString,
+    ssl: !isLocalDatabase && !hasSslMode ? { rejectUnauthorized: false } : undefined,
     max: 1, // serverless 环境限制连接数
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
