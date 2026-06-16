@@ -1,0 +1,258 @@
+# 资源能力解耦：从 features JSON 到 ability 双表
+
+这篇记录我在 B 端出版社平台做的一次架构债重构：把「点读 / AI 问答 / 拆书」这三种 AI 能力，从塞在 `resource.features` 这个 JSON 万能筐里，解耦成两张显式的关联表。
+
+它不是炫技，而是一个很典型的「先上线、后还债」的故事。我把踩过的坑、为什么这么改、怎么不停服迁移都写下来。
+
+## 目录
+
+- [背景：两个服务，一个 JSON 字段](#背景两个服务一个-json-字段)
+- [老设计错在哪](#老设计错在哪)
+- [新模型：ability 双表](#新模型ability-双表)
+- [跨服务的黄金原则：禁止直连库](#跨服务的黄金原则禁止直连库)
+- [webhook 通知链路](#webhook-通知链路)
+- [一个真实的认知错误：点读到底是资源级还是书级](#一个真实的认知错误点读到底是资源级还是书级)
+- [不停服迁移：双写 + 灰度 + diff 校验](#不停服迁移双写--灰度--diff-校验)
+- [为什么这套设计能干净拆库](#为什么这套设计能干净拆库)
+- [我对这类重构的理解](#我对这类重构的理解)
+
+---
+
+## 背景：两个服务，一个 JSON 字段
+
+我们的后端是两个服务：
+
+```
+next 业务库 (Next.js + Prisma)     TTS 产物库 (FastAPI + SQLAlchemy)
+  出版社 / 书 / 资源 / 用户          点读句子 / 章节树 / 音频 / 向量库
+  权限 / 激活码 / 小程序发布          PDF 解析 / TTS 合成 / RAG
+```
+
+业务数据在 next，AI 产物在 TTS。问题是：一个资源「有没有开点读」「关联到哪个点读文档」这种信息，当时是直接塞在 next 库 `resource.features` 这个 JSON 字段里的：
+
+```json
+{
+  "reading": { "enabled": true, "documentId": "10b6f4f2-..." },
+  "knowledgeBase": { "enabled": true, "bookId": "2" },
+  "bookAutomation": { "source": "tts-book-automation", "nodeId": "...", "path": [...] }
+}
+```
+
+`documentId` 是个字符串，指向 TTS 库的 `reading_documents.id`。三种业务，三套约定，全靠这个 JSON 维系。
+
+刚上线时这样最快，不用建表不用迁移。但跑了几个月，问题全冒出来了。
+
+## 老设计错在哪
+
+我当时盘点了 5 个具体问题：
+
+1. **JSON 弱类型**：features 没有 schema，next 的 `normalizeFeatures` 函数在序列化时多次「吞字段」——有一次把 `bookId` 吃掉了，排查了半天。
+2. **跨库无外键**：`features.reading.documentId` 是字符串指向 TTS 库，业务表删了，TTS 那条产物还指着一个空 ID，没有任何约束兜底。
+3. **状态分散**：开关在 next 的 features，内容在 TTS 的三张表，两边同步靠「TTS 解析完手动调一下 next 接口」，经常对不上。
+4. **不可扩展**：以后加 AI 视频、AI 故事书、数字人，全都要往 features 里塞字段，`normalizeFeatures` 越长越乱。
+5. **判断逻辑分散**：小程序有 4 个入口都写着 `isReadingResource(features.reading)`，加一个新业务就要 4 处同步改。
+
+一句话总结：**我们用一个弱类型 JSON 字段，承担了本该是关联表 + 状态机才能干的事。**
+
+## 新模型：ability 双表
+
+重构的核心是：把「资源 → AI 能力」这层关系，从 JSON 提升成 next 库里两张显式的表。
+
+为什么是两张表？因为能力有两个维度：
+
+| 能力 | 维度 | 表 | kind | 指向 TTS 产物 |
+|------|------|-----|------|---------------|
+| 点读 reading | **书级**（一本书一份整本 PDF） | `book_ability` | `reading` | `reading_documents.id` |
+| AI 问答 kb | **书级**（一本书一个知识库） | `book_ability` | `kb` | `knowledge_base_books.book_id` |
+| 拆书章节 tts_chapter | **资源级**（一章一个资源） | `resource_ability` | `tts_chapter` | `book_node_asset` |
+
+表结构（以资源级为例）：
+
+```sql
+CREATE TABLE `resource_ability` (
+  `id`               BIGINT NOT NULL AUTO_INCREMENT,
+  `resource_id`      BIGINT NOT NULL,
+  `book_id`          BIGINT NOT NULL,            -- 冗余, 便于按书查
+  `kind`             VARCHAR(40) NOT NULL,       -- tts_chapter / reading / ...
+  `target_id_in_tts` VARCHAR(64) NOT NULL,       -- 跨库引用 TTS 产物 ID
+  `status`           VARCHAR(20) NOT NULL DEFAULT 'pending',
+  `meta`             JSON NULL,                  -- 业务自留: sentenceCount / audioUrl
+  `enabled_by`       VARCHAR(80) NULL,
+  `enabled_at`       DATETIME(3) NULL,
+  `error_message`    TEXT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `uk_resource_kind` (`resource_id`, `kind`),
+  INDEX `resource_ability_kind_status_idx` (`kind`, `status`)
+);
+
+-- 级联删除: resource 删了, ability 自动清
+ALTER TABLE `resource_ability`
+  ADD CONSTRAINT `resource_ability_resource_id_fkey`
+  FOREIGN KEY (`resource_id`) REFERENCES `resources`(`id`) ON DELETE CASCADE;
+```
+
+几个关键设计：
+
+- **唯一键 `(resource_id, kind)`**：同一资源同一能力至多一条。想换 target 用 upsert，不会插出两条。
+- **`kind` 用 `VARCHAR` 不用 enum**：以后加 `video` / `storybook`，只是多一个字符串值，**不用改表、不用迁移**。这是为「可扩展」专门留的。
+- **`status` 状态机**：`pending → ready → disabled`，失败进 `failed` 带 `error_message`。开关只在 `ready ↔ disabled` 之间切，`pending` / `failed` 状态拒绝 toggle。
+- **跨库的 `target_id_in_tts` 不加外键**：它指向另一个库，物理上加不了 FK，由应用层保证一致性。
+
+对比之前那个 `isReadingResource(features.reading)`，现在前端的判断变成统一的：
+
+```typescript
+// 小程序拿到 abilities 数组, 找到 ready 的那条就渲染入口
+const reading = bookAbilities.find(a => a.kind === 'reading' && a.status === 'ready')
+```
+
+加新能力时，前端 `abilities.forEach` 自动支持，不用再 4 个入口同步改。
+
+## 跨服务的黄金原则：禁止直连库
+
+重构里我给自己立的第一条铁律是：
+
+> ✅ TTS → HTTP API → next → 写 next 自己的库
+>
+> ❌ TTS → 直连 next.MySQL → INSERT/UPDATE
+
+为什么不让 TTS 直接连 next 的库写一行 ability？明明更快。原因：
+
+1. **schema 私有**：next 改表 / 改字段都不该影响 TTS，只要 API 契约不变。
+2. **业务规则集中**：normalize、校验、审计、权限全在 next 的 API 层执行，TTS 绕不过去。
+3. **责任边界清晰**：API 返 4xx 是调用方错，5xx 是被调方错，DB 直连出问题两眼一抹黑。
+4. **可观测性**：HTTP 调用有 metric / log / trace，直连库什么都没有。
+
+这就是「Database per Service」——每个服务只碰自己的库，跨服务一律走接口。所以 next 暴露了一组内部 API，用 `X-Internal-Token` header 鉴权：
+
+```
+POST   /api/v1/internal/abilities              # upsert (幂等)
+PATCH  /api/v1/internal/abilities/{level}/{id} # 改状态/meta
+DELETE /api/v1/internal/abilities/{level}/{id} # 物理删 (谨慎)
+```
+
+`POST` 是 upsert，按 `(resource_id, kind)` 去重，重复调用不会插多条——这点对 webhook 重试非常重要。
+
+## webhook 通知链路
+
+完整的数据流（以点读为例）：
+
+```
+1. 运营在 B 端「开启点读」+ 上传整本 PDF
+     → next 上传 OSS, 调 TTS 解析接口
+
+2. TTS 跑流水线 (解析 → 渲染 → 预合成音频)
+     → 生成 reading_documents 一条
+
+3. TTS 解析完成, 主动 webhook 通知 next:
+     POST /api/v1/internal/abilities
+     { owner_level: 'book', kind: 'reading',
+       target_id_in_tts: '<document_id>', status: 'ready', meta: {...} }
+     → next upsert 一条 book_ability(reading)
+
+4. 小程序进书页
+     → next 返回 bookAbilities 数组
+     → 小程序按 ability 渲染「AI 点读」入口
+```
+
+TTS 端的通知器是一个独立 service，注意它的失败处理：
+
+```python
+# ability_notifier.py — 失败不能阻塞 TTS 主流程
+async def notify(self, owner_level, kind, target_id, status='ready', meta=None):
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{settings.next_backend_url}/api/v1/internal/abilities",
+                headers={"X-Internal-Token": settings.internal_api_token},
+                json={...},
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        # 关键: 失败落补偿队列, 不让 webhook 阻塞主流程
+        notify_ability.delay(payload)   # Celery 重试任务
+        logger.warning(f"⚠️ ability webhook 失败, 已入补偿队列 | err={exc}")
+```
+
+补偿用 Celery 任务，`autoretry` 指数退避重试 5 次，全失败就落 `ai_error_log` 当死信，让超管手动 review。再叠加 next 那边 upsert 的幂等性，整条链路就有了「失败可重试、重试不重复」的保证。
+
+> 这里有个真实的线上坑：测试服联调时 reading 的 webhook 全 500。查下来是 next 那边没配 `INTERNAL_API_TOKEN`，token 校验直接拒。补上两边 `.env` 同一个值、重启进程后才通。**跨服务的共享密钥，部署时一定要两边对齐。**
+
+## 一个真实的认知错误：点读到底是资源级还是书级
+
+这是我想专门记下来的一段，因为它是真·返工。
+
+我最开始把点读做成了**资源级**（`resource_ability`）——直觉上「一个 PDF 资源开点读」嘛。代码写完、数据也写进去了，测试服都跑通了。
+
+后来才想明白：点读的输入是**整本书的一份 PDF**，产物是「页面图片 + 句子切片 + 每句多音色音频」，重传 PDF 是整本替换。它天然是**书级**的，和 AI 问答（一本书一个知识库）是同一个维度，而不是挂在某个资源上。
+
+所以又把它从 `resource_ability` 改成了 `book_ability`，B 端也从「资源列表逐个开关」重写成「书级单面板」，跟 AI 问答的面板长一个样。
+
+留下的代价是测试库里 3 条废弃的资源级 reading 脏数据，得手动清掉再补一条书级的。
+
+教训：**数据建模时先问「这个能力的产物，它的生命周期边界是什么」，而不是凭「用户在哪个页面点的按钮」来定维度。** 入口位置和数据维度是两回事。幸好 `kind` 用的是字符串，给 `book_ability` 加 `reading` 这个 kind 不用改表，否则返工成本更高。
+
+## 不停服迁移：双写 + 灰度 + diff 校验
+
+老数据还在 features 里跑着，不能说切就切。我用的是经典的双写迁移：
+
+```
+Phase 1  双写期 (2-4 周)
+  TTS 跑完 → 既写老 features, 也调 webhook 写 ability
+  next API 同时返回新老两套
+        ↓
+Phase 2  切读期
+  前端切到读 ability, 灰度: 先内部账号 → 部分出版社 → 全量
+  ability 拿不到就回落 features, 并埋点记录走了哪条
+        ↓
+Phase 3  停写期
+  确认 ability 数据 ≥ features 后, 停写 features
+  ALTER 删字段, 清理 normalizeFeatures 分支
+```
+
+切读时前端的回落策略很关键，宁可降级也不能白屏：
+
+```typescript
+// ability 优先, 拿不到回落 features, 并埋点
+const reading = findReadyAbility(bookAbilities, 'reading')
+if (reading) return reading.targetIdInTts
+// 回落老逻辑 + 埋点, 用来观测「还有多少流量在走老路」
+track('ability_fallback_to_features', { bookId, kind: 'reading' })
+return features?.reading?.documentId ?? null
+```
+
+判断「能不能停写老 features」不是看时间，而是看两个硬指标：
+- diff 校验脚本（每天比对 features vs ability）跑出来 missing / mismatched 全为空；
+- 回落埋点连续几天为 0（没人再走老路）。
+
+那个 diff 脚本就是个定时任务，把「features 有但 ability 没有」和反向的差异都捞出来写报告，人工 review。没有这个脚本，数据悄悄分叉了你都不知道，切读那天就炸。
+
+## 为什么这套设计能干净拆库
+
+现在两个库其实在同一个 MySQL 实例（测试服历史遗留），靠应用层边界隔离。但这套 ability 设计让将来物理拆库变得几乎零成本，原因就一个：
+
+**跨库的连接点收敛成了唯一一处——`ability.target_id_in_tts` 这个字符串软引用。**
+
+```
+next 库                          TTS 库
+  book_ability ──(kind=reading)─┄┄→ reading_documents.id
+  book_ability ──(kind=kb)──────┄┄→ knowledge_base_books.book_id
+  resource_ability ─(tts_chapter)┄→ book_node_asset.node_id
+```
+
+实线外键全在各自库内部（next 内部级联、TTS 内部级联），跨库一律是虚线软引用，没有任何物理外键。等 features 字段删干净，跨库就只剩这几个字符串引用了，拆成两个独立 RDS 只需要改连接串，代码一行不动。
+
+这也是为什么我坚持「先解耦再分家」：先把代码层的跨库依赖切干净，物理拆库就退化成纯运维操作，不用熬夜。反过来「先拆库再解耦」会触发一连串紧急修补。
+
+## 我对这类重构的理解
+
+几个跑下来沉淀的原则：
+
+1. **JSON 字段是技术债的温床**。它上线快，但「弱类型 + 无约束 + 无状态机」三件事会随业务增长持续放大成本。能力关联、状态流转这类东西，值得早点提升成显式的表。
+
+2. **跨服务边界要靠接口，不靠数据库**。Database per Service 看着「绕」，但它换来的是 schema 私有、责任清晰、可观测。直连库省下的那点时间，会在第一次线上事故里全部还回去。
+
+3. **数据建模看生命周期，不看 UI 入口**。点读那次返工就是教训——维度由「产物的边界」决定，不由「用户在哪点的」决定。
+
+4. **不停服迁移的安全感来自校验，不来自小心**。双写 + 灰度 + 回落兜底是手段，真正让你敢按下「停写老逻辑」按钮的，是那个每天告诉你「新老数据一致、没人走老路」的 diff 脚本。
+
+这次重构没有引入任何新框架，全是两张表 + 一组接口 + 一个迁移流程。但它把一个会持续恶化的弱类型设计，变成了能稳定扩展、还能干净拆库的结构。对我来说，这比接一个新中间件更有「架构」的感觉。

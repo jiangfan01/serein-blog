@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph L4 · 意图分类 + 动态模型路由</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.66 0.19 35);
+    --active-soft: oklch(0.93 0.06 40);
+    --cheap: oklch(0.55 0.13 155);
+    --cheap-soft: oklch(0.95 0.04 155);
+    --pricey: oklch(0.52 0.15 285);
+    --pricey-soft: oklch(0.95 0.04 285);
+    --warn: oklch(0.6 0.16 40);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--active); margin-bottom: 10px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 64ch; font-size: 16px; }
+
+  .picker { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { font: inherit; font-size: 14px; cursor: pointer; padding: 9px 16px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); transition: all 200ms ease; }
+  .chip:hover { border-color: var(--active); }
+  .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .pipe { margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: stretch; }
+  @media (max-width: 720px) { .pipe { grid-template-columns: 1fr 1fr; } }
+  .stage-box { background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px; padding: 18px 16px; opacity: 0.4; transition: opacity 360ms ease, border-color 360ms ease, transform 360ms cubic-bezier(0.16,1,0.3,1); }
+  .stage-box.lit { opacity: 1; border-color: var(--active); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .stage-box .n { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--muted); }
+  .stage-box h3 { font-size: 15px; font-weight: 650; margin: 6px 0 8px; }
+  .stage-box p { font-size: 13px; color: var(--muted); min-height: 56px; }
+  .pill { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 7px; margin-top: 4px; }
+  .pill.cheap { background: var(--cheap-soft); color: var(--cheap); }
+  .pill.pricey { background: var(--pricey-soft); color: var(--pricey); }
+  .pill.intent { background: var(--active-soft); color: var(--active); }
+
+  .result { margin-top: 26px; padding: 20px 22px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); font-size: 15px; min-height: 70px; }
+  .result.show { animation: slidein 400ms cubic-bezier(0.16,1,0.3,1); }
+  .result b { color: var(--active); }
+  .result code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+  .fb { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
+  .btn { font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; padding: 9px 16px; border-radius: 10px; border: 1.5px solid var(--warn); background: var(--paper); color: var(--warn); transition: all 160ms ease; }
+  .btn:hover { background: var(--warn); color: var(--paper); }
+  .fb-note { font-size: 13px; color: var(--muted); }
+
+  footer { margin-top: 38px; color: var(--muted); font-size: 13.5px; max-width: 74ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">LangGraph 从零 · L4</div>
+  <h1>意图分类 + 动态模型路由</h1>
+  <p class="lede">在调 LLM 之前先想一步：这问题<b>值不值得</b>用贵模型？选个问题，看它怎么被分类 → 命中路由规则 → 选中模型。这就是你 <code>agent.ts</code> 里 <code>classify → route</code> 那两步。</p>
+
+  <div class="picker" id="picker">
+    <button class="chip" data-q="0">你好呀</button>
+    <button class="chip" data-q="1">React 的 useMemo 和 useCallback 区别？</button>
+    <button class="chip" data-q="2">帮我设计一个高并发秒杀系统的架构并分析瓶颈</button>
+    <button class="chip" data-q="3">查一下最新的 Next.js 16 有什么新特性</button>
+  </div>
+
+  <div class="pipe">
+    <div class="stage-box" id="s0"><div class="n">step 1</div><h3>意图分类</h3><p id="s0p">规则匹配 + 小模型，判断这是哪类问题。</p></div>
+    <div class="stage-box" id="s1"><div class="n">step 2</div><h3>查路由规则</h3><p id="s1p">从数据库读 intent → model 的映射（带缓存）。</p></div>
+    <div class="stage-box" id="s2"><div class="n">step 3</div><h3>选中模型</h3><p id="s2p">按规则选定主模型，并记下降级模型。</p></div>
+    <div class="stage-box" id="s3"><div class="n">step 4</div><h3>执行 + 计费</h3><p id="s3p">调用模型，记录 token、延迟、成本。</p></div>
+  </div>
+
+  <div class="result" id="result">选一个问题，看路由怎么走。</div>
+
+  <div class="fb">
+    <button class="btn" id="fbBtn">模拟主模型挂掉 ↘</button>
+    <span class="fb-note">点一下，看"降级 (fallback)"怎么切到备用模型。</span>
+  </div>
+
+  <footer>对照代码：step 1 = <code>intent-classifier.ts</code>，step 2-3 = <code>model-router.ts</code>，step 4 = <code>call-logger.ts</code>。<b>核心思想：模型路由把"用哪个模型"从硬编码变成数据库可配置 + 可热更新 + 可降级。便宜问题别浪费贵模型，这是真金白银的成本优化。</b></footer>
+</div>
+
+<script>
+  const CASES = {
+    0: { intent: "simple_chat", intentCN: "闲聊", model: "deepseek-flash", tier: "cheap", reason: "纯寒暄，没必要上贵模型。", fb: "deepseek-chat" },
+    1: { intent: "rag_query", intentCN: "知识问答", model: "deepseek-chat", tier: "cheap", reason: "前端知识题，中等模型 + RAG 足够。", fb: "kimi-k2" },
+    2: { intent: "complex_reasoning", intentCN: "复杂推理", model: "deepseek-reasoner", tier: "pricey", reason: "架构设计 + 瓶颈分析，需要强推理模型。", fb: "kimi-k2" },
+    3: { intent: "web_search", intentCN: "联网搜索", model: "deepseek-chat", tier: "cheap", reason: "要查最新信息，配联网工具，模型本身不用最强。", fb: "deepseek-flash" },
+  };
+  const $ = (id) => document.getElementById(id);
+  const result = $("result");
+  let cur = null, downgraded = false;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function lit(i, on) { $("s" + i).classList.toggle("lit", on); }
+  function clearLit() { [0,1,2,3].forEach((i) => lit(i, false)); }
+
+  async function run(key) {
+    cur = key; downgraded = false;
+    const c = CASES[key];
+    clearLit();
+    result.classList.remove("show"); void result.offsetWidth; result.classList.add("show");
+    result.innerHTML = "正在路由…";
+
+    lit(0, true);
+    $("s0p").innerHTML = '判定为 <span class="pill intent">' + c.intent + "</span><br>（" + c.intentCN + "）";
+    await sleep(650);
+
+    lit(1, true);
+    $("s1p").innerHTML = "命中规则：<code>" + c.intent + " → " + c.model + "</code>";
+    await sleep(650);
+
+    lit(2, true);
+    $("s2p").innerHTML = '主模型 <span class="pill ' + c.tier + '">' + c.model + '</span><br>降级 <code>' + c.fb + "</code>";
+    await sleep(650);
+
+    lit(3, true);
+    $("s3p").innerHTML = "调用 <code>" + c.model + "</code>，记录 token / 延迟 / 成本。";
+
+    const tierCN = c.tier === "pricey" ? "贵的强模型" : "便宜模型";
+    result.innerHTML = "意图 <b>" + c.intentCN + "</b> → 选了 <b>" + c.model + "</b>（" + tierCN + "）。<br>理由：" + c.reason;
+  }
+
+  function fallback() {
+    if (!cur) { result.innerHTML = "先选一个问题。"; return; }
+    if (downgraded) return;
+    downgraded = true;
+    const c = CASES[cur];
+    $("s2p").innerHTML = '主模型 <s>' + c.model + '</s> 挂了 → 降级到 <span class="pill cheap">' + c.fb + "</span>";
+    $("s3p").innerHTML = "改调 <code>" + c.fb + "</code>，并记 <code>usedFallback=true</code>。";
+    result.classList.remove("show"); void result.offsetWidth; result.classList.add("show");
+    result.innerHTML = "⚠️ 主模型 <s>" + c.model + "</s> 不可用 → <b>自动降级</b>到 <b>" + c.fb + "</b>。用户无感，日志记下这次降级。<br><b style='color:var(--warn)'>注意：你 agent.ts 里这条降级路径目前没真正接线，L4 我们就来修它。</b>";
+  }
+
+  document.querySelectorAll("#picker .chip").forEach((ch) => {
+    ch.addEventListener("click", () => {
+      document.querySelectorAll("#picker .chip").forEach((x) => x.classList.remove("on"));
+      ch.classList.add("on");
+      run(ch.dataset.q);
+    });
+  });
+  $("fbBtn").addEventListener("click", fallback);
+</script>
+</body>
+</html>

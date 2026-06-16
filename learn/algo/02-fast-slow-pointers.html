@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>算法 02 · 快慢指针（链表）</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --slow: oklch(0.55 0.15 255);
+    --slow-soft: oklch(0.93 0.05 255);
+    --fast: oklch(0.6 0.16 30);
+    --fast-soft: oklch(0.93 0.06 35);
+    --mid: oklch(0.55 0.14 155);
+    --mid-soft: oklch(0.92 0.06 155);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fast); margin-bottom: 10px; }
+  h1 { font-size: clamp(24px, 4vw, 34px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 62ch; font-size: 16px; }
+  .lede b.s { color: var(--slow); }
+  .lede b.f { color: var(--fast); }
+
+  .board { margin-top: 36px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 40px 26px; overflow-x: auto; }
+  .list { display: flex; align-items: center; gap: 4px; justify-content: center; min-width: max-content; margin: 0 auto; }
+  .node { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, Menlo, monospace; font-size: 19px; font-weight: 600; transition: all 360ms cubic-bezier(0.16,1,0.3,1); flex: none; }
+  .arrow { color: var(--muted); font-size: 18px; flex: none; }
+  .nullbox { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 13px; padding: 0 6px; flex: none; }
+  .node .ptr { position: absolute; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; white-space: nowrap; opacity: 0; transition: all 360ms cubic-bezier(0.16,1,0.3,1); }
+  .node .ptr.s { top: -24px; color: var(--slow); }
+  .node .ptr.f { bottom: -24px; color: var(--fast); }
+  .node.hasS { border-color: var(--slow); }
+  .node.hasS .ptr.s { opacity: 1; }
+  .node.hasF { background: var(--fast-soft); }
+  .node.hasF .ptr.f { opacity: 1; }
+  .node.hasS.hasF { border-color: var(--slow); background: var(--fast-soft); }
+  .node.mid { border-color: var(--mid); background: var(--mid-soft); transform: scale(1.12); }
+
+  .speed { margin-top: 50px; display: flex; gap: 26px; justify-content: center; font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  .speed .s { color: var(--slow); }
+  .speed .f { color: var(--fast); }
+
+  .narration { margin-top: 24px; padding: 16px 20px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: 15px; min-height: 56px; display: flex; align-items: center; }
+  .narration b.s { color: var(--slow); }
+  .narration b.f { color: var(--fast); }
+  .narration b.ok { color: var(--mid); }
+
+  .controls { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform 160ms ease, opacity 160ms ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+
+  footer { margin-top: 34px; color: var(--muted); font-size: 13.5px; max-width: 70ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">算法模式 · 02 · 链表破冰</div>
+  <h1>快慢指针：找链表中点</h1>
+  <p class="lede">双指针<b>不是数组专用</b>。这里两个指针同向走：<b class="s">慢指针</b>每次 1 步，<b class="f">快指针</b>每次 2 步。快的走的路是慢的两倍，所以<b class="f">快</b>到终点时，<b class="s">慢</b>正好在中点。点"下一步"看。</p>
+
+  <div class="board">
+    <div class="list" id="list"></div>
+    <div class="speed">
+      <span class="s">slow = 走 1 步</span>
+      <span class="f">fast = 走 2 步</span>
+    </div>
+  </div>
+
+  <div class="narration" id="narration"><b class="s">slow</b> 和 <b class="f">fast</b> 都从头节点出发。点"下一步"开始走。</div>
+
+  <div class="controls">
+    <button class="btn" id="nextBtn">下一步 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+  </div>
+
+  <footer>
+    <b>循环条件 <code>while (fast && fast.next)</code></b>：快指针或它的下一个为空就停 —— 这时慢指针就在中点。<br>
+    一次遍历搞定，不用"先求长度、再遍历一半"。这就是快慢指针用<b>速度差换信息</b>。同样的套路换个走法，还能<b>判环</b>（快的追上慢的）和找<b>倒数第 k 个</b>（快的先走 k 步）。
+  </footer>
+</div>
+
+<script>
+  const VALS = [1, 2, 3, 4, 5];
+  let slow, fast, done;
+
+  const $ = (id) => document.getElementById(id);
+  const listEl = $("list"), narration = $("narration"), nextBtn = $("nextBtn");
+
+  function render() {
+    listEl.innerHTML = "";
+    VALS.forEach((v, i) => {
+      const n = document.createElement("div");
+      n.className = "node";
+      if (i === slow) n.classList.add("hasS");
+      if (i === fast) n.classList.add("hasF");
+      if (done && i === slow) { n.classList.add("mid"); n.classList.remove("hasF"); }
+      n.innerHTML = v + '<span class="ptr s">slow↓</span><span class="ptr f">↑fast</span>';
+      listEl.appendChild(n);
+      if (i < VALS.length - 1) {
+        const a = document.createElement("span"); a.className = "arrow"; a.textContent = "→"; listEl.appendChild(a);
+      }
+    });
+    const a = document.createElement("span"); a.className = "arrow"; a.textContent = "→"; listEl.appendChild(a);
+    const nb = document.createElement("span"); nb.className = "nullbox"; nb.textContent = "null"; listEl.appendChild(nb);
+  }
+
+  function reset() {
+    slow = 0; fast = 0; done = false;
+    nextBtn.disabled = false; nextBtn.textContent = "下一步 →";
+    narration.innerHTML = '<b class="s">slow</b> 和 <b class="f">fast</b> 都从头节点出发。点"下一步"开始走。';
+    render();
+  }
+
+  function next() {
+    if (done) return;
+    // 循环条件：fast 存在且 fast.next 存在（fast < 末尾）
+    const fastAtEndOrBeyond = fast >= VALS.length - 1;
+    if (fastAtEndOrBeyond) {
+      done = true;
+      narration.innerHTML = '<b class="f">fast</b> 已到末尾，循环停止。<b class="ok">✓ slow 停在下标 ' + slow + '（值 ' + VALS[slow] + '），正是中点。</b>一次遍历搞定。';
+      nextBtn.disabled = true; nextBtn.textContent = "找到中点";
+      render();
+      return;
+    }
+    slow = slow + 1;
+    fast = Math.min(fast + 2, VALS.length - 1 + 1); // 防越界，仅用于展示
+    const fEnd = fast >= VALS.length;
+    narration.innerHTML = '<b class="s">slow</b> 走 1 步到下标 ' + slow + '（值 ' + VALS[slow] + '），' +
+      '<b class="f">fast</b> 走 2 步' + (fEnd ? '（已冲出末尾，下一步停）' : '到下标 ' + fast + '（值 ' + VALS[fast] + '）') + '。';
+    if (fEnd) fast = VALS.length; // 标记越界，下次判定停止
+    render();
+  }
+
+  nextBtn.addEventListener("click", next);
+  $("resetBtn").addEventListener("click", reset);
+  reset();
+</script>
+</body>
+</html>

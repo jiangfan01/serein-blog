@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>意图识别 · 三级瀑布</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.66 0.19 35);
+    --active-soft: oklch(0.93 0.06 40);
+    --free: oklch(0.55 0.13 155);
+    --free-soft: oklch(0.95 0.04 155);
+    --paid: oklch(0.52 0.15 285);
+    --paid-soft: oklch(0.95 0.04 285);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--active); margin-bottom: 10px; }
+  h1 { font-size: clamp(24px, 4vw, 34px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 60ch; font-size: 16px; }
+
+  .picker { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { font: inherit; font-size: 13.5px; cursor: pointer; padding: 9px 15px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); transition: all 200ms ease; }
+  .chip:hover { border-color: var(--active); }
+  .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .tiers { margin-top: 26px; display: flex; flex-direction: column; gap: 12px; }
+  .tier { background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px; padding: 16px 18px; opacity: 0.45; transition: opacity 340ms ease, border-color 340ms ease, transform 340ms cubic-bezier(0.16,1,0.3,1); display: flex; gap: 14px; align-items: flex-start; }
+  .tier.lit { opacity: 1; transform: translateX(4px); }
+  .tier.resolved { border-color: var(--active); box-shadow: var(--shadow); }
+  .tier.skipped { opacity: 0.3; }
+  .tier .ic { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .t0 .ic { background: oklch(0.92 0.02 265); }
+  .t1 .ic { background: var(--free-soft); }
+  .t2 .ic { background: var(--paid-soft); }
+  .tier h3 { font-size: 15px; font-weight: 650; display: flex; gap: 10px; align-items: center; }
+  .cost { font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .cost.free { background: var(--free-soft); color: var(--free); }
+  .cost.paid { background: var(--paid-soft); color: var(--paid); }
+  .tier p { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .tier .out { font-size: 13px; margin-top: 7px; min-height: 20px; }
+  .tier .out code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  .check { color: var(--active); font-weight: 700; }
+
+  .result { margin-top: 24px; padding: 18px 20px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); font-size: 15px; min-height: 60px; }
+  .result b { color: var(--active); }
+  .result code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  .hint { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  footer { margin-top: 34px; color: var(--muted); font-size: 13.5px; max-width: 70ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">L4 · 意图识别原理</div>
+  <h1>意图识别的三级瀑布</h1>
+  <p class="lede">没有玄学。问题进来，<b>越往下越贵</b>：能在上一级解决，就绝不往下走。这就是你 <code>intent-classifier.ts</code> 的真实逻辑。</p>
+
+  <div class="picker" id="picker">
+    <button class="chip" data-q="0">你好呀</button>
+    <button class="chip" data-q="1">查一下 Next.js 最新版本</button>
+    <button class="chip" data-q="2">帮我把这个需求拆成几步来做</button>
+    <button class="chip" data-q="0b">你好呀（再点一次）</button>
+  </div>
+
+  <div class="tiers">
+    <div class="tier t0" id="t0">
+      <div class="ic">⚡</div>
+      <div>
+        <h3>① 缓存 <span class="cost free">0ms · 免费</span></h3>
+        <p>同一个问题问过没？问过直接返回上次结果。</p>
+        <div class="out" id="t0o"></div>
+      </div>
+    </div>
+    <div class="tier t1" id="t1">
+      <div class="ic">📏</div>
+      <div>
+        <h3>② 规则匹配 <span class="cost free">~0ms · 免费</span></h3>
+        <p>关键词匹配（"你好""查一下""为什么"…）。命中且<b>置信度 ≥ 0.9</b> 就拍板，不调 API。</p>
+        <div class="out" id="t1o"></div>
+      </div>
+    </div>
+    <div class="tier t2" id="t2">
+      <div class="ic">🧠</div>
+      <div>
+        <h3>③ 小模型分类 <span class="cost paid">~200ms · 花钱</span></h3>
+        <p>规则拿不准时，才用最便宜的模型（deepseek-flash）输出结构化 JSON。</p>
+        <div class="out" id="t2o"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="result" id="result">选一个问题，看它在第几级被解决。</div>
+
+  <footer>核心思想：<b>分类这种小事，能用免费的规则/缓存搞定，就别浪费一次 LLM 调用。</b>规则快但脆（关键词覆盖不全），小模型准但慢且花钱 —— 三级瀑布就是在"成本"和"准确率"之间取平衡。你觉得 AI"意图识别厉害"，其实就是第③级那个小模型在做分类，配上①②兜住了大部分简单情况。</footer>
+</div>
+
+<script>
+  const CASES = {
+    "0":  { tier: 1, intent: "simple_chat",       kw: "你好",          conf: 0.95, cn: "闲聊" },
+    "1":  { tier: 1, intent: "web_search",        kw: "查一下 / 最新 / 版本", conf: 0.9,  cn: "联网搜索" },
+    "2":  { tier: 2, intent: "complex_reasoning", kw: null,            conf: 0.85, cn: "复杂推理" },
+    "0b": { tier: 0, intent: "simple_chat",       kw: "你好",          conf: 0.95, cn: "闲聊", cached: true },
+  };
+  const $ = (id) => document.getElementById(id);
+  const result = $("result");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function resetTiers() {
+    ["t0","t1","t2"].forEach((t) => { $(t).classList.remove("lit","resolved","skipped"); $(t+"o").innerHTML = ""; });
+  }
+
+  async function run(key) {
+    resetTiers();
+    const c = CASES[key];
+    result.innerHTML = "分类中…";
+
+    // 缓存层
+    $("t0").classList.add("lit");
+    await sleep(450);
+    if (c.tier === 0) {
+      $("t0o").innerHTML = '<span class="check">✓ 命中缓存</span>，直接返回 <code>' + c.intent + "</code>，后两级跳过。";
+      $("t0").classList.add("resolved");
+      $("t1").classList.add("skipped"); $("t2").classList.add("skipped");
+      result.innerHTML = "⚡ <b>缓存命中</b> → <code>" + c.intent + "</code>。第二次问同样的话，<b>0 成本</b>，连规则都不用跑。";
+      return;
+    }
+    $("t0o").innerHTML = "缓存未命中，往下走。";
+    await sleep(350);
+
+    // 规则层
+    $("t1").classList.add("lit");
+    await sleep(500);
+    if (c.tier === 1) {
+      $("t1o").innerHTML = '<span class="check">✓ 命中关键词</span> 「' + c.kw + "」 → <code>" + c.intent + "</code>，置信度 " + c.conf + " ≥ 0.9，<b>拍板，不调 API</b>。";
+      $("t1").classList.add("resolved");
+      $("t2").classList.add("skipped");
+      result.innerHTML = "📏 <b>规则搞定</b> → <code>" + c.intent + "</code>（" + c.cn + "）。省下一次 LLM 调用。";
+      return;
+    }
+    $("t1o").innerHTML = "没有明确关键词，置信度只有 0.5 < 0.9，<b>规则拿不准</b> → 交给小模型。";
+    await sleep(450);
+
+    // 小模型层
+    $("t2").classList.add("lit");
+    await sleep(700);
+    $("t2o").innerHTML = '小模型返回 <code>{ intent: "' + c.intent + '", confidence: ' + c.conf + ' }</code>';
+    $("t2").classList.add("resolved");
+    result.innerHTML = "🧠 规则兜不住 → <b>小模型分类</b> → <code>" + c.intent + "</code>（" + c.cn + "）。花了 ~200ms 和一点点钱，但准。";
+  }
+
+  document.querySelectorAll("#picker .chip").forEach((ch) => {
+    ch.addEventListener("click", () => {
+      document.querySelectorAll("#picker .chip").forEach((x) => x.classList.remove("on"));
+      ch.classList.add("on");
+      run(ch.dataset.q);
+    });
+  });
+</script>
+</body>
+</html>

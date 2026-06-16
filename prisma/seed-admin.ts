@@ -51,22 +51,21 @@ async function main() {
   console.log("\n🎫 创建邀请码...");
   
   const codes = [
-    { note: "测试用", maxUses: 5 },
-    { note: "朋友", maxUses: 1 },
+    { note: "测试用" },
+    { note: "朋友" },
   ];
 
-  for (const { note, maxUses } of codes) {
+  for (const { note } of codes) {
     const code = randomBytes(4).toString("hex").toUpperCase();
     
     await prisma.inviteCode.create({
       data: {
         code,
         note,
-        maxUses,
       },
     });
     
-    console.log(`✅ 邀请码: ${code} (${note}, 可用 ${maxUses} 次)`);
+    console.log(`✅ 邀请码: ${code} (${note})`);
   }
 
   console.log("\n🎉 初始化完成！");

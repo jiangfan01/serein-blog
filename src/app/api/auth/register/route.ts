@@ -4,6 +4,7 @@
  * 需要有效的邀请码才能注册
  */
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, generateAccessToken, generateRefreshToken, getRefreshTokenExpiry } from "@/lib/auth";
 import { randomBytes } from "crypto";
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     // 验证邀请码
     const invite = await prisma.inviteCode.findUnique({
       where: { code: inviteCode },
+      include: { usedBy: { select: { id: true } } },
     });
 
     if (!invite) {
@@ -38,7 +40,8 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "邀请码已禁用" }, { status: 400 });
     }
 
-    if (invite.usedCount >= invite.maxUses) {
+    // 一码一人：被消费过 = 已经绑定了某个用户（usedBy 关系是唯一真相来源）
+    if (invite.usedBy) {
       return Response.json({ error: "邀请码已被使用" }, { status: 400 });
     }
 
@@ -55,12 +58,18 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "该邮箱已注册" }, { status: 400 });
     }
 
-    // 创建用户（使用事务）
+    // 创建用户。
+    // 注意：把 inviteCodeId 设到用户身上，这一个写操作本身就完成了"消费邀请码"。
+    // 不再需要事务 + usedCount 自增——因为是一码一人，消费 = 单次写入。
+    //
+    // 并发兜底：User.inviteCodeId 上有 @unique。万一两个请求同时通过了上面的
+    // usedBy 检查，数据库只会让一个 create 成功，另一个抛唯一约束冲突(P2002)，
+    // 被下面的 catch 拦成友好的 400。数据库约束就是这里的"并发锁"。
     const passwordHash = await hashPassword(password);
-    
-    const user = await prisma.$transaction(async (tx) => {
-      // 创建用户
-      const newUser = await tx.user.create({
+
+    let user;
+    try {
+      user = await prisma.user.create({
         data: {
           email,
           passwordHash,
@@ -69,15 +78,19 @@ export async function POST(req: NextRequest) {
           inviteCodeId: invite.id,
         },
       });
-
-      // 更新邀请码使用次数
-      await tx.inviteCode.update({
-        where: { id: invite.id },
-        data: { usedCount: { increment: 1 } },
-      });
-
-      return newUser;
-    });
+    } catch (e) {
+      // P2002 = 唯一约束冲突（邀请码被并发抢用，或邮箱被并发抢注）
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        return Response.json(
+          { error: "邀请码已被使用或邮箱已注册" },
+          { status: 400 }
+        );
+      }
+      throw e;
+    }
 
     // 生成 tokens
     const payload = { userId: user.id, email: user.email, role: user.role };

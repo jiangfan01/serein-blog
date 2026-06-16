@@ -9,6 +9,7 @@
 
 import { runAgent } from "@/lib/agent/agent";
 import type { SSEEvent } from "@/lib/agent/types";
+import { compressSessionIfNeeded } from "@/lib/agent/context/summarizer";
 import {
   createUserMessage,
   createAssistantMessage,
@@ -162,6 +163,10 @@ export async function finalizeChat(ctx: ChatContext): Promise<void> {
 
   // 更新会话的 updatedAt
   await touchSession(ctx.sessionId);
+
+  // 异步压缩上下文（不阻塞响应）：本轮已结束，检查历史是否超阈值，
+  // 超了就把旧对话压成滚动摘要，下一轮 buildContext 自动用摘要 + 截断点之后的原文。
+  compressSessionIfNeeded({ sessionId: ctx.sessionId }).catch(console.error);
 }
 
 /**

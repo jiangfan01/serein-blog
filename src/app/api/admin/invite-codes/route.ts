@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const authError = await verifyAdmin(req);
     if (authError) return authError;
 
-    const { note, maxUses = 1, expiresInDays } = await req.json();
+    const { note, expiresInDays } = await req.json();
 
     // 生成随机邀请码
     const code = randomBytes(4).toString("hex").toUpperCase();
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
       data: {
         code,
         note,
-        maxUses,
         expiresAt: expiresInDays
           ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
           : null,

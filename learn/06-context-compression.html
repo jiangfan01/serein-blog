@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A 上下文工程 · 会话摘要压缩</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --recent: oklch(0.55 0.13 255);
+    --recent-soft: oklch(0.93 0.05 255);
+    --summary: oklch(0.55 0.13 155);
+    --summary-soft: oklch(0.93 0.05 155);
+    --danger: oklch(0.58 0.2 28);
+    --danger-soft: oklch(0.93 0.07 30);
+    --warn: oklch(0.7 0.16 70);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--summary); margin-bottom: 10px; }
+  h1 { font-size: clamp(24px, 4vw, 34px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 64ch; font-size: 16px; }
+  .lede code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+
+  .board { margin-top: 30px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 26px; }
+
+  .bar-head { display: flex; justify-content: space-between; align-items: baseline; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .bar-head b { color: var(--ink); font-size: 15px; }
+  .bar { height: 34px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); position: relative; overflow: hidden; }
+  .bar .fill { height: 100%; width: 0; display: flex; transition: width 500ms cubic-bezier(0.16,1,0.3,1); }
+  .bar .seg-sum { background: var(--summary); height: 100%; transition: width 500ms cubic-bezier(0.16,1,0.3,1); }
+  .bar .seg-rec { background: var(--recent); height: 100%; transition: width 500ms cubic-bezier(0.16,1,0.3,1); }
+  .bar .thresh { position: absolute; top: -4px; bottom: -4px; left: 80%; width: 2px; background: var(--danger); }
+  .bar .thresh span { position: absolute; top: -20px; left: 4px; font-size: 11px; color: var(--danger); font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .bar.boom { animation: shake 400ms; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+
+  .legend { display: flex; gap: 20px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  .blocks { margin-top: 26px; display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; min-height: 70px; }
+  .blk { border-radius: 10px; padding: 10px 12px; font-size: 12px; font-family: ui-monospace, Menlo, monospace; display: flex; flex-direction: column; justify-content: center; animation: pop 360ms cubic-bezier(0.16,1,0.3,1); }
+  @keyframes pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+  .blk.sum { background: var(--summary-soft); color: oklch(0.34 0.1 155); border: 1.5px solid var(--summary); min-width: 140px; }
+  .blk.sum.capped { border-style: solid; }
+  .blk.sum.bloat { background: var(--danger-soft); border-color: var(--danger); color: oklch(0.4 0.16 28); }
+  .blk.rec { background: var(--recent-soft); color: oklch(0.34 0.12 255); border: 1px solid oklch(0.85 0.06 255); }
+  .blk .t { font-weight: 700; font-size: 11px; opacity: 0.7; }
+
+  .controls { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn { font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform 160ms ease, opacity 160ms ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+  .switch { position: relative; width: 46px; height: 26px; border-radius: 13px; background: var(--danger); cursor: pointer; transition: background 220ms ease; }
+  .switch.on { background: var(--summary); }
+  .switch .dot { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left 220ms cubic-bezier(0.16,1,0.3,1); }
+  .switch.on .dot { left: 23px; }
+
+  .narration { margin-top: 24px; padding: 16px 20px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: 15px; min-height: 58px; display: flex; align-items: center; }
+  .narration b { color: var(--summary); }
+  .narration.bad { background: var(--danger-soft); border-color: var(--danger); }
+  .narration.bad b { color: var(--danger); }
+
+  footer { margin-top: 34px; color: var(--muted); font-size: 13.5px; max-width: 74ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">第二季 A · 上下文工程</div>
+  <h1>会话摘要压缩（含"摘要膨胀"防治）</h1>
+  <p class="lede">每发一轮,历史 token 涨。到 <b>80% 预算</b>触发压缩:把<b>最近 3 轮之外的旧对话</b>压成摘要。关键开关:<b>摘要上限</b>。关掉它,看摘要怎么膨胀到炸;打开它,看它定长稳如老狗。</p>
+
+  <div class="board">
+    <div class="bar-head">
+      <span>历史 token：<b id="tok">0</b> / 8000（预算）</span>
+      <span id="status">健康</span>
+    </div>
+    <div class="bar" id="bar">
+      <div class="fill" id="fill">
+        <div class="seg-sum" id="segSum"></div>
+        <div class="seg-rec" id="segRec"></div>
+      </div>
+      <div class="thresh"><span>80% 触发线</span></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--summary)"></i>摘要（旧对话压缩）</span>
+      <span><i style="background:var(--recent)"></i>最近 3 轮原文</span>
+    </div>
+
+    <div class="blocks" id="blocks"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="sendBtn">发一轮对话 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+    <div class="toggle">
+      <span>摘要上限(≤800)</span>
+      <div class="switch on" id="capSwitch"><div class="dot"></div></div>
+      <span id="capLabel">开</span>
+    </div>
+  </div>
+
+  <div class="narration" id="narration">点"发一轮对话",看历史怎么涨、到 80% 怎么压。试试把"摘要上限"关掉再发几轮。</div>
+
+  <footer>
+    对照真实代码 <code>summarizer.ts</code>：<b>感知</b> = 估算 <code>摘要token + 截断点后消息</code>；<b>触发</b> = <code>≥ 80% × conversationHistory 预算</code>；<b>压缩</b> = 最近 3 轮之外的旧对话 + 旧摘要 → 融合成新摘要，写回 <code>ChatSession.summaryContent</code> + <code>summarizedUpToMessageId</code>(截断点)。<br>
+    <b>上限那一栏就是你逮到的坑</b>：没有上限，摘要每次融合越滚越大，最终比原文还大 → 炸。<code>MAX_SUMMARY_TOKENS</code> 让摘要定长，永不膨胀。
+  </footer>
+</div>
+
+<script>
+  const BUDGET = 8000;
+  const THRESHOLD = BUDGET * 0.8;     // 6400
+  const ROUND_TOKENS = 1000;          // 一轮 ~1000 token
+  const PRESERVE = 3;                 // 保留最近 3 轮
+  const SUMMARY_CAP = 800;            // 摘要上限
+  const FOLD_PER_ROUND = 220;         // 每轮折进摘要约增加的 token（未压上限时）
+
+  let recent = 0;       // 最近轮数
+  let summaryTok = 0;   // 摘要 token
+  let capOn = true;
+  let boomed = false;
+
+  const $ = (id) => document.getElementById(id);
+  const narration = $("narration");
+
+  function histTokens() { return summaryTok + recent * ROUND_TOKENS; }
+
+  function render() {
+    const tok = histTokens();
+    $("tok").textContent = tok;
+    const pct = Math.min(100, (tok / BUDGET) * 100);
+    $("fill").style.width = pct + "%";
+    const sumPct = tok > 0 ? (summaryTok / tok) * 100 : 0;
+    $("segSum").style.width = sumPct + "%";
+    $("segRec").style.width = (100 - sumPct) + "%";
+
+    const status = $("status");
+    if (tok > BUDGET) { status.textContent = "💥 爆了"; status.style.color = "var(--danger)"; }
+    else if (tok >= THRESHOLD) { status.textContent = "⚠️ 接近上限"; status.style.color = "var(--warn)"; }
+    else { status.textContent = "健康"; status.style.color = "var(--summary)"; }
+
+    // blocks
+    const blocks = $("blocks");
+    blocks.innerHTML = "";
+    if (summaryTok > 0) {
+      const b = document.createElement("div");
+      const bloat = summaryTok > SUMMARY_CAP;
+      b.className = "blk sum" + (capOn ? " capped" : bloat ? " bloat" : "");
+      b.innerHTML = '<span class="t">摘要</span>' + summaryTok + ' tok' + (bloat ? ' ⚠️膨胀' : capOn ? ' ✓定长' : '');
+      blocks.appendChild(b);
+    }
+    for (let i = 0; i < recent; i++) {
+      const b = document.createElement("div");
+      b.className = "blk rec";
+      b.innerHTML = '<span class="t">最近</span>' + ROUND_TOKENS;
+      blocks.appendChild(b);
+    }
+  }
+
+  function send() {
+    if (boomed) return;
+    recent++;
+    let msg = "发了一轮,历史 +" + ROUND_TOKENS + " token。";
+
+    if (histTokens() >= THRESHOLD) {
+      // 触发压缩：最近 PRESERVE 轮之外的折进摘要
+      const foldRounds = Math.max(0, recent - PRESERVE);
+      if (foldRounds > 0) {
+        let added = foldRounds * FOLD_PER_ROUND;
+        if (capOn) {
+          summaryTok = Math.min(SUMMARY_CAP, summaryTok + added);
+          msg = "🔻 到 80% 触发压缩!" + foldRounds + " 轮旧对话折进摘要。<b>上限生效:摘要封顶 " + SUMMARY_CAP + " tok,定长不涨。</b>历史回落,稳。";
+        } else {
+          summaryTok += added;
+          msg = "🔻 触发压缩," + foldRounds + " 轮折进摘要。<b>没上限:摘要涨到 " + summaryTok + " tok。</b>它在慢慢膨胀…";
+        }
+        recent = PRESERVE;
+      }
+    }
+
+    if (histTokens() > BUDGET) {
+      boomed = true;
+      narration.className = "narration bad";
+      narration.innerHTML = "💥 <b>炸了!</b> 摘要本身涨到 " + summaryTok + " tok,加最近轮已超预算 " + BUDGET + "。这就是「摘要膨胀」——压缩没解决问题,只是把无限增长从原文转移到了摘要。<b>解药:给摘要设上限(把开关打开重试)。</b>";
+      $("sendBtn").disabled = true;
+    } else {
+      narration.className = "narration";
+      narration.innerHTML = msg;
+    }
+    render();
+  }
+
+  function reset() {
+    recent = 0; summaryTok = 0; boomed = false;
+    $("sendBtn").disabled = false;
+    narration.className = "narration";
+    narration.innerHTML = '点"发一轮对话",看历史怎么涨、到 80% 怎么压。试试把"摘要上限"关掉再发几轮。';
+    render();
+  }
+
+  $("sendBtn").addEventListener("click", send);
+  $("resetBtn").addEventListener("click", reset);
+  $("capSwitch").addEventListener("click", () => {
+    capOn = !capOn;
+    $("capSwitch").classList.toggle("on", capOn);
+    $("capLabel").textContent = capOn ? "开" : "关";
+    reset();
+  });
+  reset();
+</script>
+</body>
+</html>

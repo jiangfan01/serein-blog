@@ -6,4 +6,7 @@ export default {
   'pdf-reading': 'PDF 点读阅读器开发实践',
   'reading-and-ai-qa': '点读与 AI 问答系统复盘',
   'book-automation-resource-generation': '图书自动化资源生产复盘',
+  'resource-ability-decoupling': '资源能力解耦：features JSON 到 ability 双表',
+  'tts-provider-routing': 'TTS 多供应商路由与语音引擎选型',
+  'wechat-third-party-publish': '微信第三方平台多租户发布',
 }

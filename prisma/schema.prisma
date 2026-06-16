@@ -87,18 +87,19 @@ model InviteCode {
   
   /// 创建信息
   note        String?   /// 备注（给谁用的）
-  
-  /// 使用限制
-  maxUses     Int       @default(1)  /// 最大使用次数
-  usedCount   Int       @default(0)  /// 已使用次数
+
   expiresAt   DateTime? /// 过期时间（null = 永不过期）
-  
-  /// 状态
+
+  /// 管理员开关：是否被管理员禁用。
+  /// 注意：这跟"是否被用户消费过"是两件事，别混。
+  /// enabled=false 是管理员主动作废；被消费看下面的 usedBy 关系。
   enabled     Boolean   @default(true)
-  
+
   createdAt   DateTime  @default(now())
-  
-  /// 关联
+
+  /// 关联：被哪个用户使用。这是"是否已被使用"的【唯一真相来源】。
+  /// usedBy == null → 未使用；usedBy != null → 已被这个用户用掉。
+  /// 一码一人由 User.inviteCodeId 上的 @unique 在数据库层强制保证。
   usedBy      User?     /// 使用该邀请码的用户
 
   @@map("invite_codes")
@@ -138,6 +139,13 @@ model ChatSession {
   
   /// 状态
   archived    Boolean  @default(false)
+
+  /// 上下文压缩（会话摘要）
+  /// summaryContent: 旧对话压成的滚动摘要文本
+  /// summarizedUpToMessageId: 已摘要覆盖到的最后一条消息 ID（截断点）
+  ///   加载历史时只取这条之后的原文，前面的用摘要代替
+  summaryContent          String?
+  summarizedUpToMessageId String?
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

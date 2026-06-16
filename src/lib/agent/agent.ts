@@ -286,6 +286,8 @@ export async function* runAgent(
 
     // 用于追踪已处理的事件
     const processedToolCalls = new Set<string>();
+    // 用 run_id 关联同一次工具调用的 start/end，记录开始时间以计算真实延迟
+    const toolStartTimes = new Map<string, number>();
 
     // 使用 streamEvents 获取流式输出
     const stream = graph.streamEvents(initialState, {
@@ -302,8 +304,8 @@ export async function* runAgent(
         if (toolName && toolArgs && !processedToolCalls.has(`start-${runId}`)) {
           processedToolCalls.add(`start-${runId}`);
 
-          // 记录工具开始时间
-          (event as { _startTime?: number })._startTime = Date.now();
+          // 记录工具开始时间：存进 Map，用 run_id 关联（end 事件是另一个对象，挂在 event 上读不回来）
+          toolStartTimes.set(runId, Date.now());
 
           yield {
             type: "tool_start",
@@ -322,8 +324,10 @@ export async function* runAgent(
         if (toolName && result && !processedToolCalls.has(`end-${runId}`)) {
           processedToolCalls.add(`end-${runId}`);
 
-          // 计算工具延迟（简化处理）
-          const latencyMs = 500; // 实际应该从 _startTime 计算
+          // 计算真实工具延迟：用 run_id 取回开始时间，算差值
+          const startedAt = toolStartTimes.get(runId);
+          const latencyMs = startedAt ? Date.now() - startedAt : 0;
+          toolStartTimes.delete(runId); // 用完清理，避免 Map 无限增长
           toolCallRecords.push({ tool: toolName, latencyMs });
 
           // 累加输入 token（工具结果）

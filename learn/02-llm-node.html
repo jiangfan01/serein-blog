@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph L2 · 会调 LLM 的节点</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.66 0.19 35);
+    --active-soft: oklch(0.93 0.06 40);
+    --human: oklch(0.52 0.15 255);
+    --human-soft: oklch(0.95 0.04 255);
+    --ai: oklch(0.5 0.12 155);
+    --ai-soft: oklch(0.95 0.04 155);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    padding: clamp(20px, 4vw, 56px);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--active); margin-bottom: 10px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 680; letter-spacing: -0.02em; line-height: 1.15; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 64ch; font-size: 16px; }
+  .note { margin-top: 14px; font-size: 13px; color: var(--muted); background: var(--active-soft); border: 1px solid var(--active); border-radius: 10px; padding: 10px 14px; max-width: 64ch; }
+  .note b { color: oklch(0.45 0.16 35); }
+
+  .stage { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 28px; align-items: start; margin-top: 34px; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 28px 26px; }
+  .panel h2 { font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 22px; }
+
+  .graph { display: flex; flex-direction: column; align-items: center; }
+  .node { width: 220px; text-align: center; padding: 16px 18px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); font-weight: 600; font-size: 15px; transition: transform 480ms cubic-bezier(0.16,1,0.3,1), border-color 300ms ease, background 300ms ease, box-shadow 300ms ease, color 300ms ease; }
+  .node .sub { display: block; font-weight: 450; font-size: 12.5px; color: var(--muted); margin-top: 3px; font-family: ui-monospace, Menlo, monospace; }
+  .node.terminal { width: 92px; border-radius: 999px; padding: 8px 18px; font-size: 13px; color: var(--muted); background: var(--bg); }
+  .node.active { border-color: var(--active); background: var(--active-soft); color: oklch(0.4 0.16 35); transform: scale(1.06); box-shadow: 0 6px 22px oklch(0.66 0.19 35 / 0.22); }
+  .node.done { border-color: var(--ai); color: oklch(0.42 0.1 155); }
+  .node .spin { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--active); font-family: ui-monospace, Menlo, monospace; }
+
+  .edge { width: 2px; height: 32px; background: var(--line); position: relative; }
+  .edge .pulse { position: absolute; left: 50%; top: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--active); transform: translate(-50%, -4px); opacity: 0; box-shadow: 0 0 0 4px oklch(0.66 0.19 35 / 0.18); }
+  .edge.firing .pulse { animation: drop 460ms cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes drop { from { top: 0; opacity: 1; } to { top: 32px; opacity: 0; } }
+
+  .chan-label { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; font-weight: 600; background: var(--ai-soft); color: var(--ai); }
+  .messages { display: flex; flex-direction: column; gap: 12px; min-height: 220px; }
+  .empty { color: var(--muted); font-style: italic; font-size: 14px; }
+  .msg { border-radius: 12px; padding: 12px 15px; font-size: 14.5px; max-width: 90%; animation: slidein 360ms cubic-bezier(0.16,1,0.3,1); }
+  .msg .role { font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 5px; opacity: 0.75; }
+  .msg.human { align-self: flex-end; background: var(--human-soft); color: oklch(0.34 0.13 255); border: 1px solid oklch(0.85 0.06 255); }
+  .msg.ai { align-self: flex-start; background: var(--ai-soft); color: oklch(0.32 0.1 155); border: 1px solid oklch(0.85 0.06 155); }
+  .msg.streaming { border-style: dashed; }
+  .caret { display: inline-block; width: 7px; height: 15px; background: var(--ai); margin-left: 1px; vertical-align: -2px; animation: blink 900ms steps(2) infinite; }
+  @keyframes blink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+  .controls { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn { font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform 160ms ease, opacity 160ms ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  select { font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); max-width: 100%; }
+
+  .narration { margin-top: 26px; padding: 18px 20px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); font-size: 15px; min-height: 60px; display: flex; align-items: center; }
+  .narration b { color: var(--active); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  footer { margin-top: 38px; color: var(--muted); font-size: 13.5px; max-width: 72ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">LangGraph 从零 · L2</div>
+  <h1>会调 LLM 的节点</h1>
+  <p class="lede">骨架和 L1 完全一样：State 流过节点。唯一的区别 —— 这次 <code>agent</code> 节点内部调用了 LLM，把流式 token 拼成一条 AIMessage，再用 <b>append reducer</b> 追加进 <code>messages</code>。</p>
+  <div class="note">🔒 这页是<b>模拟流式</b>，因为 API key 绝不能进浏览器（F12 就被偷）。真实调用在终端跑 <code>02-llm-node.ts</code>，key 留在服务端 <code>.env</code>。这是后端铁律。</div>
+
+  <div class="stage">
+    <div class="panel">
+      <h2>图 · Graph</h2>
+      <div class="graph" id="graph">
+        <div class="node terminal" data-node="START">START</div>
+        <div class="edge" data-edge="0"><div class="pulse"></div></div>
+        <div class="node" data-node="agent" id="agentNode">agent<span class="sub">调用 LLM</span></div>
+        <div class="edge" data-edge="1"><div class="pulse"></div></div>
+        <div class="node terminal" data-node="END">END</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>State · 共享内存</h2>
+      <div class="chan-label">messages <span class="tag">append reducer</span></div>
+      <div class="messages" id="messages"><div class="empty">（空 —— 点运行，看消息怎么一条条进来）</div></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <select id="promptSel">
+      <option value="0">用一句话解释什么是闭包</option>
+      <option value="1">用三句话介绍 LangGraph</option>
+      <option value="2">React 的 useEffect 是干嘛的？</option>
+    </select>
+    <button class="btn" id="runBtn">运行 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+  </div>
+
+  <div class="narration" id="narration">选一个问题，点 <b>运行</b>。看 state 里的 <code>messages</code> 怎么从 0 条变 2 条。</div>
+
+  <footer>对照代码：这页演示的就是 <code>02-llm-node.ts</code> 里的 <code>agentNode</code>。关键认知：节点返回 <code>{ messages: [新消息] }</code> 只是"局部更新"，是 append reducer 把它接到历史后面 —— 和 L1 的 <code>log</code> 一模一样，只是这次装的是消息对象而不是字符串。</footer>
+</div>
+
+<script>
+  const ANSWERS = {
+    0: ["闭包", "是指", "一个函数", "能够", "“记住”", "并访问", "其外部", "作用域", "中的变量，", "即使", "它在", "别处", "执行。"],
+    1: ["LangGraph", "是一个", "构建", "有状态、", "多智能体", "应用", "的框架。", "它把", "智能体交互", "建模为", "有向图，", "用节点和边", "编排流程。", "核心优势", "是支持", "循环、", "分支", "和持久化", "状态。"],
+    2: ["useEffect", "用来", "在组件", "渲染后", "执行", "副作用，", "比如", "请求数据、", "订阅事件。", "它靠", "依赖数组", "决定", "何时", "重新运行。"],
+  };
+  const PROMPTS = { 0: "用一句话解释什么是闭包", 1: "用三句话介绍 LangGraph", 2: "React 的 useEffect 是干嘛的？" };
+
+  const $ = (id) => document.getElementById(id);
+  const messagesEl = $("messages"), narration = $("narration"), runBtn = $("runBtn"), agentNode = $("agentNode");
+  let running = false;
+
+  function setNodes(state) {
+    document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "done"));
+    if (state === "active") agentNode.classList.add("active");
+    if (state === "done") agentNode.classList.add("done");
+  }
+  function fireEdge(i) { const e = document.querySelector('[data-edge="' + i + '"]'); e.classList.remove("firing"); void e.offsetWidth; e.classList.add("firing"); }
+  function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  function reset() {
+    running = false; runBtn.disabled = false; runBtn.textContent = "运行 →";
+    setNodes(null);
+    messagesEl.innerHTML = '<div class="empty">（空 —— 点运行，看消息怎么一条条进来）</div>';
+    narration.innerHTML = '选一个问题，点 <b>运行</b>。看 state 里的 <code>messages</code> 怎么从 0 条变 2 条。';
+  }
+
+  async function run() {
+    if (running) return;
+    running = true; runBtn.disabled = true; runBtn.textContent = "运行中…";
+    messagesEl.innerHTML = "";
+    const key = $("promptSel").value;
+
+    // 1) 用户消息进入 State.messages
+    narration.innerHTML = "① 把 <code>HumanMessage</code> 放进 <code>messages</code>，作为图的输入。";
+    const human = document.createElement("div");
+    human.className = "msg human";
+    human.innerHTML = '<div class="role">HUMAN</div>' + PROMPTS[key];
+    messagesEl.appendChild(human);
+    await sleep(700);
+
+    // 2) START → agent
+    fireEdge(0); await sleep(300);
+    setNodes("active");
+    narration.innerHTML = "② 图从 START 走到 <code>agent</code> 节点。节点内部调用 LLM（真实代码是 <code>await model.invoke(state.messages)</code>）。";
+    agentNode.querySelector(".sub").innerHTML = '调用 LLM<span class="spin"> ●●●</span>';
+    await sleep(800);
+
+    // 3) 流式 token 拼成一条 AIMessage（还没 commit 到 State）
+    narration.innerHTML = "③ LLM 流式返回 token，节点把它们拼成<b>一条</b> AIMessage（此刻还在节点内部，是个「草稿」）。";
+    const ai = document.createElement("div");
+    ai.className = "msg ai streaming";
+    ai.innerHTML = '<div class="role">AI · streaming</div><span class="body"></span><span class="caret"></span>';
+    messagesEl.appendChild(ai);
+    const body = ai.querySelector(".body");
+    for (const tok of ANSWERS[key]) { body.textContent += tok; await sleep(95); }
+    ai.querySelector(".caret").remove();
+
+    // 4) 节点返回 { messages: [ai] }，reducer append 进 State
+    setNodes("done");
+    agentNode.querySelector(".sub").textContent = "调用 LLM";
+    ai.classList.remove("streaming");
+    ai.querySelector(".role").textContent = "AI";
+    fireEdge(1);
+    narration.innerHTML = "④ 节点 <b>return { messages: [aiMessage] }</b> —— append reducer 把这条 AIMessage 接到历史后面。现在 <code>messages</code> 有 <b>2 条</b>，图到达 END。";
+
+    running = false; runBtn.disabled = false; runBtn.textContent = "运行 →";
+  }
+
+  runBtn.addEventListener("click", run);
+  $("resetBtn").addEventListener("click", reset);
+</script>
+</body>
+</html>

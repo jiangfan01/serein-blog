@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph L3 · agent ⇄ tools 循环</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.66 0.19 35);
+    --active-soft: oklch(0.93 0.06 40);
+    --human: oklch(0.52 0.15 255);
+    --human-soft: oklch(0.95 0.04 255);
+    --ai: oklch(0.5 0.12 155);
+    --ai-soft: oklch(0.95 0.04 155);
+    --tool: oklch(0.55 0.13 65);
+    --tool-soft: oklch(0.95 0.05 70);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--active); margin-bottom: 10px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 64ch; font-size: 16px; }
+
+  .stage { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; margin-top: 32px; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 24px; }
+  .panel h2 { font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .counter { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--active); background: var(--active-soft); padding: 3px 9px; border-radius: 7px; letter-spacing: 0; text-transform: none; }
+
+  svg { display: block; width: 100%; height: auto; }
+  .gnode { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; transition: fill 300ms ease, stroke 300ms ease; }
+  .gnode.on { fill: var(--active-soft); stroke: var(--active); stroke-width: 2; }
+  .gterm { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; transition: fill 300ms ease, stroke 300ms ease; }
+  .gterm.on { fill: var(--active-soft); stroke: var(--active); }
+  .glabel { fill: var(--ink); font: 600 14px ui-sans-serif, system-ui, sans-serif; text-anchor: middle; }
+  .gsub { fill: var(--muted); font: 11px ui-monospace, Menlo, monospace; text-anchor: middle; }
+  .gterm-label { fill: var(--muted); font: 700 10px ui-monospace, Menlo, monospace; text-anchor: middle; letter-spacing: 0.1em; }
+  .gedge { fill: none; stroke: var(--line); stroke-width: 2; transition: stroke 300ms ease, stroke-width 300ms ease; }
+  .gedge.cond { stroke-dasharray: 6 5; }
+  .gedge.on { stroke: var(--active); stroke-width: 3; }
+  .gedge.cycle.on { stroke: var(--ai); }
+  .gcondlabel { fill: var(--muted); font: italic 11px ui-monospace, Menlo, monospace; text-anchor: middle; }
+
+  .messages { display: flex; flex-direction: column; gap: 11px; min-height: 300px; }
+  .empty { color: var(--muted); font-style: italic; font-size: 14px; }
+  .msg { border-radius: 12px; padding: 11px 14px; font-size: 14px; max-width: 92%; animation: slidein 360ms cubic-bezier(0.16,1,0.3,1); }
+  .msg .role { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 4px; opacity: 0.75; }
+  .msg.human { align-self: flex-end; background: var(--human-soft); color: oklch(0.34 0.13 255); border: 1px solid oklch(0.85 0.06 255); }
+  .msg.ai { align-self: flex-start; background: var(--ai-soft); color: oklch(0.3 0.1 155); border: 1px solid oklch(0.85 0.06 155); }
+  .msg.tool { align-self: flex-start; background: var(--tool-soft); color: oklch(0.36 0.1 65); border: 1px solid oklch(0.86 0.07 70); font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .msg.toolcall { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+  .controls { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn { font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform 160ms ease, opacity 160ms ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .narration { margin-top: 24px; padding: 18px 20px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); font-size: 15px; min-height: 64px; display: flex; align-items: center; }
+  .narration b { color: var(--active); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  footer { margin-top: 36px; color: var(--muted); font-size: 13.5px; max-width: 72ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">LangGraph 从零 · L3</div>
+  <h1>agent ⇄ tools 循环（ReAct）</h1>
+  <p class="lede">这就是 <code>createReactAgent</code> 和你 <code>agent.ts</code> 的核心。点"下一步"，看这个<b>环</b>怎么转一圈：LLM 决定调工具 → 工具执行 → 结果回喂 → LLM 再想 → 给出最终答案。</p>
+
+  <div class="stage">
+    <div class="panel">
+      <h2>图 · Graph <span class="counter" id="counter">LLM 调用：0 次</span></h2>
+      <svg viewBox="0 0 520 360" role="img" aria-label="ReAct 循环图">
+        <defs>
+          <marker id="m" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="context-stroke"/></marker>
+        </defs>
+        <!-- 边 -->
+        <line id="e-start" class="gedge" x1="210" y1="50" x2="210" y2="90" marker-end="url(#m)"/>
+        <path id="e-tools" class="gedge cond" d="M150,150 C110,180 95,196 86,220" marker-end="url(#m)"/>
+        <path id="e-end" class="gedge cond" d="M272,150 C310,185 322,206 332,231" marker-end="url(#m)"/>
+        <path id="e-cycle" class="gedge cycle" d="M62,222 C18,165 55,108 138,122" marker-end="url(#m)"/>
+
+        <text class="gcondlabel" x="120" y="180">tool_calls? 有</text>
+        <text class="gcondlabel" x="318" y="188">无</text>
+        <text class="gcondlabel" x="22" y="160" transform="rotate(-90 22 160)" fill="oklch(0.5 0.12 155)">环 / 回边</text>
+
+        <!-- START -->
+        <rect id="n-start" class="gterm" x="162" y="16" width="96" height="34" rx="17"/>
+        <text class="gterm-label" x="210" y="38">START</text>
+        <!-- agent -->
+        <rect id="n-agent" class="gnode" x="140" y="92" width="140" height="58" rx="12"/>
+        <text class="glabel" x="210" y="117">agent</text>
+        <text class="gsub" x="210" y="135">调用 LLM</text>
+        <!-- tools -->
+        <rect id="n-tools" class="gnode" x="16" y="222" width="140" height="58" rx="12"/>
+        <text class="glabel" x="86" y="247">tools</text>
+        <text class="gsub" x="86" y="265">执行工具</text>
+        <!-- END -->
+        <rect id="n-end" class="gterm" x="286" y="233" width="96" height="34" rx="17"/>
+        <text class="gterm-label" x="334" y="255">END</text>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <h2>State · messages</h2>
+      <div class="messages" id="messages"><div class="empty">（空 —— 点"下一步"开始）</div></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="nextBtn">下一步 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+  </div>
+
+  <div class="narration" id="narration">提问：<code>杭州今天天气怎么样？适合穿什么？</code> —— 点"下一步"，看图怎么走。</div>
+
+  <footer>对照代码：这就是 <code>03-react-loop.ts</code>。记住这一课的灵魂：<b>工具不产生决策，它只把信息塞回 State；真正的"下一步"永远是 LLM 看着新结果重新推理出来的。</b>所以工具调用必然伴随又一次 LLM 调用 —— 这就是环存在的意义。</footer>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const messagesEl = $("messages"), narration = $("narration"), counterEl = $("counter"), nextBtn = $("nextBtn");
+
+  function addMsg(cls, role, html) {
+    const d = document.createElement("div");
+    d.className = "msg " + cls;
+    d.innerHTML = '<div class="role">' + role + "</div>" + html;
+    messagesEl.appendChild(d);
+  }
+  function clearActive() {
+    document.querySelectorAll(".gnode, .gterm").forEach((n) => n.classList.remove("on"));
+    document.querySelectorAll(".gedge").forEach((e) => e.classList.remove("on"));
+  }
+  function on(nodeId, edgeId) {
+    clearActive();
+    if (nodeId) $(nodeId).classList.add("on");
+    if (edgeId) $(edgeId).classList.add("on");
+  }
+
+  let calls = 0;
+  const FRAMES = [
+    () => { on("n-start"); addMsg("human", "HUMAN", "杭州今天天气怎么样？适合穿什么？"); narration.innerHTML = "① 图从 <code>START</code> 启动，<code>messages</code> 里只有用户这一条。"; },
+    () => { on("n-agent", "e-start"); calls = 1; counterEl.textContent = "LLM 调用：1 次"; narration.innerHTML = "② 走到 <code>agent</code> 节点，<b>第 1 次调用 LLM</b>。LLM 发现自己不知道天气，需要工具。"; },
+    () => { on("n-agent", "e-tools"); addMsg("ai toolcall", "AI · 决定调工具", "get_weather({ city: \"杭州\" })"); narration.innerHTML = "③ LLM 回复里带了 <code>tool_calls</code>。<b>条件边</b>读到它 → 判断「有工具要调」，走向 <code>tools</code>。"; },
+    () => { on("n-tools", "e-tools"); addMsg("tool", "TOOL · 结果", "晴，12℃ 到 20℃，微风"); narration.innerHTML = "④ <code>tools</code> 节点执行 get_weather，把结果包成 <code>ToolMessage</code> 追加进 State。"; },
+    () => { on("n-agent", "e-cycle"); calls = 2; counterEl.textContent = "LLM 调用：2 次"; narration.innerHTML = "⑤ 沿<b>回边</b>回到 <code>agent</code>，<b>第 2 次调用 LLM</b>。这次它看得到天气结果了 —— 这就是「结果回喂触发第二次调用」。"; },
+    () => { on("n-agent", "e-end"); addMsg("ai", "AI · 最终回复", "杭州今天晴，12~20℃，微风。建议洋葱式穿搭：薄长袖 + 可脱的薄外套，早晚偏凉带件外套就好 ☀️"); narration.innerHTML = "⑥ 这次 LLM 的回复<b>没有</b> tool_calls。条件边判断「无工具」 → 走向 END。"; },
+    () => { on("n-end", "e-end"); narration.innerHTML = "⑦ 到达 <code>END</code>，图结束。最终 <code>messages</code> 共 4 条，环转了整整一圈，LLM 被调了 2 次。"; nextBtn.disabled = true; nextBtn.textContent = "已结束"; },
+  ];
+  let step = 0;
+
+  function reset() {
+    step = 0; calls = 0; nextBtn.disabled = false; nextBtn.textContent = "下一步 →";
+    counterEl.textContent = "LLM 调用：0 次";
+    clearActive();
+    messagesEl.innerHTML = '<div class="empty">（空 —— 点"下一步"开始）</div>';
+    narration.innerHTML = "提问：<code>杭州今天天气怎么样？适合穿什么？</code> —— 点「下一步」，看图怎么走。";
+  }
+  function next() {
+    if (step >= FRAMES.length) return;
+    if (step === 0) messagesEl.innerHTML = "";
+    FRAMES[step]();
+    step++;
+  }
+  nextBtn.addEventListener("click", next);
+  $("resetBtn").addEventListener("click", reset);
+</script>
+</body>
+</html>

@@ -19,6 +19,7 @@ import {
 } from "./system-prompt";
 import {
   loadHistoryFromDB,
+  loadSessionSummary,
   convertToLangChainMessages,
   estimateTokens,
   estimateMessageTokens,
@@ -106,7 +107,7 @@ const defaultSlidingWindow: SlidingWindowConfig = {
  * - 当前输入：固定 2000
  * - 历史对话：剩余空间的 80%（留 20% 余量）
  */
-function calculateTokenBudget(modelContextLength?: number): TokenBudget {
+export function calculateTokenBudget(modelContextLength?: number): TokenBudget {
   if (!modelContextLength || modelContextLength <= 0) {
     return defaultTokenBudget;
   }
@@ -192,11 +193,28 @@ export async function buildContext(
   let truncationInfo: BuiltContext["metadata"]["truncationInfo"];
 
   // ===== 1. 加载历史消息 =====
-  // 支持排除当前 trigger message，避免重复
+  // 先加载会话摘要 + 截断点：截断点之前的旧对话已被压成摘要，
+  // 只需取截断点之后的原文，前面用摘要代替。
+  let resolvedSummary = memory?.sessionSummary || session.summary;
+  let cutAtCreatedAt: Date | undefined;
+  if (session.sessionId && !providedHistory) {
+    const mem = await loadSessionSummary(session.sessionId);
+    if (mem.summaryContent) {
+      resolvedSummary = resolvedSummary || mem.summaryContent;
+    }
+    cutAtCreatedAt = mem.cutAtCreatedAt;
+  }
+
+  // 支持排除当前 trigger message，避免重复；只取截断点之后的历史
   const historyMessages =
     providedHistory ??
     (session.sessionId
-      ? await loadHistoryFromDB(session.sessionId, slidingWindow, excludeMessageId)
+      ? await loadHistoryFromDB(
+          session.sessionId,
+          slidingWindow,
+          excludeMessageId,
+          cutAtCreatedAt
+        )
       : []);
 
   const isFirstTurn = historyMessages.length === 0;
@@ -215,10 +233,8 @@ export async function buildContext(
 
   // ===== 4. 构建记忆上下文（会话摘要） =====
   let memorySection = "";
-  if (memory?.sessionSummary || session.summary) {
-    memorySection = buildSummarySection(
-      memory?.sessionSummary || session.summary || ""
-    );
+  if (resolvedSummary) {
+    memorySection = buildSummarySection(resolvedSummary);
     tokenEstimates.memoryContext = estimateTokens(memorySection);
   }
 

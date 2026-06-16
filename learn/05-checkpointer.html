@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph L5 · checkpointer 断点续传</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.62 0.17 290);
+    --active-soft: oklch(0.94 0.05 290);
+    --human: oklch(0.52 0.15 255);
+    --human-soft: oklch(0.95 0.04 255);
+    --ai: oklch(0.5 0.12 155);
+    --ai-soft: oklch(0.95 0.04 155);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; padding: clamp(20px, 4vw, 56px); }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--active); margin-bottom: 10px; }
+  h1 { font-size: clamp(24px, 4vw, 34px); font-weight: 680; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 64ch; font-size: 16px; }
+  .lede code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+
+  .tabs { margin-top: 28px; display: flex; gap: 10px; }
+  .tab { font: inherit; font-size: 14px; cursor: pointer; padding: 10px 18px; border-radius: 10px 10px 0 0; border: 1.5px solid var(--line); border-bottom: none; background: var(--bg); color: var(--muted); font-family: ui-monospace, Menlo, monospace; transition: all 200ms ease; }
+  .tab.on { background: var(--paper); color: var(--active); border-color: var(--active); font-weight: 600; }
+
+  .panel { background: var(--paper); border: 1.5px solid var(--line); border-radius: 0 14px 14px 14px; box-shadow: var(--shadow); padding: 22px; min-height: 240px; }
+  .chat { display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+  .empty { color: var(--muted); font-style: italic; font-size: 14px; margin: auto; }
+  .msg { border-radius: 12px; padding: 10px 13px; font-size: 14px; max-width: 88%; animation: slidein 340ms cubic-bezier(0.16,1,0.3,1); }
+  .msg .role { font-family: ui-monospace, Menlo, monospace; font-size: 10px; font-weight: 700; opacity: 0.7; margin-bottom: 3px; }
+  .msg.human { align-self: flex-end; background: var(--human-soft); color: oklch(0.34 0.13 255); }
+  .msg.ai { align-self: flex-start; background: var(--ai-soft); color: oklch(0.3 0.1 155); }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+  .store { margin-top: 26px; }
+  .store-h { font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .slots { grid-template-columns: 1fr; } }
+  .slot { border: 1.5px dashed var(--line); border-radius: 12px; padding: 14px 16px; background: var(--bg); transition: all 300ms ease; }
+  .slot.on { border-style: solid; border-color: var(--active); background: var(--active-soft); }
+  .slot .tid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--ink); }
+  .slot .cnt { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .slot .cnt b { color: var(--active); font-size: 16px; }
+
+  .controls { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform 160ms ease, opacity 160ms ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+
+  .narration { margin-top: 24px; padding: 16px 20px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); font-size: 15px; min-height: 56px; display: flex; align-items: center; }
+  .narration b { color: var(--active); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+  footer { margin-top: 34px; color: var(--muted); font-size: 13.5px; max-width: 72ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">LangGraph 从零 · L5</div>
+  <h1>checkpointer：让 Agent 记得住</h1>
+  <p class="lede">同一张图，<code>compile({ checkpointer })</code> 之后，State 按 <code>thread_id</code> 存档。两个会话切着发消息，看它们的记忆<b>各存各的、互不干扰</b>。这就是"State 即焚"到"State 长存"的开关。</p>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-t="A">thread: user-serein</button>
+    <button class="tab" data-t="B">thread: someone-else</button>
+  </div>
+  <div class="panel">
+    <div class="chat" id="chat"><div class="empty">这个 thread 还没消息，点下面"发送下一条"。</div></div>
+  </div>
+
+  <div class="store">
+    <div class="store-h">📦 Checkpointer 存档库（每个 thread_id 一份，独立持久化）</div>
+    <div class="slots">
+      <div class="slot" id="slotA"><div class="tid">user-serein</div><div class="cnt">存了 <b id="cntA">0</b> 条消息</div></div>
+      <div class="slot" id="slotB"><div class="tid">someone-else</div><div class="cnt">存了 <b id="cntB">0</b> 条消息</div></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="sendBtn">向当前 thread 发送下一条 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+  </div>
+
+  <div class="narration" id="narration">先在 <code>user-serein</code> 里发两条（告诉它你是谁 → 再问它你是谁），然后切到 <code>someone-else</code> 问同样的，对比它记不记得。</div>
+
+  <footer>
+    每次 <code>invoke(input, { configurable: { thread_id } })</code> 的内部动作：<b>① 按 thread_id 从存档取出上次 state → ② append 新消息 → ③ 跑图 → ④ 把新 state 存回该 thread_id。</b><br>
+    所以同一个 thread 记忆累积，换 thread_id 就是另一份存档。MemorySaver 存内存（重启丢）；换 PostgresSaver 就跨进程跨重启持久化 = 真正的断点续传。对照你的 <code>ChatExecution</code> 表 / Eino 的 <code>CheckPointStore</code>。
+  </footer>
+</div>
+
+<script>
+  const SCRIPT = {
+    A: [
+      { u: "记住：我叫 Serein，是个前端工程师。", a: "好的 Serein，记住了 ✅ 前端工程师。" },
+      { u: "我叫什么？做什么的？", a: "你叫 Serein，前端工程师 😊（我从这个 thread 的存档里读到了上一轮）" },
+    ],
+    B: [
+      { u: "我叫什么？", a: "抱歉，我不知道你的名字 🤔（这是 someone-else 的存档，里面没有 Serein 那轮）" },
+    ],
+  };
+  const threads = { A: [], B: [] };
+  const idx = { A: 0, B: 0 };
+  let cur = "A";
+
+  const $ = (id) => document.getElementById(id);
+  const chat = $("chat"), narration = $("narration"), sendBtn = $("sendBtn");
+
+  function renderChat() {
+    const msgs = threads[cur];
+    if (msgs.length === 0) {
+      chat.innerHTML = '<div class="empty">这个 thread 还没消息，点下面"发送下一条"。</div>';
+    } else {
+      chat.innerHTML = msgs.map((m) =>
+        '<div class="msg ' + m.role + '"><div class="role">' + (m.role === "human" ? "HUMAN" : "AI") + '</div>' + m.text + "</div>"
+      ).join("");
+    }
+    $("cntA").textContent = threads.A.length;
+    $("cntB").textContent = threads.B.length;
+    $("slotA").classList.toggle("on", cur === "A");
+    $("slotB").classList.toggle("on", cur === "B");
+  }
+
+  function switchTo(t) {
+    cur = t;
+    document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x.dataset.t === t));
+    const tid = t === "A" ? "user-serein" : "someone-else";
+    narration.innerHTML = "切到 thread <code>" + tid + "</code>：checkpointer 取出<b>这一份</b>存档（" + threads[t].length + " 条），和另一份完全隔离。";
+    renderChat();
+    sendBtn.disabled = idx[t] >= SCRIPT[t].length;
+    sendBtn.textContent = sendBtn.disabled ? "这个 thread 没有更多脚本了" : "向当前 thread 发送下一条 →";
+  }
+
+  function send() {
+    const turn = SCRIPT[cur][idx[cur]];
+    if (!turn) return;
+    const tid = cur === "A" ? "user-serein" : "someone-else";
+    threads[cur].push({ role: "human", text: turn.u });
+    renderChat();
+    narration.innerHTML = "invoke(<code>" + tid + "</code>)：① 取出该 thread 存档（已有 " + (threads[cur].length - 1) + " 条）→ ② append 新问题 → ③ 跑图调 LLM…";
+    setTimeout(() => {
+      threads[cur].push({ role: "ai", text: turn.a });
+      idx[cur]++;
+      renderChat();
+      narration.innerHTML = "④ 新 state 存回 <code>" + tid + "</code>（现在 " + threads[cur].length + " 条）。" +
+        (cur === "A" && idx.A === 2 ? " <b>看到没？它记得你是 Serein —— 因为这份存档里有第 1 轮。</b>" :
+         cur === "B" ? " <b>它不知道你是谁 —— 因为这是另一个 thread_id 的存档。</b>" : "");
+      sendBtn.disabled = idx[cur] >= SCRIPT[cur].length;
+      if (sendBtn.disabled) sendBtn.textContent = "这个 thread 没有更多脚本了";
+    }, 600);
+  }
+
+  function reset() {
+    threads.A = []; threads.B = []; idx.A = 0; idx.B = 0;
+    sendBtn.disabled = false; sendBtn.textContent = "向当前 thread 发送下一条 →";
+    switchTo("A");
+  }
+
+  document.querySelectorAll(".tab").forEach((tb) => tb.addEventListener("click", () => switchTo(tb.dataset.t)));
+  sendBtn.addEventListener("click", send);
+  $("resetBtn").addEventListener("click", reset);
+  reset();
+</script>
+</body>
+</html>

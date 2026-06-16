@@ -32,7 +32,8 @@ import type { HistoryMessage, SlidingWindowConfig } from "./types";
 export async function loadHistoryFromDB(
   sessionId: string,
   config: Partial<SlidingWindowConfig> = {},
-  excludeMessageId?: string
+  excludeMessageId?: string,
+  afterCreatedAt?: Date
 ): Promise<HistoryMessage[]> {
   const { maxRounds = 10, includeToolMessages = true } = config;
 
@@ -45,6 +46,8 @@ export async function loadHistoryFromDB(
       sessionId,
       // 排除指定的消息（当前 trigger message）
       ...(excludeMessageId && { id: { not: excludeMessageId } }),
+      // 只取截断点之后的消息（更早的已被摘要覆盖）
+      ...(afterCreatedAt && { createdAt: { gt: afterCreatedAt } }),
     },
     orderBy: { createdAt: "desc" }, // 倒序取最新的
     take: fetchLimit,
@@ -118,6 +121,39 @@ function truncateByRounds(
   }
 
   return result;
+}
+
+// ============================================================
+// 会话摘要加载
+// ============================================================
+
+/**
+ * 加载会话的滚动摘要 + 截断点时间
+ *
+ * 截断点（summarizedUpToMessageId）之前的对话已被压成摘要，
+ * 加载历史时只需取截断点之后的原文，前面用摘要代替。
+ */
+export async function loadSessionSummary(sessionId: string): Promise<{
+  summaryContent: string | null;
+  cutAtCreatedAt?: Date;
+}> {
+  const session = await prisma.chatSession.findUnique({
+    where: { id: sessionId },
+    select: { summaryContent: true, summarizedUpToMessageId: true },
+  });
+
+  if (!session) return { summaryContent: null };
+
+  let cutAtCreatedAt: Date | undefined;
+  if (session.summarizedUpToMessageId) {
+    const cutMsg = await prisma.chatMessage.findUnique({
+      where: { id: session.summarizedUpToMessageId },
+      select: { createdAt: true },
+    });
+    cutAtCreatedAt = cutMsg?.createdAt;
+  }
+
+  return { summaryContent: session.summaryContent, cutAtCreatedAt };
 }
 
 // ============================================================

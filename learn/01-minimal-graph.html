@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph L1 · 图是怎么跑的</title>
+<style>
+  :root {
+    --bg: oklch(0.97 0.008 85);
+    --paper: oklch(0.99 0.005 85);
+    --ink: oklch(0.28 0.03 265);
+    --muted: oklch(0.55 0.022 265);
+    --line: oklch(0.89 0.012 85);
+    --active: oklch(0.66 0.19 35);
+    --active-soft: oklch(0.93 0.06 40);
+    --val: oklch(0.52 0.15 255);
+    --val-soft: oklch(0.94 0.05 255);
+    --append: oklch(0.55 0.13 155);
+    --append-soft: oklch(0.93 0.05 155);
+    --shadow: 0 1px 2px oklch(0.28 0.03 265 / 0.06), 0 8px 24px oklch(0.28 0.03 265 / 0.07);
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: clamp(20px, 4vw, 56px);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { margin-bottom: 36px; }
+  .kicker {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--active); margin-bottom: 10px;
+  }
+  h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 680; letter-spacing: -0.02em; line-height: 1.15; }
+  .lede { color: var(--muted); margin-top: 12px; max-width: 62ch; font-size: 16px; }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 28px 26px;
+  }
+  .panel h2 {
+    font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 22px;
+  }
+
+  /* ---- graph ---- */
+  .graph { display: flex; flex-direction: column; align-items: center; }
+  .node {
+    width: 220px; text-align: center;
+    padding: 14px 18px; border-radius: 12px;
+    border: 1.5px solid var(--line); background: var(--paper);
+    font-weight: 600; font-size: 15px;
+    transition: transform 480ms cubic-bezier(0.16,1,0.3,1),
+                border-color 300ms ease, background 300ms ease, box-shadow 300ms ease, color 300ms ease;
+  }
+  .node .sub { display: block; font-weight: 450; font-size: 12.5px; color: var(--muted); margin-top: 3px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .node.terminal { width: 92px; border-radius: 999px; padding: 8px 18px; font-size: 13px; color: var(--muted); background: var(--bg); }
+  .node.active {
+    border-color: var(--active); background: var(--active-soft);
+    color: oklch(0.4 0.16 35); transform: scale(1.06);
+    box-shadow: 0 6px 22px oklch(0.66 0.19 35 / 0.22);
+  }
+  .node.done { border-color: var(--append); color: oklch(0.42 0.1 155); }
+
+  .edge { width: 2px; height: 34px; background: var(--line); position: relative; overflow: visible; }
+  .edge .pulse {
+    position: absolute; left: 50%; top: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--active); transform: translate(-50%, -4px); opacity: 0;
+    box-shadow: 0 0 0 4px oklch(0.66 0.19 35 / 0.18);
+  }
+  .edge.firing .pulse { animation: drop 460ms cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes drop { from { top: 0; opacity: 1; } to { top: 34px; opacity: 0; } }
+
+  /* ---- state inspector ---- */
+  .field { margin-bottom: 22px; }
+  .field-label { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); margin-bottom: 8px; display:flex; align-items:center; gap:8px;}
+  .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; font-weight: 600; letter-spacing: 0.02em; }
+  .tag.replace { background: var(--val-soft); color: var(--val); }
+  .tag.append { background: var(--append-soft); color: var(--append); }
+  .tag.sum { background: var(--active-soft); color: var(--active); }
+
+  .value-box {
+    font-family: ui-monospace, Menlo, monospace; font-size: 40px; font-weight: 680;
+    color: var(--val); letter-spacing: -0.02em;
+    transition: transform 420ms cubic-bezier(0.16,1,0.3,1);
+  }
+  .value-box.bump { transform: scale(1.18); }
+
+  .log-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .log-list li {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+    background: var(--append-soft); color: oklch(0.4 0.09 155);
+    padding: 7px 11px; border-radius: 8px;
+    animation: slidein 420ms cubic-bezier(0.16,1,0.3,1);
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .log-empty { color: var(--muted); font-size: 13px; font-style: italic; }
+
+  /* ---- controls ---- */
+  .controls { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+  .btn {
+    font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+    padding: 10px 20px; border-radius: 10px; border: 1.5px solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    transition: transform 160ms ease, opacity 160ms ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+
+  .seg { display: inline-flex; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 7px 14px; border: 0; background: var(--paper); color: var(--muted);
+    transition: background 200ms ease, color 200ms ease;
+  }
+  .seg button.on { background: var(--ink); color: var(--paper); }
+  .ctl-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ctl-row > span { font-size: 13px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+
+  .narration {
+    margin-top: 26px; padding: 18px 20px; border-radius: 12px;
+    background: var(--paper); border: 1px solid var(--line);
+    font-size: 15px; min-height: 64px; display: flex; align-items: center;
+    transition: background 300ms ease;
+  }
+  .narration.warn { background: var(--active-soft); border-color: var(--active); }
+  .narration b { color: var(--active); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; background: var(--bg); padding: 1px 6px; border-radius: 5px; }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 13.5px; max-width: 70ch; }
+  footer code { font-family: ui-monospace, Menlo, monospace; background: var(--paper); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+
+  /* ---- anatomy diagram ---- */
+  .anatomy { margin-bottom: 42px; }
+  .anatomy-title { font-size: 20px; font-weight: 660; letter-spacing: -0.01em; }
+  .anatomy-sub { color: var(--muted); font-size: 14px; margin: 4px 0 18px; max-width: 60ch; }
+  .diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 18px clamp(8px, 3vw, 26px); }
+  .diagram svg { display: block; width: 100%; height: auto; }
+  .edgekey { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .edgekey span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 26px; height: 0; border-top-width: 2px; border-top-style: solid; }
+  .legend { margin-top: 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 16px 24px; }
+  .legend-item { display: flex; gap: 12px; align-items: flex-start; }
+  .legend-num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--paper); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .legend-item h3 { font-size: 14px; font-weight: 650; margin-bottom: 2px; }
+  .legend-item p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .legend-item code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; background: var(--bg); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+
+  .s-node { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; }
+  .s-node-hot { fill: var(--active-soft); stroke: var(--active); stroke-width: 1.5; }
+  .s-term { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+  .s-edge { fill: none; stroke: var(--ink); stroke-width: 2; }
+  .s-cond { fill: none; stroke: var(--active); stroke-width: 2; stroke-dasharray: 6 5; }
+  .s-cycle { fill: none; stroke: var(--append); stroke-width: 2.2; }
+  .s-rail { fill: var(--val-soft); stroke: var(--val); stroke-width: 1; opacity: 0.5; }
+  .s-label { fill: var(--ink); font: 600 15px ui-sans-serif, system-ui, sans-serif; text-anchor: middle; }
+  .s-sub { fill: var(--muted); font: 12px ui-monospace, Menlo, monospace; text-anchor: middle; }
+  .s-term-label { fill: var(--muted); font: 700 11px ui-monospace, Menlo, monospace; text-anchor: middle; letter-spacing: 0.1em; }
+  .s-deco { fill: var(--muted); font: italic 12px ui-monospace, Menlo, monospace; text-anchor: middle; }
+  .s-rail-label { fill: var(--val); font: 700 12px ui-monospace, Menlo, monospace; text-anchor: middle; letter-spacing: 0.18em; }
+  .badge { fill: var(--ink); }
+  .badge-txt { fill: var(--paper); font: 700 12px ui-sans-serif, system-ui; text-anchor: middle; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">LangGraph 从零 · L1</div>
+    <h1>一张图是怎么跑起来的</h1>
+    <p class="lede">没有 LLM，没有魔法。只有三样东西：流过节点的 <b>State</b>、改 State 的 <b>节点</b>、决定"多次写入怎么合并"的 <b>reducer</b>。点"单步执行"，看 state 怎么一步步变。</p>
+  </header>
+
+  <section class="anatomy">
+    <div class="anatomy-title">LangGraph 的零件解剖</div>
+    <p class="anatomy-sub">这是一张真实的 Agent 图（带条件边和环，就是你 <code>agent.ts</code> 的结构）。对着编号看每个零件是什么。</p>
+    <div class="diagram">
+      <svg viewBox="0 0 760 430" role="img" aria-label="LangGraph 结构解剖图">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="oklch(0.28 0.03 265)"/></marker>
+          <marker id="ahc" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="oklch(0.66 0.19 35)"/></marker>
+          <marker id="ahy" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="oklch(0.55 0.13 155)"/></marker>
+        </defs>
+
+        <!-- State 侧轨 -->
+        <rect class="s-rail" x="702" y="24" width="34" height="356" rx="17"/>
+        <text class="s-rail-label" transform="rotate(-90 719 202)" x="719" y="202">STATE</text>
+
+        <!-- 边 -->
+        <line class="s-edge" x1="380" y1="66" x2="380" y2="144" marker-end="url(#ah)"/>
+        <path class="s-cond" d="M352,212 C322,258 270,276 236,314" marker-end="url(#ahc)"/>
+        <path class="s-cond" d="M410,212 C468,256 498,284 520,322" marker-end="url(#ahc)"/>
+        <path class="s-cycle" d="M150,338 C66,326 66,150 294,170" marker-end="url(#ahy)"/>
+
+        <!-- 决策提示 -->
+        <text class="s-deco" x="381" y="240">tool_calls?</text>
+        <text class="s-deco" x="120" y="250" fill="oklch(0.55 0.13 155)">环 / cycle</text>
+
+        <!-- START -->
+        <rect class="s-term" x="320" y="26" width="120" height="40" rx="20"/>
+        <text class="s-term-label" x="380" y="51">START</text>
+
+        <!-- agent 节点 -->
+        <rect class="s-node-hot" x="296" y="146" width="170" height="64" rx="12"/>
+        <text class="s-label" x="381" y="174">agent</text>
+        <text class="s-sub" x="381" y="194">调用 LLM</text>
+
+        <!-- tools 节点 -->
+        <rect class="s-node" x="150" y="318" width="150" height="58" rx="12"/>
+        <text class="s-label" x="225" y="343">tools</text>
+        <text class="s-sub" x="225" y="362">执行工具</text>
+
+        <!-- END -->
+        <rect class="s-term" x="496" y="326" width="120" height="40" rx="20"/>
+        <text class="s-term-label" x="556" y="351">END</text>
+
+        <!-- 编号徽标 -->
+        <g><circle class="badge" cx="452" cy="40" r="12"/><text class="badge-txt" x="452" y="44">1</text></g>
+        <g><circle class="badge" cx="478" cy="158" r="12"/><text class="badge-txt" x="478" y="162">2</text></g>
+        <g><circle class="badge" cx="318" cy="262" r="12"/><text class="badge-txt" x="318" y="266">3</text></g>
+        <g><circle class="badge" cx="158" cy="312" r="12"/><text class="badge-txt" x="158" y="316">4</text></g>
+        <g><circle class="badge" cx="74" cy="232" r="12"/><text class="badge-txt" x="74" y="236">5</text></g>
+        <g><circle class="badge" cx="628" cy="338" r="12"/><text class="badge-txt" x="628" y="342">6</text></g>
+        <g><circle class="badge" cx="719" cy="44" r="12"/><text class="badge-txt" x="719" y="48">7</text></g>
+      </svg>
+
+      <div class="edgekey">
+        <span><i class="swatch" style="border-top-color: oklch(0.28 0.03 265)"></i> 实线 = 普通边（固定走向）</span>
+        <span><i class="swatch" style="border-top-color: oklch(0.66 0.19 35); border-top-style: dashed"></i> 虚线 = 条件边（读 State 决定）</span>
+        <span><i class="swatch" style="border-top-color: oklch(0.55 0.13 155)"></i> 绿色回边 = 环</span>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-num">1</div><div><h3>边界节点 · START</h3><p>图的入口。LangGraph 内置，不用你写逻辑，只标记"从这开始"。</p></div></div>
+        <div class="legend-item"><div class="legend-num">2</div><div><h3>节点 · Node（agent）</h3><p>真正干活的函数。这里内部调用 LLM。输入完整 State，返回对 State 的<b>局部更新</b>。</p></div></div>
+        <div class="legend-item"><div class="legend-num">3</div><div><h3>条件边 · Conditional Edge</h3><p>读 State 决定走哪条路：上一条消息有 <code>tool_calls</code> 就去 tools，没有就去 END。对应你的 <code>shouldContinue</code>。</p></div></div>
+        <div class="legend-item"><div class="legend-num">4</div><div><h3>节点 · Node（tools）</h3><p>另一个节点，执行工具调用。执行完把结果写回 State。</p></div></div>
+        <div class="legend-item"><div class="legend-num">5</div><div><h3>环 · Cycle（回边）</h3><p>tools 执行完<b>又回到 agent</b>。这条回边让 Agent 能"调完工具再想、再调"。它是 Agent 的灵魂，也是 LangGraph <b>不是 DAG</b> 的原因。</p></div></div>
+        <div class="legend-item"><div class="legend-num">6</div><div><h3>边界节点 · END</h3><p>出口。走到这里整张图结束，返回最终 State。</p></div></div>
+        <div class="legend-item"><div class="legend-num">7</div><div><h3>State · 共享数据</h3><p>贯穿全程。每个节点都读它、改它（按 reducer 合并）。它<b>不含逻辑</b>，只是流动的数据。</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="stage">
+    <!-- 左：图 -->
+    <div class="panel">
+      <h2>图 · Graph</h2>
+      <div class="graph" id="graph">
+        <div class="node terminal" data-node="START">START</div>
+        <div class="edge" data-edge="0"><div class="pulse"></div></div>
+        <div class="node" data-node="increment">increment<span class="sub">value + 1</span></div>
+        <div class="edge" data-edge="1"><div class="pulse"></div></div>
+        <div class="node" data-node="double">double<span class="sub">value × 2</span></div>
+        <div class="edge" data-edge="2"><div class="pulse"></div></div>
+        <div class="node terminal" data-node="END">END</div>
+      </div>
+    </div>
+
+    <!-- 右：State 检查器 -->
+    <div class="panel">
+      <h2>State · 共享内存</h2>
+      <div class="field">
+        <div class="field-label">value <span class="tag replace" id="valTag">replace</span></div>
+        <div class="value-box" id="valueBox">1</div>
+      </div>
+      <div class="field">
+        <div class="field-label">log <span class="tag append" id="logTag">append</span></div>
+        <ul class="log-list" id="logList"><li class="log-empty">（空）</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="stepBtn">单步执行 →</button>
+    <button class="btn ghost" id="resetBtn">重置</button>
+
+    <div class="ctl-row">
+      <span>log reducer</span>
+      <div class="seg" id="logSeg">
+        <button data-mode="append" class="on">追加</button>
+        <button data-mode="replace">覆盖</button>
+      </div>
+    </div>
+
+    <div class="ctl-row">
+      <span>value reducer</span>
+      <div class="seg" id="valSeg">
+        <button data-mode="replace" class="on">覆盖</button>
+        <button data-mode="sum">累加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="narration" id="narration">点 <b>单步执行</b> 开始。当前在 <code>START</code>，state 是初始值 <code>{ value: 1, log: [] }</code>。</div>
+
+  <footer>
+    对照代码：这页演示的就是 <code>01-minimal-graph.ts</code>。试试把上面两个 reducer 都打开看差别 —— 尤其把 value 切到<b>累加</b>，你会亲眼看到我在任务里埋的那个坑。看懂了回来跟我讲为什么。
+  </footer>
+</div>
+
+<script>
+  // ===== 图定义：节点序列 + 每个节点返回的"局部更新" =====
+  const SEQ = ["START", "increment", "double", "END"];
+  const NODE_FN = {
+    increment: (s) => ({ value: s.value + 1, log: ["increment: " + s.value + " -> " + (s.value + 1)] }),
+    double:    (s) => ({ value: s.value * 2, log: ["double: " + s.value + " -> " + (s.value * 2)] }),
+  };
+
+  let logMode = "append";   // append | replace
+  let valMode = "replace";  // replace | sum
+  let state, cursor;        // cursor 指向 SEQ 的当前位置
+
+  const $ = (id) => document.getElementById(id);
+  const valueBox = $("valueBox"), logList = $("logList"), narration = $("narration");
+  const stepBtn = $("stepBtn");
+
+  function reducerValue(prev, next) { return valMode === "sum" ? prev + next : next; }
+  function reducerLog(prev, next)   { return logMode === "replace" ? next : prev.concat(next); }
+
+  function render(bump) {
+    valueBox.textContent = state.value;
+    if (bump) { valueBox.classList.add("bump"); setTimeout(() => valueBox.classList.remove("bump"), 420); }
+    $("valTag").textContent = valMode; $("valTag").className = "tag " + (valMode === "sum" ? "sum" : "replace");
+    $("logTag").textContent = logMode; $("logTag").className = "tag " + (logMode === "replace" ? "replace" : "append");
+    if (state.log.length === 0) { logList.innerHTML = '<li class="log-empty">（空）</li>'; }
+    else { logList.innerHTML = state.log.map((l) => "<li>" + l + "</li>").join(""); }
+    document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "done"));
+    SEQ.slice(0, cursor).forEach((name) => { const el = document.querySelector('[data-node="' + name + '"]'); if (el) el.classList.add("done"); });
+    const cur = document.querySelector('[data-node="' + SEQ[cursor] + '"]');
+    if (cur) cur.classList.add("active");
+  }
+
+  function reset() {
+    state = { value: 1, log: [] };
+    cursor = 0;
+    stepBtn.disabled = false;
+    stepBtn.textContent = "单步执行 →";
+    narration.className = "narration";
+    narration.innerHTML = '点 <b>单步执行</b> 开始。当前在 <code>START</code>，state 是初始值 <code>{ value: 1, log: [] }</code>。';
+    render(false);
+  }
+
+  function fireEdge(i) {
+    const edge = document.querySelector('[data-edge="' + i + '"]');
+    if (!edge) return;
+    edge.classList.remove("firing"); void edge.offsetWidth; edge.classList.add("firing");
+  }
+
+  function step() {
+    if (cursor >= SEQ.length - 1) return;
+    fireEdge(cursor);
+    const fromName = SEQ[cursor];
+    cursor++;
+    const nodeName = SEQ[cursor];
+
+    setTimeout(() => {
+      if (NODE_FN[nodeName]) {
+        const before = { ...state };
+        const update = NODE_FN[nodeName](state);
+        state = {
+          value: reducerValue(before.value, update.value),
+          log: reducerLog(before.log, update.log),
+        };
+        const merged = valMode === "sum"
+          ? "累加 reducer：" + before.value + " + " + update.value + " = <b>" + state.value + "</b>（注意：节点已经算过一次 +1/×2，再累加就把旧值重复计进去了，这就是坑）"
+          : "覆盖 reducer：直接变成 <b>" + state.value + "</b>";
+        const logMsg = logMode === "replace"
+          ? "log 是覆盖模式，只剩最新一条"
+          : "log 是追加模式，历史都留着（共 " + state.log.length + " 条）";
+        narration.className = "narration" + (valMode === "sum" ? " warn" : "");
+        narration.innerHTML = "执行节点 <code>" + nodeName + "</code>：它返回 <code>{ value: " + update.value + ", log: [...] }</code>。" +
+          "<br>value 的 " + merged + "；" + logMsg + "。";
+      } else if (nodeName === "END") {
+        narration.className = "narration";
+        narration.innerHTML = "到达 <code>END</code>，图执行完毕。最终 <code>value = " + state.value + "</code>，log 共 " + state.log.length + " 条。点重置再换个 reducer 组合试试。";
+        stepBtn.disabled = true; stepBtn.textContent = "已结束";
+      }
+      render(true);
+    }, 230);
+  }
+
+  function bindSeg(segId, apply) {
+    document.querySelectorAll("#" + segId + " button").forEach((b) => {
+      b.addEventListener("click", () => {
+        document.querySelectorAll("#" + segId + " button").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        apply(b.dataset.mode);
+        reset();
+      });
+    });
+  }
+
+  stepBtn.addEventListener("click", step);
+  $("resetBtn").addEventListener("click", reset);
+  bindSeg("logSeg", (m) => (logMode = m));
+  bindSeg("valSeg", (m) => (valMode = m));
+  reset();
+</script>
+</body>
+</html>
